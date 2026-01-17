@@ -1,6 +1,6 @@
 # Abbacchio Python
 
-Python logging transports for [Abbacchio](https://github.com/yourusername/pino-live) log viewer.
+Python logging transports for [Abbacchio](https://github.com/yourusername/abbacchio) log viewer.
 
 Supports:
 - Python stdlib `logging`

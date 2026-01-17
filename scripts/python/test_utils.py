@@ -8,7 +8,7 @@ import random
 
 API_URL = os.environ.get("API_URL", "http://localhost:4000/api/logs")
 
-DEFAULT_CHANNELS = ["optimus", "bumblebee", "jazz"]
+DEFAULT_CHANNELS = ["Moody Blues", "bumblebee", "jazz"]
 
 NAMESPACES = ["auth", "api", "db", "cache", "worker", "scheduler"]
 

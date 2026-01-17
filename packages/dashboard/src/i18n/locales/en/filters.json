@@ -1,0 +1,25 @@
+{
+  "levels": {
+    "all": "All"
+  },
+  "namespace": {
+    "placeholder": "All Namespaces",
+    "all": "All Namespaces"
+  },
+  "search": {
+    "placeholder": "Search logs... (Ctrl+F)",
+    "match": "{{count}} match",
+    "match_other": "{{count}} matches"
+  },
+  "tooltips": {
+    "matchCase": "Match case",
+    "clearFilters": "Clear filters",
+    "manageKey": "Manage encryption key",
+    "copyLink": "Copy link",
+    "enablePersistence": "Enable persistence",
+    "disablePersistence": "Disable persistence",
+    "clearLogs": "Clear logs",
+    "disconnect": "Disconnect channel",
+    "addChannel": "Add channel"
+  }
+}

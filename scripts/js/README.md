@@ -4,16 +4,14 @@ Test scripts for generating logs using various Node.js logging libraries.
 
 ## Prerequisites
 
-Install the transport package and required logging libraries:
+From the repo root:
 
 ```bash
-# Install the transport (from this repo or npm)
-npm install @pino-live/transport
+# Install all dependencies (includes pino, winston, bunyan)
+pnpm install
 
-# Install logging libraries as needed
-npm install pino        # for pino tests
-npm install winston     # for winston tests
-npm install bunyan      # for bunyan tests
+# Build the transport package
+pnpm build:transport
 ```
 
 ## Usage

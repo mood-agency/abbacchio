@@ -1,4 +1,5 @@
 import { useState, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LogEntry } from '../types';
 import { LevelBadge, ChannelBadge } from './ui/CustomBadge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ interface LogRowProps {
   showChannel?: boolean;
   searchQuery?: string;
   caseSensitive?: boolean;
+  isNew?: boolean;
 }
 
 function formatDateTime(timestamp: number): string {
@@ -100,7 +102,9 @@ function highlightData(
   return highlightText(dataString, query, caseSensitive);
 }
 
-export const LogRow = memo(function LogRow({ log, showChannel = false, searchQuery = '', caseSensitive = false }: LogRowProps) {
+export const LogRow = memo(function LogRow({ log, showChannel = false, searchQuery = '', caseSensitive = false, isNew = false }: LogRowProps) {
+  const { t } = useTranslation('logs');
+  const { t: tDialogs } = useTranslation('dialogs');
   const [isExpanded, setIsExpanded] = useState(false);
   const showData = hasData(log.data);
   const isEncrypted = log.encrypted && !log.decryptionFailed;
@@ -119,12 +123,13 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
     navigator.clipboard.writeText(JSON.stringify(log.data, null, 2));
   }, [log.data]);
 
-  // Determine row styling based on encryption state
+  // Determine row styling based on encryption state and new status
   const rowClasses = [
     'border-b border-border hover:bg-muted/50 transition-colors',
     (showData || decryptionFailed) ? 'cursor-pointer' : '',
     decryptionFailed ? 'bg-destructive/5' : '',
     isEncrypted ? 'bg-yellow-500/5' : '',
+    isNew ? 'animate-highlight' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -149,7 +154,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
               )}
             </TooltipTrigger>
             <TooltipContent>
-              {decryptionFailed ? 'Decryption failed' : wasSentEncrypted ? 'Encrypted at source' : 'Not encrypted'}
+              {decryptionFailed ? t('encryption.decryptionFailed') : wasSentEncrypted ? t('encryption.encryptedAtSource') : t('encryption.notEncrypted')}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -164,7 +169,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {decryptionFailed ? 'Decryption failed' : 'Encrypted'}
+                {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
               </TooltipContent>
             </Tooltip>
           ) : (
@@ -189,7 +194,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {decryptionFailed ? 'Decryption failed' : 'Encrypted'}
+                {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
               </TooltipContent>
             </Tooltip>
           ) : (
@@ -206,7 +211,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                   <Lock className="w-4 h-4" />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>Encrypted - Enter key to decrypt</TooltipContent>
+              <TooltipContent>{t('encryption.enterKeyToDecrypt')}</TooltipContent>
             </Tooltip>
           )}
           {decryptionFailed && (
@@ -216,7 +221,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                   <AlertTriangle className="w-4 h-4" />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>Decryption failed - Check your key</TooltipContent>
+              <TooltipContent>{t('encryption.checkYourKey')}</TooltipContent>
             </Tooltip>
           )}
           <span className={decryptionFailed ? 'text-destructive' : isEncrypted ? 'text-yellow-400 italic' : ''}>
@@ -234,7 +239,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {decryptionFailed ? 'Decryption failed' : 'Encrypted'}
+                {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
               </TooltipContent>
             </Tooltip>
           ) : showData ? (
@@ -251,7 +256,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                       <Copy className="w-3 h-3" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Copy JSON</TooltipContent>
+                  <TooltipContent>{t('tooltips.copyJson')}</TooltipContent>
                 </Tooltip>
                 <CodeBlock
                   code={JSON.stringify(log.data, null, 2)}
@@ -280,10 +285,10 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
           <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 ml-24">
             <div className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />
-              <span className="font-medium">Decryption Failed</span>
+              <span className="font-medium">{tDialogs('decryptionFailed.title')}</span>
             </div>
             <p className="text-sm text-destructive/80 mt-1">
-              Could not decrypt this log entry. Please check that you've entered the correct encryption key.
+              {tDialogs('decryptionFailed.description')}
             </p>
           </div>
         </div>

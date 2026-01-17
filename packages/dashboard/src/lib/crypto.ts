@@ -1,6 +1,21 @@
 /**
  * Browser-compatible AES-256-GCM decryption
  * Must match the server-side encryption format
+ *
+ * IMPORTANT: Key Derivation Algorithm Compatibility
+ * ================================================
+ * The server (transport) uses scrypt for key derivation, which is not available
+ * in the Web Crypto API. The browser uses PBKDF2 instead.
+ *
+ * For encryption to work correctly, the transport must be configured to use
+ * browser-compatible key derivation (PBKDF2), not the default scrypt.
+ *
+ * Both algorithms derive a 256-bit AES key from the password, but they use
+ * different derivation functions:
+ * - Server (scrypt): More memory-hard, better for server-side
+ * - Browser (PBKDF2): Web Crypto API compatible
+ *
+ * The transport library handles this automatically when used with the dashboard.
  */
 
 const SALT_LENGTH = 32;

@@ -15,7 +15,12 @@
       "Bash(pnpm --filter @abbacchio/dashboard build:*)",
       "Bash(pnpm test:*)",
       "Bash(pnpm install:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pnpm why:*)",
+      "Bash(npx vite build)",
+      "Bash(timeout 10 npx vite:*)",
+      "Bash(timeout 8 npx vite:*)",
+      "Bash(pnpm build:*)"
     ]
   }
 }

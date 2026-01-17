@@ -2,11 +2,13 @@
  * Shared utilities for test log generation scripts
  */
 
+import { parseArgs } from 'node:util';
+
 export const API_URL = process.env.API_URL || 'http://localhost:4000/api/logs';
 
-export const defaultChannels = ['optimus', 'bumblebee', 'jazz'] as const;
+export const defaultChannels = ['API', 'Worker1', 'Worker2'] as const;
 
-export const namespaces = ['auth', 'api', 'db', 'cache', 'worker', 'scheduler'];
+export const namespaces = ['init', 'processing', 'shutdown', 'cache', 'worker', 'scheduler'];
 
 export const levelNames = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
 
@@ -84,9 +86,7 @@ export interface ScriptOptions {
   channels: readonly string[];
 }
 
-export function parseScriptArgs(defaultChannels: readonly string[]): ScriptOptions {
-  const { parseArgs } = require('util');
-
+export function parseScriptArgs(defaultCh: readonly string[]): ScriptOptions {
   const { values } = parseArgs({
     options: {
       count: { type: 'string', short: 'c', default: '5' },
@@ -99,7 +99,7 @@ export function parseScriptArgs(defaultChannels: readonly string[]): ScriptOptio
 
   const channels = values.channel
     ? values.channel.split(',').map((c: string) => c.trim())
-    : defaultChannels;
+    : defaultCh;
 
   return {
     count: parseInt(values.count!, 10),

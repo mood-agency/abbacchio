@@ -11,7 +11,7 @@
  */
 
 import winston from 'winston';
-import { AbbacchioWinstonTransport } from '@pino-live/transport/winston';
+import { AbbacchioWinstonTransport } from '../../packages/transport/dist/transports/winston.js';
 import {
   API_URL,
   defaultChannels,

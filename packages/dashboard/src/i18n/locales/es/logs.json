@@ -1,0 +1,65 @@
+{
+  "empty": {
+    "welcome": {
+      "title": "Conectar a un Canal",
+      "description": "Agrega un canal para empezar a recibir logs. Puedes conectarte a múltiples canales simultáneamente.",
+      "urlHint": "# O visita con parámetros URL:"
+    },
+    "noLogs": {
+      "title": "Sin logs aún",
+      "description": "Envía logs desde tu aplicación usando uno de los métodos a continuación"
+    },
+    "noMatches": {
+      "title": "Sin logs coincidentes",
+      "description": "Intenta ajustar tu búsqueda o filtros"
+    },
+    "connectionFailed": {
+      "title": "Conexión fallida",
+      "defaultError": "No se pudo conectar al servidor",
+      "hint": "Verifica que el servidor esté ejecutándose"
+    },
+    "connecting": "Conectando a {{channel}}...",
+    "loading": "Cargando logs..."
+  },
+  "pagination": {
+    "showing": "Mostrando {{start}}-{{end}} de {{total}}",
+    "page": "Página",
+    "of": "de",
+    "perPage": "Por página:",
+    "firstPage": "Primera página",
+    "previousPage": "Página anterior",
+    "nextPage": "Página siguiente",
+    "lastPage": "Última página"
+  },
+  "encryption": {
+    "encrypted": "Cifrado",
+    "notEncrypted": "Sin cifrar",
+    "encryptedAtSource": "Cifrado en origen",
+    "decryptionFailed": "Descifrado fallido",
+    "enterKeyToDecrypt": "Cifrado - Ingresa clave para descifrar",
+    "checkYourKey": "Descifrado fallido - Verifica tu clave"
+  },
+  "tooltips": {
+    "copyJson": "Copiar JSON"
+  },
+  "install": "Instalar",
+  "addChannel": "Agregar Canal",
+  "persistence": {
+    "enabled": "Persistencia de logs habilitada",
+    "disabled": "Persistencia de logs deshabilitada",
+    "enabledDescription": "Los logs se guardarán en SQLite",
+    "disabledDescription": "Los logs solo se mantendrán en memoria"
+  },
+  "toast": {
+    "linkCopied": "Enlace copiado al portapapeles",
+    "disconnected": "Desconectado de {{channel}}",
+    "connected": "Conectado al canal: {{channel}}",
+    "keyUpdated": "Clave de cifrado actualizada",
+    "logsDeleted": "Todos los logs han sido eliminados",
+    "deleteError": "Error al eliminar logs",
+    "invalidKeyFormat": "Formato de clave inválido",
+    "invalidKeyDescription": "La clave debe tener exactamente 43 caracteres (codificación base64url)",
+    "channelNameRequired": "Nombre de canal requerido",
+    "channelNameRequiredDescription": "Por favor ingresa un nombre de canal para conectar"
+  }
+}

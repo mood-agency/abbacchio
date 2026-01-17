@@ -68,6 +68,14 @@ export async function clearAllLogs(): Promise<void> {
   await sendMessage('clearAllLogs');
 }
 
+/**
+ * Clear logs for a specific channel
+ */
+export async function clearLogsForChannel(channel: string): Promise<void> {
+  await initDatabase();
+  await sendMessage('clearLogsForChannel', { channel });
+}
+
 export interface QueryOptions {
   search?: string;
   level?: FilterLevel;
@@ -135,17 +143,17 @@ export async function getLogCount(): Promise<number> {
 /**
  * Check if any logs have encryption flags set
  */
-export async function hasEncryptedLogs(): Promise<boolean> {
+export async function hasEncryptedLogs(channel?: string): Promise<boolean> {
   await initDatabase();
-  return sendMessage<boolean>('hasEncryptedLogs');
+  return sendMessage<boolean>('hasEncryptedLogs', { channel });
 }
 
 /**
  * Get all logs that need decryption (encrypted or previously failed)
  */
-export async function getLogsNeedingDecryption(): Promise<LogEntry[]> {
+export async function getLogsNeedingDecryption(channel?: string): Promise<LogEntry[]> {
   await initDatabase();
-  const rows = await sendMessage<SQLiteRow[]>('getLogsNeedingDecryption');
+  const rows = await sendMessage<SQLiteRow[]>('getLogsNeedingDecryption', { channel });
   return rows.map(rowToLogEntry);
 }
 

@@ -56,6 +56,20 @@ body {
   padding: 0 2px;
 }
 
+/* New row highlight animation */
+@keyframes highlight-fade {
+  0% {
+    background-color: rgba(56, 189, 248, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-highlight {
+  animation: highlight-fade 2s ease-out forwards;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

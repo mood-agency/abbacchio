@@ -16,9 +16,14 @@ import { resetIdPool } from './lib/id-pool.js';
 // Configuration from environment
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const API_KEY = process.env.API_KEY;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+// SECURITY: Default CORS to localhost only in production, allow all in dev
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || (IS_DEV ? '*' : 'http://localhost:4001');
 const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT !== 'false';
+// SECURITY: Trust proxy headers only when explicitly enabled
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+// SECURITY: Require API key in production (warn in dev)
+const REQUIRE_API_KEY = process.env.REQUIRE_API_KEY === 'true' || !IS_DEV;
 
 // Graceful shutdown configuration
 const SHUTDOWN_TIMEOUT = parseInt(process.env.SHUTDOWN_TIMEOUT || '30000', 10);
@@ -38,22 +43,57 @@ if (ENABLE_RATE_LIMIT) {
 // Input validation middleware for log ingestion
 app.use('/api/logs', createValidatorMiddleware());
 
-// Optional API key authentication
+// SECURITY: API key authentication
+// In production, API_KEY is required for all endpoints
+// In development, API_KEY is optional but recommended
+if (REQUIRE_API_KEY && !API_KEY) {
+  console.warn('\n⚠️  WARNING: API_KEY is not set. Set API_KEY environment variable for production use.\n');
+}
+
 if (API_KEY) {
   app.use('/api/*', async (c, next) => {
     const key = c.req.header('X-API-KEY') || c.req.query('apiKey');
 
-    // Allow SSE without auth for convenience (can be configured)
-    if (c.req.path === '/api/logs/stream' && !key) {
-      return next();
-    }
-
+    // SECURITY: All endpoints require authentication when API_KEY is set
+    // No more bypass for SSE streams - all connections must be authenticated
     if (key !== API_KEY) {
-      return c.json({ error: 'Unauthorized' }, 401);
+      return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
     }
     return next();
   });
+} else if (REQUIRE_API_KEY) {
+  // Block all API requests if API_KEY is required but not set
+  app.use('/api/*', async (c) => {
+    return c.json({ error: 'Service Unavailable', message: 'API key not configured on server' }, 503);
+  });
 }
+
+// SECURITY: Add security headers to all responses
+app.use('*', async (c, next) => {
+  await next();
+
+  // Prevent MIME type sniffing
+  c.header('X-Content-Type-Options', 'nosniff');
+
+  // Prevent clickjacking
+  c.header('X-Frame-Options', 'DENY');
+
+  // XSS protection (legacy browsers)
+  c.header('X-XSS-Protection', '1; mode=block');
+
+  // Referrer policy - don't leak URLs
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Content Security Policy (relaxed for dashboard)
+  if (!IS_DEV) {
+    c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+  }
+
+  // HSTS - only in production with HTTPS
+  if (!IS_DEV && c.req.header('x-forwarded-proto') === 'https') {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+});
 
 // API routes
 app.route('/api', routes);

@@ -25,12 +25,14 @@ export interface ConnectionStats {
 
 export interface ConnectionManagerConfig {
   maxConnections: number;
+  maxConnectionsPerIp: number; // SECURITY: limit connections per IP to prevent DoS
   connectionTimeout: number; // ms - disconnect after inactivity
   heartbeatInterval: number; // ms - interval for heartbeat checks
 }
 
 const DEFAULT_CONFIG: ConnectionManagerConfig = {
   maxConnections: parseInt(process.env.MAX_CONNECTIONS || '1000', 10),
+  maxConnectionsPerIp: parseInt(process.env.MAX_CONNECTIONS_PER_IP || '10', 10),
   connectionTimeout: parseInt(process.env.CONNECTION_TIMEOUT || '3600000', 10), // 1 hour
   heartbeatInterval: 60000, // 60 seconds
 };
@@ -73,11 +75,36 @@ export class ConnectionManager {
   }
 
   /**
+   * Get number of connections from a specific IP
+   */
+  getConnectionCountByIp(ip: string): number {
+    let count = 0;
+    for (const conn of this.connections.values()) {
+      if (conn.ip === ip) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Check if an IP can accept more connections
+   */
+  canIpAcceptConnection(ip: string): boolean {
+    return this.getConnectionCountByIp(ip) < this.config.maxConnectionsPerIp;
+  }
+
+  /**
    * Register a new connection
    * @returns connection ID if accepted, null if limit reached
    */
   register(channel: string, ip: string): string | null {
     if (!this.canAcceptConnection()) {
+      return null;
+    }
+
+    // SECURITY: Check per-IP limit to prevent single IP from exhausting connections
+    if (!this.canIpAcceptConnection(ip)) {
       return null;
     }
 

@@ -10,6 +10,8 @@
  *   --channel <name>  Channel name(s), comma-separated (default: optimus,bumblebee,jazz)
  */
 
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import pino, { Logger } from 'pino';
 import {
   API_URL,
@@ -24,11 +26,15 @@ import {
   sleep,
 } from './test-utils';
 
+// Resolve path to transport for pino (pino needs file paths, not package exports)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const transportPath = join(__dirname, '../../packages/transport/dist/transports/pino.js');
+
 function createLogger(channel: string, secretKey?: string): Logger {
   return pino({
     level: 'trace',
     transport: {
-      target: '@pino-live/transport/pino',
+      target: transportPath,
       options: {
         url: API_URL,
         channel,

@@ -1,0 +1,25 @@
+{
+  "levels": {
+    "all": "Todos"
+  },
+  "namespace": {
+    "placeholder": "Todos los namespaces",
+    "all": "Todos los namespaces"
+  },
+  "search": {
+    "placeholder": "Buscar logs... (Ctrl+F)",
+    "match": "{{count}} coincidencia",
+    "match_other": "{{count}} coincidencias"
+  },
+  "tooltips": {
+    "matchCase": "Coincidir mayúsculas",
+    "clearFilters": "Limpiar filtros",
+    "manageKey": "Gestionar clave de cifrado",
+    "copyLink": "Copiar enlace",
+    "enablePersistence": "Habilitar persistencia",
+    "disablePersistence": "Deshabilitar persistencia",
+    "clearLogs": "Limpiar logs",
+    "disconnect": "Desconectar canal",
+    "addChannel": "Agregar canal"
+  }
+}

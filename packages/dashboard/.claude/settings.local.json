@@ -13,7 +13,13 @@
       "Bash(ls:*)",
       "Bash(curl:*)",
       "WebFetch(domain:sqlite.org)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(timeout 8 npx vite:*)",
+      "Bash(timeout 10 npx vite:*)",
+      "Bash(timeout 15 npx vite:*)",
+      "Bash(pnpm install:*)",
+      "Bash(timeout 10 npm run dev:*)"
     ]
   }
 }

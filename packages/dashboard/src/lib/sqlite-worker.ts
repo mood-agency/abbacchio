@@ -299,24 +299,55 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         break;
       }
 
-      case 'hasEncryptedLogs': {
-        let count = 0;
+      case 'clearLogsForChannel': {
+        const options = payload as { channel: string };
         db.exec({
-          sql: 'SELECT COUNT(*) as count FROM logs WHERE encrypted = 1 OR decryption_failed = 1',
-          rowMode: 'object',
-          callback: (row) => { count = (row as { count: number }).count; },
+          sql: 'DELETE FROM logs WHERE channel = ?',
+          bind: [options.channel],
         });
+        db.exec("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
+        self.postMessage({ id, success: true });
+        break;
+      }
+
+      case 'hasEncryptedLogs': {
+        const options = payload as { channel?: string } | undefined;
+        let count = 0;
+        if (options?.channel) {
+          db.exec({
+            sql: 'SELECT COUNT(*) as count FROM logs WHERE (encrypted = 1 OR decryption_failed = 1) AND channel = ?',
+            bind: [options.channel],
+            rowMode: 'object',
+            callback: (row) => { count = (row as { count: number }).count; },
+          });
+        } else {
+          db.exec({
+            sql: 'SELECT COUNT(*) as count FROM logs WHERE encrypted = 1 OR decryption_failed = 1',
+            rowMode: 'object',
+            callback: (row) => { count = (row as { count: number }).count; },
+          });
+        }
         self.postMessage({ id, success: true, result: count > 0 });
         break;
       }
 
       case 'getLogsNeedingDecryption': {
+        const options = payload as { channel?: string } | undefined;
         const rows: Record<string, unknown>[] = [];
-        db.exec({
-          sql: `SELECT * FROM logs WHERE (encrypted = 1 AND encrypted_data IS NOT NULL) OR (decryption_failed = 1 AND encrypted_data IS NOT NULL)`,
-          rowMode: 'object',
-          callback: (row) => rows.push(row as Record<string, unknown>),
-        });
+        if (options?.channel) {
+          db.exec({
+            sql: `SELECT * FROM logs WHERE ((encrypted = 1 AND encrypted_data IS NOT NULL) OR (decryption_failed = 1 AND encrypted_data IS NOT NULL)) AND channel = ?`,
+            bind: [options.channel],
+            rowMode: 'object',
+            callback: (row) => rows.push(row as Record<string, unknown>),
+          });
+        } else {
+          db.exec({
+            sql: `SELECT * FROM logs WHERE (encrypted = 1 AND encrypted_data IS NOT NULL) OR (decryption_failed = 1 AND encrypted_data IS NOT NULL)`,
+            rowMode: 'object',
+            callback: (row) => rows.push(row as Record<string, unknown>),
+          });
+        }
         self.postMessage({ id, success: true, result: rows });
         break;
       }

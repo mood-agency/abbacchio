@@ -1,0 +1,18 @@
+{
+  "appName": "Abbacchio",
+  "actions": {
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "connect": "Conectar",
+    "copy": "Copiar",
+    "delete": "Eliminar",
+    "apply": "Aplicar",
+    "clear": "Limpiar"
+  },
+  "theme": {
+    "toggleDarkMode": "Cambiar modo oscuro"
+  },
+  "labels": {
+    "optional": "(opcional)"
+  }
+}

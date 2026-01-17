@@ -1,0 +1,67 @@
+{
+  "masterPassword": {
+    "title": "Contraseña Maestra",
+    "unlockTitle": "Desbloquear Dashboard",
+    "unlockDescription": "Ingresa tu contraseña maestra para descifrar tus canales guardados.",
+    "createTitle": "Crear Contraseña Maestra",
+    "createDescription": "Establece una contraseña maestra para cifrar las configuraciones de tus canales. Esto mantiene tus claves de cifrado seguras.",
+    "migrationTitle": "Protege Tus Canales",
+    "migrationDescription": "Tus canales están almacenados sin cifrado. Establece una contraseña maestra para protegerlos, o continúa sin persistencia.",
+    "passwordLabel": "Contraseña",
+    "confirmLabel": "Confirmar Contraseña",
+    "passwordPlaceholder": "Ingresa contraseña maestra",
+    "confirmPlaceholder": "Confirma la contraseña",
+    "unlock": "Desbloquear",
+    "create": "Crear Contraseña",
+    "migrate": "Cifrar y Guardar",
+    "skipPersistence": "No Guardar Canales",
+    "skipPersistenceDescription": "Los canales solo se almacenarán en memoria y se perderán cuando cierres el navegador.",
+    "wrongPassword": "Contraseña inválida. Por favor intenta de nuevo.",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "passwordTooShort": "La contraseña debe tener al menos 8 caracteres.",
+    "encryptionFailed": "Error al cifrar datos. Por favor intenta de nuevo.",
+    "changingPassword": "Cambiar Contraseña Maestra",
+    "currentPassword": "Contraseña Actual",
+    "newPassword": "Nueva Contraseña",
+    "changePassword": "Cambiar Contraseña",
+    "resetStorage": "Restablecer Todos los Datos",
+    "resetWarning": "Esto eliminará todos los canales guardados y sus claves de cifrado.",
+    "reset": "Restablecer"
+  },
+  "addChannel": {
+    "title": "Agregar Canal",
+    "description": "Ingresa un nombre de canal para conectar. Opcionalmente agrega una clave de cifrado.",
+    "channelName": "Nombre del Canal",
+    "channelPlaceholder": "ej., mi-app",
+    "encryptionKey": "Clave de Cifrado",
+    "keyPlaceholder": "Ingresa la clave si los logs están cifrados"
+  },
+  "encryptionKey": {
+    "title": "Clave de Cifrado",
+    "decryption": {
+      "title": "Clave de Descifrado",
+      "description": "Ingresa tu clave para descifrar los logs cifrados.",
+      "placeholder": "Pega tu clave de cifrado...",
+      "apply": "Aplicar Clave",
+      "clear": "Limpiar Clave"
+    },
+    "generator": {
+      "title": "Generador de Claves",
+      "description": "Genera una nueva clave para usar en la configuración de tu transport.",
+      "generate": "Generar Clave",
+      "regenerate": "Regenerar",
+      "copyKey": "Copiar Clave",
+      "copied": "¡Copiado!"
+    }
+  },
+  "deleteConfirmation": {
+    "title": "¿Eliminar logs de {{channel}}?",
+    "description": "Esta acción no se puede deshacer. Todos los logs de este canal serán eliminados permanentemente del almacenamiento del navegador y el servidor.",
+    "deleting": "Eliminando...",
+    "deleteAll": "Eliminar todo"
+  },
+  "decryptionFailed": {
+    "title": "Descifrado Fallido",
+    "description": "No se pudo descifrar esta entrada de log. Por favor verifica que hayas ingresado la clave de cifrado correcta."
+  }
+}

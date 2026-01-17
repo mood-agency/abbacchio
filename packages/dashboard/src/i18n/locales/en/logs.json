@@ -1,0 +1,65 @@
+{
+  "empty": {
+    "welcome": {
+      "title": "Connect to a Channel",
+      "description": "Add a channel to start receiving logs. You can connect to multiple channels simultaneously.",
+      "urlHint": "# Or visit with URL params:"
+    },
+    "noLogs": {
+      "title": "No logs yet",
+      "description": "Send logs from your application using one of the methods below"
+    },
+    "noMatches": {
+      "title": "No matching logs",
+      "description": "Try adjusting your search or filters"
+    },
+    "connectionFailed": {
+      "title": "Connection failed",
+      "defaultError": "Unable to connect to the server",
+      "hint": "Check if the server is running"
+    },
+    "connecting": "Connecting to {{channel}}...",
+    "loading": "Loading logs..."
+  },
+  "pagination": {
+    "showing": "Showing {{start}}-{{end}} of {{total}}",
+    "page": "Page",
+    "of": "of",
+    "perPage": "Per page:",
+    "firstPage": "First page",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "lastPage": "Last page"
+  },
+  "encryption": {
+    "encrypted": "Encrypted",
+    "notEncrypted": "Not encrypted",
+    "encryptedAtSource": "Encrypted at source",
+    "decryptionFailed": "Decryption failed",
+    "enterKeyToDecrypt": "Encrypted - Enter key to decrypt",
+    "checkYourKey": "Decryption failed - Check your key"
+  },
+  "tooltips": {
+    "copyJson": "Copy JSON"
+  },
+  "install": "Install",
+  "addChannel": "Add Channel",
+  "persistence": {
+    "enabled": "Log persistence enabled",
+    "disabled": "Log persistence disabled",
+    "enabledDescription": "Logs will be saved to SQLite storage",
+    "disabledDescription": "Logs will only be kept in memory"
+  },
+  "toast": {
+    "linkCopied": "Link copied to clipboard",
+    "disconnected": "Disconnected from {{channel}}",
+    "connected": "Connected to channel: {{channel}}",
+    "keyUpdated": "Encryption key updated",
+    "logsDeleted": "All logs have been deleted",
+    "deleteError": "Failed to delete logs",
+    "invalidKeyFormat": "Invalid key format",
+    "invalidKeyDescription": "Key must be exactly 43 characters (base64url encoded)",
+    "channelNameRequired": "Channel name required",
+    "channelNameRequiredDescription": "Please enter a channel name to connect"
+  }
+}

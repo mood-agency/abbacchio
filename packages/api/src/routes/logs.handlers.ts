@@ -22,15 +22,26 @@ function getChannel(c: Context): string {
   return c.req.header('X-Channel') || c.req.query('channel') || DEFAULT_CHANNEL;
 }
 
+// SECURITY: Only trust proxy headers when explicitly enabled
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+
 /**
  * Get client IP from context
+ * SECURITY: Only trusts proxy headers when TRUST_PROXY is enabled
  */
 function getClientIp(c: Context): string {
-  const forwarded = c.req.header('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  if (TRUST_PROXY) {
+    const forwarded = c.req.header('x-forwarded-for');
+    if (forwarded) {
+      return forwarded.split(',')[0].trim();
+    }
+    const realIp = c.req.header('x-real-ip');
+    if (realIp) {
+      return realIp;
+    }
   }
-  return c.req.header('x-real-ip') || 'unknown';
+  // Fallback to a simple identifier when proxy is not trusted
+  return 'direct-client';
 }
 
 /**

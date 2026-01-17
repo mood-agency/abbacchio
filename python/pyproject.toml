@@ -42,9 +42,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/pino-live"
-Repository = "https://github.com/yourusername/pino-live"
-Documentation = "https://github.com/yourusername/pino-live#readme"
+Homepage = "https://github.com/yourusername/abbacchio"
+Repository = "https://github.com/yourusername/abbacchio"
+Documentation = "https://github.com/yourusername/abbacchio#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["abbacchio"]

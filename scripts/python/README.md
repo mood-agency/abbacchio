@@ -4,16 +4,38 @@ Test scripts for generating logs using various Python logging libraries.
 
 ## Prerequisites
 
-Install the abbacchio package and required logging libraries:
+### Using uv (recommended)
 
 ```bash
-# Install abbacchio (from this repo or PyPI)
-pip install abbacchio
+# Create a virtual environment
+uv venv
 
-# Or install from local source
+# Activate the environment
+# On Windows:
+.venv\Scripts\activate
+# On macOS/Linux:
+source .venv/bin/activate
+
+# Install abbacchio and dependencies
+uv pip install -e ./python structlog loguru
+```
+
+### Using pip
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+
+# Activate the environment
+# On Windows:
+.venv\Scripts\activate
+# On macOS/Linux:
+source .venv/bin/activate
+
+# Install abbacchio package in development mode
 pip install -e ./python
 
-# Install logging libraries as needed
+# Install optional logging libraries as needed
 pip install structlog   # for structlog tests
 pip install loguru      # for loguru tests
 # stdlib logging is built-in

@@ -1,0 +1,67 @@
+{
+  "masterPassword": {
+    "title": "Master Password",
+    "unlockTitle": "Unlock Dashboard",
+    "unlockDescription": "Enter your master password to decrypt your saved channels.",
+    "createTitle": "Create Master Password",
+    "createDescription": "Set a master password to encrypt your channel configurations. This keeps your encryption keys secure.",
+    "migrationTitle": "Secure Your Channels",
+    "migrationDescription": "Your channels are stored without encryption. Set a master password to protect them, or continue without persistence.",
+    "passwordLabel": "Password",
+    "confirmLabel": "Confirm Password",
+    "passwordPlaceholder": "Enter master password",
+    "confirmPlaceholder": "Confirm password",
+    "unlock": "Unlock",
+    "create": "Create Password",
+    "migrate": "Encrypt & Save",
+    "skipPersistence": "Don't Save Channels",
+    "skipPersistenceDescription": "Channels will only be stored in memory and will be lost when you close the browser.",
+    "wrongPassword": "Invalid password. Please try again.",
+    "passwordMismatch": "Passwords do not match.",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "encryptionFailed": "Failed to encrypt data. Please try again.",
+    "changingPassword": "Change Master Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "changePassword": "Change Password",
+    "resetStorage": "Reset All Data",
+    "resetWarning": "This will delete all saved channels and their encryption keys.",
+    "reset": "Reset"
+  },
+  "addChannel": {
+    "title": "Add Channel",
+    "description": "Enter a channel name to connect. Optionally add an encryption key.",
+    "channelName": "Channel Name",
+    "channelPlaceholder": "e.g., my-app",
+    "encryptionKey": "Encryption Key",
+    "keyPlaceholder": "Enter key if logs are encrypted"
+  },
+  "encryptionKey": {
+    "title": "Encryption Key",
+    "decryption": {
+      "title": "Decryption Key",
+      "description": "Enter your key to decrypt encrypted logs.",
+      "placeholder": "Paste your encryption key...",
+      "apply": "Apply Key",
+      "clear": "Clear Key"
+    },
+    "generator": {
+      "title": "Key Generator",
+      "description": "Generate a new key to use in your transport configuration.",
+      "generate": "Generate Key",
+      "regenerate": "Regenerate",
+      "copyKey": "Copy Key",
+      "copied": "Copied!"
+    }
+  },
+  "deleteConfirmation": {
+    "title": "Delete logs for {{channel}}?",
+    "description": "This action cannot be undone. All logs for this channel will be permanently deleted from your browser storage and the server.",
+    "deleting": "Deleting...",
+    "deleteAll": "Delete all"
+  },
+  "decryptionFailed": {
+    "title": "Decryption Failed",
+    "description": "Could not decrypt this log entry. Please check that you've entered the correct encryption key."
+  }
+}

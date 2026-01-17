@@ -11,7 +11,7 @@
  */
 
 import bunyan from 'bunyan';
-import { bunyanStream } from '@pino-live/transport/bunyan';
+import { bunyanStream } from '../../packages/transport/dist/transports/bunyan.js';
 import {
   API_URL,
   defaultChannels,

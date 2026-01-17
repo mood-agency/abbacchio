@@ -1,8 +1,14 @@
 /**
  * Rate Limiting Middleware
  * Token bucket per IP with configurable window and max requests
+ *
+ * SECURITY: Proxy headers (x-forwarded-for, x-real-ip) are only trusted
+ * when TRUST_PROXY=true is set. Otherwise, we use a fallback IP.
  */
 import type { Context, Next, MiddlewareHandler } from 'hono';
+
+// SECURITY: Only trust proxy headers when explicitly enabled
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
 
 export interface RateLimiterConfig {
   windowMs: number;     // Time window in milliseconds
@@ -22,21 +28,49 @@ const DEFAULT_CONFIG: RateLimiterConfig = {
 
 /**
  * Get client IP from request
+ * SECURITY: Only trusts proxy headers when TRUST_PROXY is enabled
  */
 function getClientIp(c: Context): string {
-  // Check common proxy headers
-  const forwarded = c.req.header('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  // SECURITY: Only check proxy headers if explicitly trusted
+  // These headers can be spoofed by clients if there's no trusted proxy
+  if (TRUST_PROXY) {
+    const forwarded = c.req.header('x-forwarded-for');
+    if (forwarded) {
+      // Take the first IP in the chain (original client)
+      return forwarded.split(',')[0].trim();
+    }
+
+    const realIp = c.req.header('x-real-ip');
+    if (realIp) {
+      return realIp;
+    }
   }
 
-  const realIp = c.req.header('x-real-ip');
-  if (realIp) {
-    return realIp;
+  // Fallback: use a hash of available identifying info
+  // In most deployments without proxy, this will be a consistent identifier
+  const userAgent = c.req.header('user-agent') || '';
+  const acceptLanguage = c.req.header('accept-language') || '';
+
+  // Create a simple hash for rate limiting purposes
+  // This isn't perfect but provides some differentiation
+  if (userAgent || acceptLanguage) {
+    return `client_${simpleHash(userAgent + acceptLanguage)}`;
   }
 
-  // Fallback to connection info (may not be available in all environments)
   return 'unknown';
+}
+
+/**
+ * Simple string hash for client identification
+ */
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36);
 }
 
 export class RateLimiter {
