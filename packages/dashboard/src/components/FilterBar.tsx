@@ -18,8 +18,6 @@ interface FilterBarProps {
   availableNamespaces: string[];
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  logCount: number;
-  filteredCount: number;
   matchCount?: number;
 }
 
@@ -33,8 +31,6 @@ export function FilterBar({
   availableNamespaces,
   searchQuery,
   setSearchQuery,
-  logCount,
-  filteredCount,
   matchCount,
 }: FilterBarProps) {
   const hasFilters = levelFilter !== 'all' || namespaceFilter !== '' || searchQuery !== '';
@@ -110,12 +106,6 @@ export function FilterBar({
         </Button>
       )}
 
-      {/* Log count */}
-      <span className="text-sm text-muted-foreground">
-        {filteredCount === logCount
-          ? `${logCount} logs`
-          : `${filteredCount} of ${logCount} logs`}
-      </span>
     </div>
   );
 }

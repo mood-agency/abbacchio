@@ -15,7 +15,7 @@ import { parseArgs } from 'util';
 
 const API_URL = process.env.API_URL || 'http://localhost:4000/api/logs';
 
-const channels = ['optimus', 'bumblebee', 'jazz'] as const;
+const channels = ['Moody Blues'] as const;
 
 const namespaces = ['auth', 'api', 'db', 'cache', 'worker', 'scheduler'];
 

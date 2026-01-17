@@ -9,6 +9,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    exclude: ['@sqlite.org/sqlite-wasm'],
+  },
   server: {
     port: 4001,
     proxy: {
@@ -19,6 +22,10 @@ export default defineConfig({
     },
     watch: {
       usePolling: true,
+    },
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
   build: {

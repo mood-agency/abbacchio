@@ -1,19 +1,40 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { LogEntry, LogLevelLabel } from '../types';
-import { decryptLog, isCryptoAvailable } from '../lib/crypto';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { LogEntry, FilterLevel } from '../types';
+import { useLogStore } from './useLogStore';
+import {
+  queryLogs,
+  getFilteredCount,
+  getDistinctNamespaces,
+  clearAllLogs,
+} from '../lib/sqlite-db';
 
-const MAX_LOGS = 1000;
-const LOG_LEVELS: Record<number, LogLevelLabel> = {
-  10: 'trace',
-  20: 'debug',
-  30: 'info',
-  40: 'warn',
-  50: 'error',
-  60: 'fatal',
-};
+// Default page size options
+export const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
+export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 interface UseLogStreamResult {
+  /** Paginated logs for the current page (filtered) */
   logs: LogEntry[];
+  /** Total count of filtered logs */
+  filteredCount: number;
+  /** Total count of all logs in database */
+  totalCount: number;
+  /** Whether database initialization is complete */
+  isInitialized: boolean;
+  /** Pagination */
+  currentPage: number;
+  setCurrentPage: (page: number) => void;
+  pageSize: PageSize;
+  setPageSize: (size: PageSize) => void;
+  totalPages: number;
+  /** Filter settings */
+  levelFilter: FilterLevel;
+  setLevelFilter: (level: FilterLevel) => void;
+  namespaceFilter: string;
+  setNamespaceFilter: (namespace: string) => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  /** Connection status */
   isConnected: boolean;
   isConnecting: boolean;
   clearLogs: () => void;
@@ -21,216 +42,170 @@ interface UseLogStreamResult {
   secretKey: string;
   setSecretKey: (key: string) => void;
   hasEncryptedLogs: boolean;
-  /** Available channels */
   channels: string[];
-  /** Channel filter from URL parameter */
   urlChannel: string;
-}
-
-// Get URL parameters
-function getUrlParams() {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    channel: params.get('channel') || '',
-    key: params.get('key') || '',
-  };
+  /** Available namespaces for filter dropdown */
+  availableNamespaces: string[];
+  /** Persistence toggle */
+  persistLogs: boolean;
+  setPersistLogs: (persist: boolean) => void;
 }
 
 export function useLogStream(): UseLogStreamResult {
+  const {
+    totalCount,
+    isInitialized,
+    clearLogs: clearStore,
+    onNewLogs,
+    onClear,
+    isConnected,
+    isConnecting,
+    connectionError,
+    secretKey,
+    setSecretKey,
+    hasEncryptedLogs,
+    channels,
+    urlChannel,
+    persistLogs,
+    setPersistLogs,
+  } = useLogStore();
+
+  // Filter state
+  const [levelFilter, setLevelFilter] = useState<FilterLevel>('all');
+  const [namespaceFilter, setNamespaceFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(100);
+
+  // Results from SQL queries
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(true);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [secretKey, setSecretKey] = useState(() => {
-    // Only use URL param - no localStorage persistence
-    const urlParams = getUrlParams();
-    return urlParams.key;
-  });
-  const [channels, setChannels] = useState<string[]>(['default']);
-  const [urlChannel] = useState(() => getUrlParams().channel);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<number>();
-  const reconnectAttempts = useRef(0);
-  const secretKeyRef = useRef(secretKey);
+  const [filteredCount, setFilteredCount] = useState(0);
+  const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
 
-  // Keep ref in sync
-  useEffect(() => {
-    secretKeyRef.current = secretKey;
-  }, [secretKey]);
+  // Debounce ref for search queries
+  const searchTimeoutRef = useRef<number | null>(null);
+  const lastQueryRef = useRef<string>('');
 
-  // Decrypt a log entry if encrypted
-  const processEntry = useCallback(async (entry: LogEntry): Promise<LogEntry> => {
-    if (!entry.encrypted || !entry.encryptedData) {
-      return entry;
-    }
+  // Load logs from SQLite with current filters
+  const loadLogs = useCallback(async () => {
+    const offset = (currentPage - 1) * pageSize;
 
-    const key = secretKeyRef.current;
-    if (!key || !isCryptoAvailable()) {
-      return { ...entry, decryptionFailed: !key };
-    }
+    const options = {
+      search: searchQuery || undefined,
+      level: levelFilter,
+      namespace: namespaceFilter || undefined,
+      channel: urlChannel || undefined,
+      limit: pageSize,
+      offset,
+    };
 
     try {
-      const decrypted = await decryptLog<{
-        level?: number;
-        time?: number;
-        msg?: string;
-        message?: string;
-        namespace?: string;
-        name?: string;
-        [key: string]: unknown;
-      }>(entry.encryptedData, key);
+      const [fetchedLogs, count, namespaces] = await Promise.all([
+        queryLogs(options),
+        getFilteredCount({
+          search: searchQuery || undefined,
+          level: levelFilter,
+          namespace: namespaceFilter || undefined,
+          channel: urlChannel || undefined,
+        }),
+        getDistinctNamespaces(),
+      ]);
 
-      if (!decrypted) {
-        return { ...entry, decryptionFailed: true };
-      }
+      setLogs(fetchedLogs);
+      setFilteredCount(count);
+      setAvailableNamespaces(namespaces);
+    } catch (error) {
+      console.error('Failed to load logs:', error);
+    }
+  }, [currentPage, pageSize, searchQuery, levelFilter, namespaceFilter, urlChannel]);
 
-      const level = typeof decrypted.level === 'number' ? decrypted.level : 30;
-      const { level: _, time, msg, message, namespace, name, ...rest } = decrypted;
+  // Initial load and filter changes
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
 
-      return {
-        ...entry,
-        level,
-        levelLabel: LOG_LEVELS[level as keyof typeof LOG_LEVELS] || 'info',
-        time: time || entry.time,
-        msg: msg || message || '',
-        namespace: namespace || name,
-        data: rest,
-        encrypted: false,
-        encryptedData: undefined,
-      };
-    } catch {
-      return { ...entry, decryptionFailed: true };
+  // Subscribe to new logs - reload when new logs arrive
+  useEffect(() => {
+    const unsubscribe = onNewLogs(() => {
+      // Reload logs when new data arrives
+      loadLogs();
+    });
+    return unsubscribe;
+  }, [onNewLogs, loadLogs]);
+
+  // Subscribe to clear
+  useEffect(() => {
+    const unsubscribe = onClear(async () => {
+      setLogs([]);
+      setFilteredCount(0);
+      setAvailableNamespaces([]);
+      setCurrentPage(1);
+    });
+    return unsubscribe;
+  }, [onClear]);
+
+  // Calculate total pages
+  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [levelFilter, namespaceFilter, pageSize]);
+
+  // Debounced search query update
+  const handleSetSearchQuery = useCallback((query: string) => {
+    setSearchQuery(query);
+
+    // Clear any existing timeout
+    if (searchTimeoutRef.current !== null) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Only reset page after debounce
+    if (query !== lastQueryRef.current) {
+      searchTimeoutRef.current = window.setTimeout(() => {
+        setCurrentPage(1);
+        lastQueryRef.current = query;
+      }, 150);
     }
   }, []);
 
-  // Re-decrypt all encrypted logs when secret key changes
+  // Ensure current page is valid
   useEffect(() => {
-    if (!secretKey) return;
-
-    const decryptExisting = async () => {
-      const updated = await Promise.all(
-        logs.map(async (log) => {
-          if (log.encrypted && log.encryptedData && !log.decryptionFailed) {
-            return processEntry(log);
-          }
-          // Retry failed decryptions with new key
-          if (log.decryptionFailed && log.encryptedData) {
-            return processEntry({ ...log, encrypted: true, decryptionFailed: false });
-          }
-          return log;
-        })
-      );
-      setLogs(updated);
-    };
-
-    decryptExisting();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secretKey]);
-
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
+  }, [currentPage, totalPages]);
 
-    setIsConnecting(true);
-    setConnectionError(null);
+  // Clear logs wrapper
+  const clearLogs = useCallback(async () => {
+    await clearStore();
+    await clearAllLogs();
+  }, [clearStore]);
 
-    // Build stream URL with optional channel filter
-    const streamUrl = urlChannel
-      ? `/api/logs/stream?channel=${encodeURIComponent(urlChannel)}`
-      : '/api/logs/stream';
-    const eventSource = new EventSource(streamUrl);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      setIsConnected(true);
-      setIsConnecting(false);
-      setConnectionError(null);
-      reconnectAttempts.current = 0;
-    };
-
-    eventSource.addEventListener('log', async (event) => {
-      try {
-        const entry: LogEntry = JSON.parse(event.data);
-        const processed = await processEntry(entry);
-        setLogs((prev) => {
-          const next = [...prev, processed];
-          // Keep max logs, removing oldest (from beginning)
-          return next.slice(-MAX_LOGS);
-        });
-      } catch (e) {
-        console.error('Failed to parse log event:', e);
-      }
-    });
-
-    eventSource.addEventListener('batch', async (event) => {
-      try {
-        const entries: LogEntry[] = JSON.parse(event.data);
-        const processed = await Promise.all(entries.map(processEntry));
-        setLogs((prev) => {
-          const next = [...prev, ...processed];
-          // Keep max logs, removing oldest (from beginning)
-          return next.slice(-MAX_LOGS);
-        });
-      } catch (e) {
-        console.error('Failed to parse batch event:', e);
-      }
-    });
-
-    eventSource.addEventListener('channels', (event) => {
-      try {
-        const channelList: string[] = JSON.parse(event.data);
-        setChannels(channelList);
-      } catch (e) {
-        console.error('Failed to parse channels event:', e);
-      }
-    });
-
-    eventSource.addEventListener('channel:added', (event) => {
-      const newChannel = event.data;
-      setChannels((prev) => {
-        if (prev.includes(newChannel)) return prev;
-        return [...prev, newChannel];
-      });
-    });
-
-    eventSource.onerror = () => {
-      setIsConnected(false);
-      setIsConnecting(false);
-      eventSource.close();
-
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-      reconnectAttempts.current++;
-      setConnectionError(`Connection lost. Reconnecting in ${delay / 1000}s...`);
-
-      reconnectTimeoutRef.current = window.setTimeout(() => {
-        connect();
-      }, delay);
-    };
-  }, [processEntry, urlChannel]);
-
-  useEffect(() => {
-    connect();
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, [connect]);
-
-  const clearLogs = useCallback(() => {
-    setLogs([]);
-    fetch('/api/logs', { method: 'DELETE' }).catch(console.error);
-  }, []);
-
-  const hasEncryptedLogs = logs.some((log) => log.encrypted || log.decryptionFailed);
+  // Page change handler
+  const handleSetCurrentPage = useCallback((page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  }, [totalPages]);
 
   return {
     logs,
+    filteredCount,
+    totalCount,
+    isInitialized,
+    currentPage,
+    setCurrentPage: handleSetCurrentPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    levelFilter,
+    setLevelFilter,
+    namespaceFilter,
+    setNamespaceFilter,
+    searchQuery,
+    setSearchQuery: handleSetSearchQuery,
     isConnected,
     isConnecting,
     clearLogs,
@@ -240,5 +215,8 @@ export function useLogStream(): UseLogStreamResult {
     hasEncryptedLogs,
     channels,
     urlChannel,
+    availableNamespaces,
+    persistLogs,
+    setPersistLogs,
   };
 }

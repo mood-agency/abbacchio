@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(npm search:*)",
+      "Bash(npm view:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(pnpm remove:*)",
+      "Bash(pnpm run build)",
+      "Bash(ls:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:sqlite.org)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

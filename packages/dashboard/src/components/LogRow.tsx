@@ -27,6 +27,16 @@ function formatTime(timestamp: number): string {
   return `${time}.${ms}`;
 }
 
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Syntax highlight JSON (only used when expanded - not performance critical)
+ */
 function syntaxHighlightJson(obj: unknown, searchQuery?: string): string {
   const json = JSON.stringify(obj, null, 2);
   let highlighted = json
@@ -40,31 +50,7 @@ function syntaxHighlightJson(obj: unknown, searchQuery?: string): string {
   if (searchQuery) {
     const escaped = escapeRegex(searchQuery);
     highlighted = highlighted.replace(
-      new RegExp(`(${escaped})(?![^<]*>)`, 'gi'),
-      '<mark class="search-highlight">$1</mark>'
-    );
-  }
-
-  return highlighted;
-}
-
-/**
- * Syntax highlight inline JSON (single line preview)
- */
-function syntaxHighlightInlineJson(obj: unknown, searchQuery?: string): string {
-  const json = JSON.stringify(obj);
-  let highlighted = json
-    .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
-    .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
-    .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
-    .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>')
-    .replace(/: (null)/g, ': <span class="json-null">$1</span>');
-
-  // Add search highlighting
-  if (searchQuery) {
-    const escaped = escapeRegex(searchQuery);
-    highlighted = highlighted.replace(
-      new RegExp(`(${escaped})(?![^<]*>)`, 'gi'),
+      new RegExp(`(${escaped})`, 'gi'),
       '<mark class="search-highlight">$1</mark>'
     );
   }
@@ -77,18 +63,18 @@ function hasData(data: Record<string, unknown>): boolean {
 }
 
 /**
- * Escape special regex characters in a string
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Highlight search matches in text
+ * Highlight search matches in text - optimized with fast-path checks
  */
 function highlightText(text: string, query: string): React.ReactNode {
+  // Fast path: no highlighting needed
   if (!query || !text) return text;
 
+  // Quick check if query exists in text (case-insensitive)
+  const textLower = text.toLowerCase();
+  const queryLower = query.toLowerCase();
+  if (!textLower.includes(queryLower)) return text;
+
+  // Split by pattern using native regex
   const escaped = escapeRegex(query);
   const regex = new RegExp(`(${escaped})`, 'gi');
   const parts = text.split(regex);
@@ -96,7 +82,7 @@ function highlightText(text: string, query: string): React.ReactNode {
   if (parts.length === 1) return text;
 
   return parts.map((part, i) =>
-    regex.test(part) ? (
+    part.toLowerCase() === queryLower ? (
       <mark key={i} className="search-highlight">
         {part}
       </mark>
@@ -104,6 +90,30 @@ function highlightText(text: string, query: string): React.ReactNode {
       part
     )
   );
+}
+
+/**
+ * Highlight search in data
+ */
+function highlightData(
+  data: Record<string, unknown>,
+  query: string
+): React.ReactNode {
+  const dataString = JSON.stringify(data);
+
+  // Fast path: no query
+  if (!query) {
+    return dataString;
+  }
+
+  const queryLower = query.toLowerCase();
+
+  // Check if there's a match
+  if (!dataString.toLowerCase().includes(queryLower)) {
+    return dataString;
+  }
+
+  return highlightText(dataString, query);
 }
 
 export const LogRow = memo(function LogRow({ log, showChannel = false, searchQuery = '' }: LogRowProps) {
@@ -209,7 +219,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
           </span>
         </div>
 
-        {/* Data column - truncated JSON preview with syntax highlighting */}
+        {/* Data column - with search highlighting */}
         <div className="flex-1 truncate font-mono text-xs text-muted-foreground">
           {isEncrypted || decryptionFailed ? (
             <Tooltip>
@@ -223,10 +233,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
               </TooltipContent>
             </Tooltip>
           ) : showData ? (
-            <span
-              title={JSON.stringify(log.data, null, 2)}
-              dangerouslySetInnerHTML={{ __html: syntaxHighlightInlineJson(log.data, searchQuery) }}
-            />
+            <span>{highlightData(log.data, searchQuery)}</span>
           ) : null}
         </div>
 

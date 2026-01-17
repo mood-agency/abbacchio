@@ -1,12 +1,18 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useLogStream } from '../hooks/useLogStream';
+import { useLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useLogStream';
 import { FilterBar } from './FilterBar';
 import { LogRow } from './LogRow';
-import type { FilterLevel } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -27,7 +33,6 @@ import {
   Link,
   Sun,
   Moon,
-  ArrowDown,
   RefreshCw,
   Copy,
   Eye,
@@ -37,11 +42,30 @@ import {
   FileText,
   Loader2,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Database,
+  DatabaseBackup,
 } from 'lucide-react';
 
 export function LogViewer() {
   const {
     logs,
+    filteredCount,
+    totalCount,
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    levelFilter,
+    setLevelFilter,
+    namespaceFilter,
+    setNamespaceFilter,
+    searchQuery,
+    setSearchQuery,
     isConnected,
     isConnecting,
     clearLogs,
@@ -50,6 +74,9 @@ export function LogViewer() {
     hasEncryptedLogs,
     channels,
     urlChannel,
+    availableNamespaces,
+    persistLogs,
+    setPersistLogs,
   } = useLogStream();
 
   // If no channel is provided, show a friendly message
@@ -92,6 +119,9 @@ export function LogViewer() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [showFullKey, setShowFullKey] = useState(false);
 
+  // Page jump input
+  const [pageInput, setPageInput] = useState('');
+
   // Mask key showing only first 4 characters
   const maskedKey = generatedKey
     ? generatedKey.slice(0, 4) + '*'.repeat(Math.max(0, generatedKey.length - 4))
@@ -133,6 +163,7 @@ export function LogViewer() {
 
   // Copy full link with channel and key
   const [copiedLink, setCopiedLink] = useState(false);
+  const channelFilter = urlChannel;
   const copyLink = async () => {
     const params = new URLSearchParams();
     if (channelFilter) params.set('channel', channelFilter);
@@ -148,114 +179,68 @@ export function LogViewer() {
     }
   };
 
-  // Filter state
-  const [levelFilter, setLevelFilter] = useState<FilterLevel>('all');
-  const channelFilter = urlChannel;
-  const [namespaceFilter, setNamespaceFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Auto-scroll state
-  const [autoScroll, setAutoScroll] = useState(true);
+  // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevLogCountRef = useRef(0);
+  const isAtTopRef = useRef(true);
 
-  // Extract unique namespaces from logs
-  const availableNamespaces = useMemo(() => {
-    const namespaces = new Set<string>();
-    for (const log of logs) {
-      if (log.namespace) {
-        namespaces.add(log.namespace);
-      }
+  // Track if user is at top of scroll
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Consider "at top" if within 50px of the top
+      isAtTopRef.current = container.scrollTop < 50;
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Scroll to top when page changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+      isAtTopRef.current = true;
     }
-    return Array.from(namespaces).sort();
-  }, [logs]);
+  }, [currentPage]);
 
-  // Filter logs (oldest first, newest last - like a console)
-  const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      // Level filter
-      if (levelFilter !== 'all' && log.levelLabel !== levelFilter) {
-        return false;
-      }
-
-      // Channel filter
-      if (channelFilter && !log.channel?.toLowerCase().includes(channelFilter.toLowerCase())) {
-        return false;
-      }
-
-      // Namespace filter (also searches channel as fallback)
-      if (namespaceFilter) {
-        const filterLower = namespaceFilter.toLowerCase();
-        const namespaceMatch = log.namespace?.toLowerCase().includes(filterLower);
-        const channelMatch = log.channel?.toLowerCase().includes(filterLower);
-        if (!namespaceMatch && !channelMatch) {
-          return false;
-        }
-      }
-
-      // Search filter
-      if (searchQuery) {
-        const searchLower = searchQuery.toLowerCase();
-        const msgMatch = log.msg.toLowerCase().includes(searchLower);
-        const namespaceMatch = log.namespace?.toLowerCase().includes(searchLower);
-        const channelMatch = log.channel?.toLowerCase().includes(searchLower);
-        const dataMatch = JSON.stringify(log.data).toLowerCase().includes(searchLower);
-        if (!msgMatch && !namespaceMatch && !channelMatch && !dataMatch) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [logs, levelFilter, channelFilter, namespaceFilter, searchQuery]);
-
-  // Count total search matches across all filtered logs
+  // Count total search matches across current page logs
   const matchCount = useMemo(() => {
     if (!searchQuery) return 0;
     const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escaped, 'gi');
 
     let count = 0;
-    for (const log of filteredLogs) {
+    for (const log of logs) {
       const msgMatches = log.msg.match(regex);
       const dataMatches = JSON.stringify(log.data).match(regex);
       count += (msgMatches?.length || 0) + (dataMatches?.length || 0);
     }
     return count;
-  }, [filteredLogs, searchQuery]);
+  }, [logs, searchQuery]);
 
   // Virtualization for performance with large log lists
   const rowVirtualizer = useVirtualizer({
-    count: filteredLogs.length,
+    count: logs.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 36, // Estimated row height in pixels
     overscan: 20, // Render extra rows outside viewport for smoother scrolling
     measureElement: (element) => element.getBoundingClientRect().height,
   });
 
-  // Auto-scroll to bottom when new logs arrive (like a console)
-  useEffect(() => {
-    if (autoScroll && logs.length > prevLogCountRef.current && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+  // Handle page jump
+  const handlePageJump = useCallback(() => {
+    const page = parseInt(pageInput, 10);
+    if (!isNaN(page) && page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      setPageInput('');
     }
-    prevLogCountRef.current = logs.length;
-  }, [logs.length, autoScroll]);
+  }, [pageInput, totalPages, setCurrentPage]);
 
-  // Detect user scroll - check if at bottom
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-    setAutoScroll(isAtBottom);
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-      setAutoScroll(true);
-    }
-  }, []);
+  // Calculate showing range
+  const showingStart = filteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+  const showingEnd = Math.min(currentPage * pageSize, filteredCount);
 
   return (
     <TooltipProvider>
@@ -290,6 +275,21 @@ export function LogViewer() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Clear all logs</TooltipContent>
+            </Tooltip>
+
+            {/* Persist logs toggle */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPersistLogs(!persistLogs)}
+                  className={persistLogs ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}
+                >
+                  {persistLogs ? <DatabaseBackup className="w-5 h-5" /> : <Database className="w-5 h-5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{persistLogs ? 'Disable log persistence' : 'Enable log persistence'}</TooltipContent>
             </Tooltip>
 
             {/* Key generator button */}
@@ -355,8 +355,6 @@ export function LogViewer() {
           availableNamespaces={availableNamespaces}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          logCount={logs.length}
-          filteredCount={filteredLogs.length}
           matchCount={matchCount}
         />
 
@@ -376,9 +374,8 @@ export function LogViewer() {
         <ScrollArea
           className="flex-1"
           viewPortRef={scrollContainerRef}
-          onScrollCapture={handleScroll}
         >
-          {filteredLogs.length === 0 ? (
+          {logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
               {!isConnected && !isConnecting ? (
                 <>
@@ -391,6 +388,14 @@ export function LogViewer() {
                 <>
                   <Loader2 className="w-16 h-16 mb-4 opacity-50 animate-spin" />
                   <p className="text-lg">Connecting...</p>
+                </>
+              ) : totalCount > 0 && (searchQuery || levelFilter !== 'all' || namespaceFilter) ? (
+                <>
+                  <FileText className="w-16 h-16 mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No matching logs</p>
+                  <p className="text-sm mt-1 text-muted-foreground">
+                    Try adjusting your search or filters
+                  </p>
                 </>
               ) : (
                 <div className="text-center w-[625px] px-6 py-8">
@@ -469,12 +474,12 @@ logger.info("Hello from Winston!");`}
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-                const log = filteredLogs[virtualItem.index];
+                const log = logs[virtualItem.index];
                 // Guard against stale virtualizer items during clear
                 if (!log) return null;
                 return (
                   <div
-                    key={log.id}
+                    key={`${log.id}-${searchQuery}`}
                     data-index={virtualItem.index}
                     ref={rowVirtualizer.measureElement}
                     style={{
@@ -497,15 +502,122 @@ logger.info("Hello from Winston!");`}
           )}
         </ScrollArea>
 
-        {/* Scroll to bottom indicator */}
-        {!autoScroll && logs.length > 0 && (
-          <Button
-            onClick={scrollToBottom}
-            className="fixed bottom-4 right-4 rounded-full shadow-lg"
-          >
-            <ArrowDown className="w-4 h-4 mr-2" />
-            New logs
-          </Button>
+        {/* Pagination controls */}
+        {filteredCount > 0 && (
+          <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-muted/50">
+            {/* Left: Showing info */}
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                Showing {showingStart}-{showingEnd} of {filteredCount}
+              </span>
+
+              {/* Page size selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Per page:</span>
+                <Select
+                  value={pageSize.toString()}
+                  onValueChange={(value) => setPageSize(parseInt(value, 10) as typeof pageSize)}
+                >
+                  <SelectTrigger className="w-20 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <SelectItem key={size} value={size.toString()}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Right: Pagination controls */}
+            <div className="flex items-center gap-2">
+              {/* First page */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>First page</TooltipContent>
+              </Tooltip>
+
+              {/* Previous page */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Previous page</TooltipContent>
+              </Tooltip>
+
+              {/* Page info */}
+              <div className="flex items-center gap-2 px-2">
+                <span className="text-sm text-muted-foreground">Page</span>
+                <Input
+                  type="text"
+                  value={pageInput}
+                  onChange={(e) => setPageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handlePageJump();
+                    }
+                  }}
+                  onBlur={handlePageJump}
+                  placeholder={currentPage.toString()}
+                  className="w-12 h-8 text-center px-1"
+                />
+                <span className="text-sm text-muted-foreground">of {totalPages}</span>
+              </div>
+
+              {/* Next page */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Next page</TooltipContent>
+              </Tooltip>
+
+              {/* Last page */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Last page</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
         )}
 
         {/* Key Generator Dialog */}
