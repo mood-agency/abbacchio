@@ -17,8 +17,12 @@ interface LogRowProps {
   caseSensitive?: boolean;
 }
 
-function formatTime(timestamp: number): string {
+function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp);
+  const dateStr = date.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+  });
   const time = date.toLocaleTimeString('en-US', {
     hour12: false,
     hour: '2-digit',
@@ -26,7 +30,7 @@ function formatTime(timestamp: number): string {
     second: '2-digit',
   });
   const ms = String(date.getMilliseconds()).padStart(3, '0');
-  return `${time}.${ms}`;
+  return `${dateStr} ${time}.${ms}`;
 }
 
 /**
@@ -127,9 +131,9 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
     <div className={rowClasses} onClick={toggleExpand}>
       {/* Main row */}
       <div className="flex items-start gap-3 px-4 py-2 text-sm">
-        {/* Time */}
-        <span className="text-muted-foreground font-mono text-xs w-24 flex-shrink-0 tabular-nums">
-          {formatTime(log.time)}
+        {/* Date/Time */}
+        <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
+          {formatDateTime(log.time)}
         </span>
 
         {/* Encryption status icon */}
@@ -242,7 +246,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                       variant="ghost"
                       size="icon"
                       onClick={copyToClipboard}
-                      className="absolute top-1 right-1 h-6 w-6 z-10"
+                      className="absolute top-1 left-1 h-6 w-6 z-10"
                     >
                       <Copy className="w-3 h-3" />
                     </Button>

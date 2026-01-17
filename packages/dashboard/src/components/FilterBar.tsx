@@ -12,7 +12,20 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LevelBadge } from '@/components/ui/CustomBadge';
 import { Search, X, CaseSensitive } from 'lucide-react';
+import type { FilterLevel } from '../types';
+
+interface LevelCounts {
+  all: number;
+  trace: number;
+  debug: number;
+  info: number;
+  warn: number;
+  error: number;
+  fatal: number;
+}
 
 interface FilterBarProps {
   namespaceFilter: string;
@@ -23,6 +36,10 @@ interface FilterBarProps {
   matchCount?: number;
   caseSensitive: boolean;
   setCaseSensitive: (value: boolean) => void;
+  onClearFilters: () => void;
+  levelFilter: FilterLevel;
+  setLevelFilter: (level: FilterLevel) => void;
+  levelCounts: LevelCounts;
 }
 
 export function FilterBar({
@@ -34,11 +51,45 @@ export function FilterBar({
   matchCount,
   caseSensitive,
   setCaseSensitive,
+  onClearFilters,
+  levelFilter,
+  setLevelFilter,
+  levelCounts,
 }: FilterBarProps) {
-  const hasFilters = namespaceFilter !== '' || searchQuery !== '';
+  const hasFilters = namespaceFilter !== '' || searchQuery !== '' || caseSensitive || levelFilter !== 'all';
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/50 relative z-10">
+    <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/50 relative z-10">
+      {/* Level tabs */}
+      <Tabs value={levelFilter} onValueChange={(v) => setLevelFilter(v as FilterLevel)}>
+        <TabsList className="h-8 bg-transparent p-0 gap-0.5">
+          {(['all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const).map((level) => {
+            const count = levelCounts[level];
+            return (
+              <TabsTrigger
+                key={level}
+                value={level}
+                className="h-7 px-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md"
+              >
+                <span className="flex items-center gap-1.5">
+                  {level === 'all' ? (
+                    <span className="font-medium uppercase">All</span>
+                  ) : (
+                    <LevelBadge level={level} />
+                  )}
+                  <span className="tabular-nums text-muted-foreground">
+                    {count.toLocaleString()}
+                  </span>
+                </span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+
+      {/* Separator */}
+      <div className="h-6 w-px bg-border" />
+
       {/* Namespace filter */}
       <Select
         value={namespaceFilter || 'all'}
@@ -97,10 +148,7 @@ export function FilterBar({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            setNamespaceFilter('');
-            setSearchQuery('');
-          }}
+          onClick={onClearFilters}
           className="text-muted-foreground"
         >
           <X className="w-4 h-4 mr-1" />

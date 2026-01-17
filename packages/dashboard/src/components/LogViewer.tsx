@@ -2,9 +2,9 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { useLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useLogStream';
+import { useFilterParams } from '../hooks/useFilterParams';
 import { FilterBar } from './FilterBar';
 import { LogRow } from './LogRow';
-import { LevelBadge } from '@/components/ui/CustomBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -55,6 +55,19 @@ import {
 } from 'lucide-react';
 
 export function LogViewer() {
+  // URL params for filters
+  const {
+    level: levelFilter,
+    namespace: namespaceFilter,
+    search: searchQuery,
+    caseSensitive,
+    setLevel: setLevelFilter,
+    setNamespace: setNamespaceFilter,
+    setSearch: setSearchQuery,
+    setCaseSensitive,
+    clearFilters,
+  } = useFilterParams();
+
   const {
     logs,
     filteredCount,
@@ -64,12 +77,6 @@ export function LogViewer() {
     pageSize,
     setPageSize,
     totalPages,
-    levelFilter,
-    setLevelFilter,
-    namespaceFilter,
-    setNamespaceFilter,
-    searchQuery,
-    setSearchQuery,
     isConnected,
     isConnecting,
     clearLogs,
@@ -83,7 +90,7 @@ export function LogViewer() {
     persistLogs,
     setPersistLogs,
     levelCounts,
-  } = useLogStream();
+  } = useLogStream({ levelFilter, namespaceFilter, searchQuery });
 
   // If no channel is provided, show a friendly message
   if (!urlChannel) {
@@ -128,9 +135,6 @@ export function LogViewer() {
 
   // Page jump input
   const [pageInput, setPageInput] = useState('');
-
-  // Search case sensitivity
-  const [caseSensitive, setCaseSensitive] = useState(false);
 
   // Delete confirmation dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -441,75 +445,42 @@ export function LogViewer() {
           </div>
         </header>
 
-        {/* Main content with sidebar */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Level sidebar */}
-          <aside className="w-44 border-r border-border bg-muted/30 flex flex-col">
-            <div className="p-3 text-xs font-medium text-muted-foreground">
-              Log Levels
-            </div>
-            <nav className="flex-1 px-2 pb-2 space-y-1">
-              {(['all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const).map((level) => {
-                const count = levelCounts[level];
-                const isActive = levelFilter === level;
-                return (
-                  <button
-                    key={level}
-                    onClick={() => setLevelFilter(level)}
-                    className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors ${
-                      isActive
-                        ? 'bg-primary/10 ring-1 ring-primary/30'
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {level === 'all' ? (
-                      <span className={`text-xs font-medium px-2 py-0.5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
-                        ALL
-                      </span>
-                    ) : (
-                      <LevelBadge level={level} />
-                    )}
-                    <span className={`text-xs tabular-nums ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
-                      {count.toLocaleString()}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
+        {/* Main content */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Filter bar with level tabs */}
+          <FilterBar
+            namespaceFilter={namespaceFilter}
+            setNamespaceFilter={setNamespaceFilter}
+            availableNamespaces={availableNamespaces}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            matchCount={matchCount}
+            caseSensitive={caseSensitive}
+            setCaseSensitive={setCaseSensitive}
+            onClearFilters={clearFilters}
+            levelFilter={levelFilter}
+            setLevelFilter={setLevelFilter}
+            levelCounts={levelCounts}
+          />
 
-          {/* Main log area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Filter bar */}
-            <FilterBar
-              namespaceFilter={namespaceFilter}
-              setNamespaceFilter={setNamespaceFilter}
-              availableNamespaces={availableNamespaces}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              matchCount={matchCount}
-              caseSensitive={caseSensitive}
-              setCaseSensitive={setCaseSensitive}
-            />
+          {/* Column headers */}
+          <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border bg-muted relative z-10">
+            <span className="w-36 flex-shrink-0">Date/Time</span>
+            <span className="w-5 flex-shrink-0"></span>
+            <span className="w-16 flex-shrink-0">Level</span>
+            {channels.length > 1 && !channelFilter && (
+              <span className="w-24 flex-shrink-0">Channel</span>
+            )}
+            <span className="w-28 flex-shrink-0">Namespace</span>
+            <span className="w-48 flex-shrink-0">Message</span>
+            <span className="flex-1">Data</span>
+          </div>
 
-            {/* Column headers */}
-            <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border bg-muted relative z-10">
-              <span className="w-24 flex-shrink-0">Time</span>
-              <span className="w-5 flex-shrink-0"></span>
-              <span className="w-16 flex-shrink-0">Level</span>
-              {channels.length > 1 && !channelFilter && (
-                <span className="w-24 flex-shrink-0">Channel</span>
-              )}
-              <span className="w-28 flex-shrink-0">Namespace</span>
-              <span className="w-48 flex-shrink-0">Message</span>
-              <span className="flex-1">Data</span>
-            </div>
-
-            {/* Log list */}
-            <ScrollArea
-              className="flex-1"
-              viewPortRef={scrollContainerRef}
-            >
+          {/* Log list */}
+          <ScrollArea
+            className="flex-1"
+            viewPortRef={scrollContainerRef}
+          >
           {logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
               {!isConnected && !isConnecting ? (
@@ -637,7 +608,6 @@ logger.info("Hello from Winston!");`}
             </div>
           )}
             </ScrollArea>
-          </div>
         </div>
 
         {/* Pagination controls */}

@@ -14,6 +14,13 @@ import {
 export const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
 export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
+interface UseLogStreamOptions {
+  /** Filter settings from URL params */
+  levelFilter: FilterLevel;
+  namespaceFilter: string;
+  searchQuery: string;
+}
+
 interface UseLogStreamResult {
   /** Paginated logs for the current page (filtered) */
   logs: LogEntry[];
@@ -29,13 +36,6 @@ interface UseLogStreamResult {
   pageSize: PageSize;
   setPageSize: (size: PageSize) => void;
   totalPages: number;
-  /** Filter settings */
-  levelFilter: FilterLevel;
-  setLevelFilter: (level: FilterLevel) => void;
-  namespaceFilter: string;
-  setNamespaceFilter: (namespace: string) => void;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
   /** Connection status */
   isConnected: boolean;
   isConnecting: boolean;
@@ -55,7 +55,9 @@ interface UseLogStreamResult {
   levelCounts: LevelCounts;
 }
 
-export function useLogStream(): UseLogStreamResult {
+export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
+  const { levelFilter, namespaceFilter, searchQuery } = options;
+
   const {
     totalCount,
     isInitialized,
@@ -74,11 +76,6 @@ export function useLogStream(): UseLogStreamResult {
     setPersistLogs,
   } = useLogStore();
 
-  // Filter state
-  const [levelFilter, setLevelFilter] = useState<FilterLevel>('all');
-  const [namespaceFilter, setNamespaceFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(100);
@@ -91,9 +88,8 @@ export function useLogStream(): UseLogStreamResult {
     all: 0, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0,
   });
 
-  // Debounce ref for search queries
-  const searchTimeoutRef = useRef<number | null>(null);
-  const lastQueryRef = useRef<string>('');
+  // Track previous filter values for page reset
+  const prevFiltersRef = useRef({ levelFilter, namespaceFilter, searchQuery });
 
   // Load logs from SQLite with current filters
   const loadLogs = useCallback(async () => {
@@ -161,26 +157,21 @@ export function useLogStream(): UseLogStreamResult {
 
   // Reset to page 1 when filters change
   useEffect(() => {
+    const prev = prevFiltersRef.current;
+    if (
+      prev.levelFilter !== levelFilter ||
+      prev.namespaceFilter !== namespaceFilter ||
+      prev.searchQuery !== searchQuery
+    ) {
+      setCurrentPage(1);
+      prevFiltersRef.current = { levelFilter, namespaceFilter, searchQuery };
+    }
+  }, [levelFilter, namespaceFilter, searchQuery]);
+
+  // Also reset page when pageSize changes
+  useEffect(() => {
     setCurrentPage(1);
-  }, [levelFilter, namespaceFilter, pageSize]);
-
-  // Debounced search query update
-  const handleSetSearchQuery = useCallback((query: string) => {
-    setSearchQuery(query);
-
-    // Clear any existing timeout
-    if (searchTimeoutRef.current !== null) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    // Only reset page after debounce
-    if (query !== lastQueryRef.current) {
-      searchTimeoutRef.current = window.setTimeout(() => {
-        setCurrentPage(1);
-        lastQueryRef.current = query;
-      }, 150);
-    }
-  }, []);
+  }, [pageSize]);
 
   // Ensure current page is valid
   useEffect(() => {
@@ -210,12 +201,6 @@ export function useLogStream(): UseLogStreamResult {
     pageSize,
     setPageSize,
     totalPages,
-    levelFilter,
-    setLevelFilter,
-    namespaceFilter,
-    setNamespaceFilter,
-    searchQuery,
-    setSearchQuery: handleSetSearchQuery,
     isConnected,
     isConnecting,
     clearLogs,
