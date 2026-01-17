@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { toast } from 'sonner';
 import { useLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useLogStream';
 import { FilterBar } from './FilterBar';
 import { LogRow } from './LogRow';
@@ -16,6 +17,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -121,6 +123,10 @@ export function LogViewer() {
 
   // Page jump input
   const [pageInput, setPageInput] = useState('');
+
+  // Delete confirmation dialog
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Mask key showing only first 4 characters
   const maskedKey = generatedKey
@@ -238,6 +244,22 @@ export function LogViewer() {
     }
   }, [pageInput, totalPages, setCurrentPage]);
 
+  // Handle delete confirmation
+  const handleConfirmDelete = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      await clearLogs();
+      setShowDeleteDialog(false);
+      toast.success('All logs have been deleted');
+    } catch (error) {
+      toast.error('Failed to delete logs', {
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [clearLogs]);
+
   // Calculate showing range
   const showingStart = filteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
   const showingEnd = Math.min(currentPage * pageSize, filteredCount);
@@ -268,7 +290,7 @@ export function LogViewer() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={clearLogs}
+                  onClick={() => setShowDeleteDialog(true)}
                   className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -700,6 +722,36 @@ logger.info("Hello from Winston!");`}
                 </Button>
               </DialogFooter>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete all logs?</DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. All logs will be permanently deleted from your browser storage and the server.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete all'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

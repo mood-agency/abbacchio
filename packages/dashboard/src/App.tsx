@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { LogViewer } from './components/LogViewer';
+import { Toaster } from './components/ui/sonner';
 
 function App() {
   // Initialize dark mode from system preference
@@ -9,7 +10,12 @@ function App() {
     }
   }, []);
 
-  return <LogViewer />;
+  return (
+    <>
+      <LogViewer />
+      <Toaster position="bottom-right" />
+    </>
+  );
 }
 
 export default App;

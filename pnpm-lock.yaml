@@ -58,19 +58,6 @@ importers:
         specifier: ^4.0.17
         version: 4.0.17(@types/node@22.19.7)(jiti@1.21.7)(tsx@4.21.0)
 
-  packages/client:
-    dependencies:
-      pino-abstract-transport:
-        specifier: ^3.0.0
-        version: 3.0.0
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.19.7
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/dashboard:
     dependencies:
       '@radix-ui/react-checkbox':
@@ -124,6 +111,9 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       sql.js:
         specifier: ^1.13.0
         version: 1.13.0
@@ -161,37 +151,6 @@ importers:
       vite:
         specifier: ^6.0.7
         version: 6.4.1(@types/node@22.19.7)(jiti@1.21.7)(tsx@4.21.0)
-
-  packages/server:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.13.7
-        version: 1.19.9(hono@4.11.4)
-      hono:
-        specifier: ^4.6.14
-        version: 4.11.4
-      nanoid:
-        specifier: ^5.0.9
-        version: 5.1.6
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.19.7
-      '@vitest/coverage-v8':
-        specifier: ^4.0.17
-        version: 4.0.17(vitest@4.0.17(@types/node@22.19.7)(jiti@1.21.7)(tsx@4.21.0))
-      eventsource-parser:
-        specifier: ^3.0.6
-        version: 3.0.6
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.17
-        version: 4.0.17(@types/node@22.19.7)(jiti@1.21.7)(tsx@4.21.0)
 
   packages/transport:
     dependencies:
@@ -1971,6 +1930,12 @@ packages:
 
   sonic-boom@4.2.0:
     resolution: {integrity: sha512-INb7TM37/mAcsGmc9hyyI6+QR3rR1zVRu36B0NeGXKnOOLiZOfER5SA+N7X7k3yUYRzLWafduTDvJAfDswwEww==}
+
+  sonner@2.0.7:
+    resolution: {integrity: sha512-W6ZN4p58k8aDKA4XPcx2hpIQXBRAgyiWVkYhT7CvK6D3iAu7xjvVyhQHg2/iaKJZ1XVJ4r7XuwGL+WGEK37i9w==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      react-dom: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
 
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
@@ -3851,6 +3816,11 @@ snapshots:
   sonic-boom@4.2.0:
     dependencies:
       atomic-sleep: 1.0.0
+
+  sonner@2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   source-map-js@1.2.1: {}
 
