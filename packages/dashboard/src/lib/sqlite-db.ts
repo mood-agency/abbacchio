@@ -95,6 +95,7 @@ function rowToLogEntry(row: SQLiteRow): LogEntry {
     encrypted: row.encrypted === 1,
     encryptedData: row.encrypted_data as string | undefined,
     decryptionFailed: row.decryption_failed === 1,
+    wasEncrypted: row.was_encrypted === 1,
   };
 }
 
@@ -163,4 +164,22 @@ export async function requestPersistence(): Promise<boolean> {
     return navigator.storage.persist();
   }
   return false;
+}
+
+export interface LevelCounts {
+  all: number;
+  trace: number;
+  debug: number;
+  info: number;
+  warn: number;
+  error: number;
+  fatal: number;
+}
+
+/**
+ * Get counts of logs by level
+ */
+export async function getLevelCounts(channel?: string): Promise<LevelCounts> {
+  await initDatabase();
+  return sendMessage<LevelCounts>('getLevelCounts', { channel });
 }

@@ -48,14 +48,24 @@ export interface UseLogStoreResult {
   setPersistLogs: (persist: boolean) => void;
 }
 
-// Get URL parameters
-function getUrlParams() {
+// Cache initial URL params (read once before React StrictMode double-invocation)
+// Note: Secret key is kept in memory only for security - never persisted to storage
+const initialUrlParams = (() => {
   const params = new URLSearchParams(window.location.search);
-  return {
-    channel: params.get('channel') || '',
-    key: params.get('key') || '',
-  };
-}
+  const key = params.get('key') || '';
+  const channel = params.get('channel') || '';
+
+  // Remove key from URL immediately for security (keep channel)
+  if (key) {
+    params.delete('key');
+    const newUrl = params.toString()
+      ? `${window.location.pathname}?${params.toString()}`
+      : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+  }
+
+  return { channel, key };
+})();
 
 export function useLogStore(): UseLogStoreResult {
   const [totalCount, setTotalCount] = useState(0);
@@ -63,9 +73,10 @@ export function useLogStore(): UseLogStoreResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [secretKey, setSecretKey] = useState(() => getUrlParams().key);
+  // Secret key is kept in memory only - never persisted for security
+  const [secretKey, setSecretKey] = useState(initialUrlParams.key);
   const [channels, setChannels] = useState<string[]>(['default']);
-  const [urlChannel] = useState(() => getUrlParams().channel);
+  const [urlChannel] = useState(initialUrlParams.channel);
   const [hasEncryptedLogs, setHasEncryptedLogs] = useState(false);
   const [persistLogs, setPersistLogs] = useState(true);
 
@@ -181,15 +192,16 @@ export function useLogStore(): UseLogStoreResult {
   // Process a log entry (decrypt if needed)
   const processEntry = useCallback(
     async (entry: LogEntry): Promise<LogEntry> => {
-      // Non-encrypted: return as-is
+      // Non-encrypted: return as-is (wasEncrypted stays false/undefined)
       if (!entry.encrypted || !entry.encryptedData) {
-        return entry;
+        return { ...entry, wasEncrypted: false };
       }
 
+      // Mark as originally encrypted
       const key = secretKeyRef.current;
       if (!key || !isCryptoAvailable()) {
         setHasEncryptedLogs(true);
-        return { ...entry, decryptionFailed: !key };
+        return { ...entry, wasEncrypted: true, decryptionFailed: !key };
       }
 
       try {
@@ -205,7 +217,7 @@ export function useLogStore(): UseLogStoreResult {
 
         if (!decrypted) {
           setHasEncryptedLogs(true);
-          return { ...entry, decryptionFailed: true };
+          return { ...entry, wasEncrypted: true, decryptionFailed: true };
         }
 
         const level = typeof decrypted.level === 'number' ? decrypted.level : 30;
@@ -221,10 +233,11 @@ export function useLogStore(): UseLogStoreResult {
           data: rest,
           encrypted: false,
           encryptedData: undefined,
+          wasEncrypted: true, // Preserve that it was originally encrypted
         };
       } catch {
         setHasEncryptedLogs(true);
-        return { ...entry, decryptionFailed: true };
+        return { ...entry, wasEncrypted: true, decryptionFailed: true };
       }
     },
     []

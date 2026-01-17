@@ -32,9 +32,17 @@ async function initDB() {
       data TEXT NOT NULL,
       encrypted INTEGER DEFAULT 0,
       encrypted_data TEXT,
-      decryption_failed INTEGER DEFAULT 0
+      decryption_failed INTEGER DEFAULT 0,
+      was_encrypted INTEGER DEFAULT 0
     )
   `);
+
+  // Add was_encrypted column if it doesn't exist (migration for existing DBs)
+  try {
+    db.exec(`ALTER TABLE logs ADD COLUMN was_encrypted INTEGER DEFAULT 0`);
+  } catch {
+    // Column already exists, ignore error
+  }
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time)`);
 
@@ -105,14 +113,15 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           encrypted?: boolean;
           encryptedData?: string;
           decryptionFailed?: boolean;
+          wasEncrypted?: boolean;
         }>;
 
         db.exec('BEGIN TRANSACTION');
         try {
           for (const log of logs) {
             db.exec({
-              sql: `INSERT OR REPLACE INTO logs (id, level, level_label, time, msg, namespace, channel, data, encrypted, encrypted_data, decryption_failed)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              sql: `INSERT OR REPLACE INTO logs (id, level, level_label, time, msg, namespace, channel, data, encrypted, encrypted_data, decryption_failed, was_encrypted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               bind: [
                 log.id,
                 log.level,
@@ -125,6 +134,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
                 log.encrypted ? 1 : 0,
                 log.encryptedData ?? null,
                 log.decryptionFailed ? 1 : 0,
+                log.wasEncrypted ? 1 : 0,
               ],
             });
           }
@@ -308,6 +318,52 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           callback: (row) => rows.push(row as Record<string, unknown>),
         });
         self.postMessage({ id, success: true, result: rows });
+        break;
+      }
+
+      case 'getLevelCounts': {
+        const options = payload as { channel?: string };
+        const conditions: string[] = [];
+        const params: (string | number | null)[] = [];
+
+        if (options?.channel) {
+          conditions.push(`channel = ?`);
+          params.push(options.channel);
+        }
+
+        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const counts: Record<string, number> = {
+          all: 0,
+          trace: 0,
+          debug: 0,
+          info: 0,
+          warn: 0,
+          error: 0,
+          fatal: 0,
+        };
+
+        // Get total count
+        db.exec({
+          sql: `SELECT COUNT(*) as count FROM logs ${where}`,
+          bind: params,
+          rowMode: 'object',
+          callback: (row) => { counts.all = (row as { count: number }).count; },
+        });
+
+        // Get counts per level
+        db.exec({
+          sql: `SELECT level_label, COUNT(*) as count FROM logs ${where} GROUP BY level_label`,
+          bind: params,
+          rowMode: 'object',
+          callback: (row) => {
+            const r = row as { level_label: string; count: number };
+            if (r.level_label in counts) {
+              counts[r.level_label] = r.count;
+            }
+          },
+        });
+
+        self.postMessage({ id, success: true, result: counts });
         break;
       }
 

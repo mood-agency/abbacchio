@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useLogStream';
 import { FilterBar } from './FilterBar';
 import { LogRow } from './LogRow';
+import { LevelBadge } from '@/components/ui/CustomBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -50,6 +51,7 @@ import {
   ChevronsRight,
   Database,
   DatabaseBackup,
+  Radio,
 } from 'lucide-react';
 
 export function LogViewer() {
@@ -73,12 +75,14 @@ export function LogViewer() {
     clearLogs,
     connectionError,
     secretKey,
+    setSecretKey,
     hasEncryptedLogs,
     channels,
     urlChannel,
     availableNamespaces,
     persistLogs,
     setPersistLogs,
+    levelCounts,
   } = useLogStream();
 
   // If no channel is provided, show a friendly message
@@ -114,19 +118,39 @@ export function LogViewer() {
   // Theme state
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-  // Key generator dialog
+  // Key dialog state
   const [showKeyDialog, setShowKeyDialog] = useState(false);
   const [generatedKey, setGeneratedKey] = useState('');
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [showFullKey, setShowFullKey] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
 
   // Page jump input
   const [pageInput, setPageInput] = useState('');
 
+  // Search case sensitivity
+  const [caseSensitive, setCaseSensitive] = useState(false);
+
   // Delete confirmation dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Channel switch dialog
+  const [showChannelDialog, setShowChannelDialog] = useState(false);
+  const [newChannel, setNewChannel] = useState('');
+  const [newKey, setNewKey] = useState('');
+
+  // Navigate to new channel
+  const goToChannel = () => {
+    if (!newChannel.trim()) return;
+    const params = new URLSearchParams();
+    params.set('channel', newChannel.trim());
+    if (newKey.trim()) {
+      params.set('key', newKey.trim());
+    }
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
+  };
 
   // Mask key showing only first 4 characters
   const maskedKey = generatedKey
@@ -160,11 +184,25 @@ export function LogViewer() {
     }
   };
 
-  // Auto-generate key when dialog opens
-  const openKeyDialog = async () => {
+  // Open key dialog
+  const openKeyDialog = () => {
     setShowKeyDialog(true);
     setCopiedKey(false);
-    await generateNewKey();
+    setKeyInput(secretKey); // Pre-fill with current key if exists
+  };
+
+  // Apply the entered key for decryption
+  const applyKey = () => {
+    if (keyInput.trim()) {
+      setSecretKey(keyInput.trim());
+      setShowKeyDialog(false);
+    }
+  };
+
+  // Clear the current decryption key
+  const clearKey = () => {
+    setSecretKey('');
+    setKeyInput('');
   };
 
   // Copy full link with channel and key
@@ -270,17 +308,26 @@ export function LogViewer() {
         {/* Header */}
         <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background relative z-20">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500" />
-              <h1 className="text-lg font-semibold text-foreground">Abbacchio</h1>
-              {urlChannel && (
-                <>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="text-lg font-semibold text-foreground">{urlChannel}</span>
-                </>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <h1 className="text-lg font-semibold text-foreground">Abbacchio</h1>
+                {urlChannel && (
+                  <>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="text-lg font-semibold text-foreground">{urlChannel}</span>
+                  </>
+                )}
+              </div>
+              {secretKey && (
+                <div className="flex items-center gap-1 ml-5 text-xs text-muted-foreground">
+                  <Key className="w-3 h-3" />
+                  <span className="font-mono">
+                    {secretKey.slice(0, 4)}{'*'.repeat(Math.max(0, secretKey.length - 4))}
+                  </span>
+                </div>
               )}
             </div>
-
           </div>
 
           <div className="flex items-center gap-1">
@@ -305,7 +352,15 @@ export function LogViewer() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setPersistLogs(!persistLogs)}
+                  onClick={() => {
+                    const newValue = !persistLogs;
+                    setPersistLogs(newValue);
+                    toast(newValue ? 'Log persistence enabled' : 'Log persistence disabled', {
+                      description: newValue
+                        ? 'Logs will be saved to SQLite storage'
+                        : 'Logs will only be kept in memory',
+                    });
+                  }}
                   className={persistLogs ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}
                 >
                   {persistLogs ? <DatabaseBackup className="w-5 h-5" /> : <Database className="w-5 h-5" />}
@@ -349,6 +404,24 @@ export function LogViewer() {
               <TooltipContent>Copy link with channel and key</TooltipContent>
             </Tooltip>
 
+            {/* Switch channel button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setNewChannel('');
+                    setNewKey('');
+                    setShowChannelDialog(true);
+                  }}
+                >
+                  <Radio className="w-5 h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Switch channel</TooltipContent>
+            </Tooltip>
+
             {/* Theme toggle */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -368,35 +441,75 @@ export function LogViewer() {
           </div>
         </header>
 
-        {/* Filter bar */}
-        <FilterBar
-          levelFilter={levelFilter}
-          setLevelFilter={setLevelFilter}
-          namespaceFilter={namespaceFilter}
-          setNamespaceFilter={setNamespaceFilter}
-          availableNamespaces={availableNamespaces}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          matchCount={matchCount}
-        />
+        {/* Main content with sidebar */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Level sidebar */}
+          <aside className="w-44 border-r border-border bg-muted/30 flex flex-col">
+            <div className="p-3 text-xs font-medium text-muted-foreground">
+              Log Levels
+            </div>
+            <nav className="flex-1 px-2 pb-2 space-y-1">
+              {(['all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const).map((level) => {
+                const count = levelCounts[level];
+                const isActive = levelFilter === level;
+                return (
+                  <button
+                    key={level}
+                    onClick={() => setLevelFilter(level)}
+                    className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors ${
+                      isActive
+                        ? 'bg-primary/10 ring-1 ring-primary/30'
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    {level === 'all' ? (
+                      <span className={`text-xs font-medium px-2 py-0.5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+                        ALL
+                      </span>
+                    ) : (
+                      <LevelBadge level={level} />
+                    )}
+                    <span className={`text-xs tabular-nums ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+                      {count.toLocaleString()}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
 
-        {/* Column headers */}
-        <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border bg-muted relative z-10">
-          <span className="w-24 flex-shrink-0">Time</span>
-          <span className="w-16 flex-shrink-0">Level</span>
-          {channels.length > 1 && !channelFilter && (
-            <span className="w-24 flex-shrink-0">Channel</span>
-          )}
-          <span className="w-28 flex-shrink-0">Namespace</span>
-          <span className="w-48 flex-shrink-0">Message</span>
-          <span className="flex-1">Data</span>
-        </div>
+          {/* Main log area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Filter bar */}
+            <FilterBar
+              namespaceFilter={namespaceFilter}
+              setNamespaceFilter={setNamespaceFilter}
+              availableNamespaces={availableNamespaces}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              matchCount={matchCount}
+              caseSensitive={caseSensitive}
+              setCaseSensitive={setCaseSensitive}
+            />
 
-        {/* Log list */}
-        <ScrollArea
-          className="flex-1"
-          viewPortRef={scrollContainerRef}
-        >
+            {/* Column headers */}
+            <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border bg-muted relative z-10">
+              <span className="w-24 flex-shrink-0">Time</span>
+              <span className="w-5 flex-shrink-0"></span>
+              <span className="w-16 flex-shrink-0">Level</span>
+              {channels.length > 1 && !channelFilter && (
+                <span className="w-24 flex-shrink-0">Channel</span>
+              )}
+              <span className="w-28 flex-shrink-0">Namespace</span>
+              <span className="w-48 flex-shrink-0">Message</span>
+              <span className="flex-1">Data</span>
+            </div>
+
+            {/* Log list */}
+            <ScrollArea
+              className="flex-1"
+              viewPortRef={scrollContainerRef}
+            >
           {logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
               {!isConnected && !isConnecting ? (
@@ -516,13 +629,16 @@ logger.info("Hello from Winston!");`}
                       log={log}
                       showChannel={channels.length > 1 && !channelFilter}
                       searchQuery={searchQuery}
+                      caseSensitive={caseSensitive}
                     />
                   </div>
                 );
               })}
             </div>
           )}
-        </ScrollArea>
+            </ScrollArea>
+          </div>
+        </div>
 
         {/* Pagination controls */}
         {filteredCount > 0 && (
@@ -642,7 +758,7 @@ logger.info("Hello from Winston!");`}
           </div>
         )}
 
-        {/* Key Generator Dialog */}
+        {/* Key Dialog */}
         <Dialog open={showKeyDialog} onOpenChange={(open) => {
           setShowKeyDialog(open);
           if (!open) {
@@ -655,62 +771,128 @@ logger.info("Hello from Winston!");`}
             <DialogHeader>
               <DialogTitle>Encryption Key</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Use this key to encrypt logs sent to your channels.
-              </p>
+            <div className="space-y-6">
+              {/* Decryption Key Section */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Decryption Key</p>
+                <p className="text-sm text-muted-foreground">
+                  Enter your key to decrypt encrypted logs.
+                </p>
+                <div className="relative">
+                  <Input
+                    type={showFullKey ? 'text' : 'password'}
+                    value={keyInput}
+                    onChange={(e) => setKeyInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && applyKey()}
+                    placeholder="Paste your encryption key..."
+                    className="font-mono text-sm pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowFullKey(!showFullKey)}
+                    className="absolute right-0 top-0 h-full px-3"
+                  >
+                    {showFullKey ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={applyKey}
+                    disabled={!keyInput.trim()}
+                  >
+                    Apply Key
+                  </Button>
+                  {secretKey && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={clearKey}
+                    >
+                      Clear Key
+                    </Button>
+                  )}
+                </div>
+              </div>
 
-              {isGeneratingKey && !generatedKey ? (
-                <div className="flex items-center justify-center py-4">
-                  <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <Input
-                      type="text"
-                      value={showFullKey ? generatedKey : maskedKey}
-                      readOnly
-                      className="font-mono text-sm pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowFullKey(!showFullKey)}
-                      className="absolute right-0 top-0 h-full px-3"
-                    >
-                      {showFullKey ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </Button>
+              <div className="border-t" />
+
+              {/* Key Generator Utility Section */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Key Generator</p>
+                <p className="text-sm text-muted-foreground">
+                  Generate a new key to use in your transport configuration.
+                </p>
+                {isGeneratingKey && !generatedKey ? (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={copyKey}
-                      disabled={!generatedKey}
-                    >
-                      <Copy className="w-4 h-4 mr-1.5" />
-                      {copiedKey ? 'Copied!' : 'Copy Key'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={generateNewKey}
-                      disabled={isGeneratingKey}
-                    >
-                      <RefreshCw className={`w-4 h-4 mr-1.5 ${isGeneratingKey ? 'animate-spin' : ''}`} />
-                      Generate
-                    </Button>
+                ) : generatedKey ? (
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        value={showFullKey ? generatedKey : maskedKey}
+                        readOnly
+                        className="font-mono text-sm pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowFullKey(!showFullKey)}
+                        className="absolute right-0 top-0 h-full px-3"
+                      >
+                        {showFullKey ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={copyKey}
+                      >
+                        <Copy className="w-4 h-4 mr-1.5" />
+                        {copiedKey ? 'Copied!' : 'Copy Key'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={generateNewKey}
+                        disabled={isGeneratingKey}
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-1.5 ${isGeneratingKey ? 'animate-spin' : ''}`} />
+                        Regenerate
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={generateNewKey}
+                    disabled={isGeneratingKey}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-1.5" />
+                    Generate Key
+                  </Button>
+                )}
+              </div>
 
               <DialogFooter>
                 <Button
@@ -750,6 +932,57 @@ logger.info("Hello from Winston!");`}
                 disabled={isDeleting}
               >
                 {isDeleting ? 'Deleting...' : 'Delete all'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Switch Channel Dialog */}
+        <Dialog open={showChannelDialog} onOpenChange={setShowChannelDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Switch Channel</DialogTitle>
+              <DialogDescription>
+                Enter a channel name and optionally an encryption key to view logs from another channel.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Channel</label>
+                <Input
+                  type="text"
+                  value={newChannel}
+                  onChange={(e) => setNewChannel(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && goToChannel()}
+                  placeholder="e.g., my-app"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Encryption Key <span className="text-muted-foreground font-normal">(optional)</span></label>
+                <Input
+                  type="password"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && goToChannel()}
+                  placeholder="Enter key if logs are encrypted"
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowChannelDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={goToChannel}
+                disabled={!newChannel.trim()}
+              >
+                Go to Channel
               </Button>
             </DialogFooter>
           </DialogContent>

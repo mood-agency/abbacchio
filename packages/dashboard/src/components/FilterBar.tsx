@@ -1,4 +1,3 @@
-import type { FilterLevel } from '../types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,49 +7,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, X } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Search, X, CaseSensitive } from 'lucide-react';
 
 interface FilterBarProps {
-  levelFilter: FilterLevel;
-  setLevelFilter: (level: FilterLevel) => void;
   namespaceFilter: string;
   setNamespaceFilter: (namespace: string) => void;
   availableNamespaces: string[];
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   matchCount?: number;
+  caseSensitive: boolean;
+  setCaseSensitive: (value: boolean) => void;
 }
 
-const levels: FilterLevel[] = ['all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-
 export function FilterBar({
-  levelFilter,
-  setLevelFilter,
   namespaceFilter,
   setNamespaceFilter,
   availableNamespaces,
   searchQuery,
   setSearchQuery,
   matchCount,
+  caseSensitive,
+  setCaseSensitive,
 }: FilterBarProps) {
-  const hasFilters = levelFilter !== 'all' || namespaceFilter !== '' || searchQuery !== '';
+  const hasFilters = namespaceFilter !== '' || searchQuery !== '';
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/50 relative z-10">
-      {/* Level filter */}
-      <Select value={levelFilter} onValueChange={(value) => setLevelFilter(value as FilterLevel)}>
-        <SelectTrigger className="w-[130px] h-9">
-          <SelectValue placeholder="All Levels" />
-        </SelectTrigger>
-        <SelectContent>
-          {levels.map((level) => (
-            <SelectItem key={level} value={level}>
-              {level === 'all' ? 'All Levels' : level.charAt(0).toUpperCase() + level.slice(1)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
       {/* Namespace filter */}
       <Select
         value={namespaceFilter || 'all'}
@@ -70,20 +58,35 @@ export function FilterBar({
       </Select>
 
       {/* Search */}
-      <div className="relative flex-1 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          type="text"
-          placeholder="Search logs..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 pr-3 h-9"
-        />
-        {searchQuery && matchCount !== undefined && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-            {matchCount} {matchCount === 1 ? 'match' : 'matches'}
-          </span>
-        )}
+      <div className="relative flex-1 max-w-md flex items-center gap-1">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search logs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-3 h-9"
+          />
+          {searchQuery && matchCount !== undefined && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+              {matchCount} {matchCount === 1 ? 'match' : 'matches'}
+            </span>
+          )}
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-9 w-9 ${caseSensitive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+              onClick={() => setCaseSensitive(!caseSensitive)}
+            >
+              <CaseSensitive className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Match case</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Spacer */}
@@ -95,7 +98,6 @@ export function FilterBar({
           variant="ghost"
           size="sm"
           onClick={() => {
-            setLevelFilter('all');
             setNamespaceFilter('');
             setSearchQuery('');
           }}
@@ -105,7 +107,6 @@ export function FilterBar({
           Clear filters
         </Button>
       )}
-
     </div>
   );
 }

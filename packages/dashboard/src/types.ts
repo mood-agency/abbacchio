@@ -26,6 +26,8 @@ export interface LogEntry {
   encryptedData?: string;
   /** Set to true after decryption fails */
   decryptionFailed?: boolean;
+  /** True if the message was originally sent encrypted (persists after decryption) */
+  wasEncrypted?: boolean;
 }
 
 export type FilterLevel = 'all' | LogLevelLabel;

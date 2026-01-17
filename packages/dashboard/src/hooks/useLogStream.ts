@@ -6,6 +6,8 @@ import {
   getFilteredCount,
   getDistinctNamespaces,
   clearAllLogs,
+  getLevelCounts,
+  type LevelCounts,
 } from '../lib/sqlite-db';
 
 // Default page size options
@@ -49,6 +51,8 @@ interface UseLogStreamResult {
   /** Persistence toggle */
   persistLogs: boolean;
   setPersistLogs: (persist: boolean) => void;
+  /** Level counts for sidebar */
+  levelCounts: LevelCounts;
 }
 
 export function useLogStream(): UseLogStreamResult {
@@ -83,6 +87,9 @@ export function useLogStream(): UseLogStreamResult {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filteredCount, setFilteredCount] = useState(0);
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
+  const [levelCounts, setLevelCounts] = useState<LevelCounts>({
+    all: 0, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0,
+  });
 
   // Debounce ref for search queries
   const searchTimeoutRef = useRef<number | null>(null);
@@ -102,7 +109,7 @@ export function useLogStream(): UseLogStreamResult {
     };
 
     try {
-      const [fetchedLogs, count, namespaces] = await Promise.all([
+      const [fetchedLogs, count, namespaces, counts] = await Promise.all([
         queryLogs(options),
         getFilteredCount({
           search: searchQuery || undefined,
@@ -111,11 +118,13 @@ export function useLogStream(): UseLogStreamResult {
           channel: urlChannel || undefined,
         }),
         getDistinctNamespaces(),
+        getLevelCounts(urlChannel || undefined),
       ]);
 
       setLogs(fetchedLogs);
       setFilteredCount(count);
       setAvailableNamespaces(namespaces);
+      setLevelCounts(counts);
     } catch (error) {
       console.error('Failed to load logs:', error);
     }
@@ -141,6 +150,7 @@ export function useLogStream(): UseLogStreamResult {
       setLogs([]);
       setFilteredCount(0);
       setAvailableNamespaces([]);
+      setLevelCounts({ all: 0, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 });
       setCurrentPage(1);
     });
     return unsubscribe;
@@ -218,5 +228,6 @@ export function useLogStream(): UseLogStreamResult {
     availableNamespaces,
     persistLogs,
     setPersistLogs,
+    levelCounts,
   };
 }
