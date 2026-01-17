@@ -1,0 +1,52 @@
+{
+  "name": "@abbacchio/api",
+  "version": "0.1.0",
+  "description": "Abbacchio API - Real-time log viewer HTTP API with SSE streaming",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "abbacchio": "dist/server.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "logs",
+    "logging",
+    "dashboard",
+    "real-time",
+    "sse",
+    "viewer",
+    "server"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.14",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^4.0.17",
+    "eventsource-parser": "^3.0.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.17"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

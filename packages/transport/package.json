@@ -1,0 +1,56 @@
+{
+  "name": "@abbacchio/transport",
+  "version": "0.1.0",
+  "description": "Abbacchio transport - Log transports for Pino, Winston, Bunyan, and console",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./transports/pino": {
+      "types": "./dist/transports/pino.d.ts",
+      "default": "./dist/transports/pino.js"
+    },
+    "./transports/winston": {
+      "types": "./dist/transports/winston.d.ts",
+      "default": "./dist/transports/winston.js"
+    },
+    "./transports/bunyan": {
+      "types": "./dist/transports/bunyan.d.ts",
+      "default": "./dist/transports/bunyan.js"
+    },
+    "./transports/console": {
+      "types": "./dist/transports/console.d.ts",
+      "default": "./dist/transports/console.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "pino",
+    "winston",
+    "bunyan",
+    "logs",
+    "logging",
+    "transport",
+    "client"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "pino-abstract-transport": "^3.0.0",
+    "winston-transport": "^4.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

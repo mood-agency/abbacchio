@@ -1,54 +1,40 @@
 {
-  "name": "pino-live",
+  "name": "abbacchio",
   "version": "0.1.0",
-  "description": "Real-time log viewer dashboard with HTTP ingestion for Pino and other loggers",
+  "private": true,
+  "description": "Real-time log viewer dashboard with HTTP ingestion for Pino, Winston, Bunyan, and other loggers",
   "type": "module",
-  "main": "dist/server.js",
-  "exports": {
-    ".": "./dist/server.js",
-    "./transport": "./dist/transport.js"
-  },
-  "bin": {
-    "pino-live": "dist/server.js"
-  },
   "scripts": {
-    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:dashboard\"",
-    "dev:server": "tsx watch src/server.ts",
-    "dev:dashboard": "cd dashboard && pnpm dev",
-    "build": "pnpm build:server && pnpm build:dashboard",
-    "build:server": "tsc",
-    "build:dashboard": "cd dashboard && pnpm build",
-    "start": "node dist/server.js",
-    "postinstall": "cd dashboard && pnpm install",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "dev": "concurrently \"pnpm --filter @abbacchio/api dev\" \"pnpm --filter @abbacchio/dashboard dev\"",
+    "dev:api": "pnpm --filter @abbacchio/api dev",
+    "dev:dashboard": "pnpm --filter @abbacchio/dashboard dev",
+    "build": "pnpm -r build",
+    "build:api": "pnpm --filter @abbacchio/api build",
+    "build:transport": "pnpm --filter @abbacchio/transport build",
+    "build:dashboard": "pnpm --filter @abbacchio/dashboard build",
+    "start": "pnpm --filter @abbacchio/api start",
+    "test": "pnpm -r test",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
   },
   "keywords": [
     "pino",
+    "winston",
+    "bunyan",
     "logs",
     "logging",
     "dashboard",
     "real-time",
     "sse",
-    "viewer"
+    "viewer",
+    "transport"
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "@hono/node-server": "^1.13.7",
-    "hono": "^4.6.14",
-    "nanoid": "^5.0.9",
-    "pino-abstract-transport": "^3.0.0"
-  },
   "devDependencies": {
-    "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^4.0.17",
     "concurrently": "^9.1.2",
-    "eventsource-parser": "^3.0.6",
-    "tsx": "^4.19.2",
+    "pino": "^10.2.0",
     "typescript": "^5.7.2",
-    "vitest": "^4.0.17"
+    "winston": "^3.19.0"
   },
   "engines": {
     "node": ">=18"
