@@ -77,4 +77,39 @@ export interface ServerConfig {
 /**
  * SSE event types
  */
-export type SSEEventType = 'log' | 'batch' | 'ping';
+export type SSEEventType = 'log' | 'batch' | 'ping' | 'channels' | 'channel:added';
+
+/**
+ * Server statistics response
+ */
+export interface ServerStats {
+  connections: {
+    totalConnections: number;
+    connectionsByChannel: Record<string, number>;
+    oldestConnection: number | null;
+    totalBytesSent: number;
+    totalMessagesSent: number;
+    totalMessagesDropped: number;
+  };
+  channels: {
+    channelCount: number;
+    maxChannels: number;
+    channels: Array<{
+      name: string;
+      createdAt: number;
+      lastActivity: number;
+      logCount: number;
+    }>;
+  };
+}
+
+/**
+ * Health check response
+ */
+export interface HealthResponse {
+  status: 'ok';
+  uptime: number;
+  connections: number;
+  maxConnections: number;
+  channels: number;
+}

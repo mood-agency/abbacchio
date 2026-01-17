@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { serve } from '@hono/node-server';
+import { serve, type ServerType } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -7,12 +7,21 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 import routes from './routes/index.js';
+import { createRateLimiterMiddleware, resetRateLimiter } from './middleware/rate-limiter.js';
+import { createValidatorMiddleware } from './middleware/validator.js';
+import { getConnectionManager, resetConnectionManager } from './lib/connection-manager.js';
+import { resetLogBuffer, getLogBuffer } from './lib/log-buffer.js';
+import { resetIdPool } from './lib/id-pool.js';
 
 // Configuration from environment
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const API_KEY = process.env.API_KEY;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 const IS_DEV = process.env.NODE_ENV !== 'production';
+const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT !== 'false';
+
+// Graceful shutdown configuration
+const SHUTDOWN_TIMEOUT = parseInt(process.env.SHUTDOWN_TIMEOUT || '30000', 10);
 
 // Create Hono app
 const app = new Hono();
@@ -20,6 +29,14 @@ const app = new Hono();
 // Middleware
 app.use('*', cors({ origin: CORS_ORIGIN }));
 app.use('*', logger());
+
+// Rate limiting middleware (optional, enabled by default)
+if (ENABLE_RATE_LIMIT) {
+  app.use('/api/*', createRateLimiterMiddleware());
+}
+
+// Input validation middleware for log ingestion
+app.use('/api/logs', createValidatorMiddleware());
 
 // Optional API key authentication
 if (API_KEY) {
@@ -41,8 +58,19 @@ if (API_KEY) {
 // API routes
 app.route('/api', routes);
 
-// Health check
-app.get('/health', (c) => c.json({ status: 'ok' }));
+// Health check with detailed status
+app.get('/health', (c) => {
+  const connectionManager = getConnectionManager();
+  const buffer = getLogBuffer();
+
+  return c.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    connections: connectionManager.size,
+    maxConnections: connectionManager.maxConnections,
+    channels: buffer.channelCount,
+  });
+});
 
 // Serve dashboard static files (only in production)
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -105,6 +133,7 @@ if (shouldServeDashboard) {
             <li><code>GET /api/logs/stream</code> - SSE stream</li>
             <li><code>GET /api/logs</code> - Get buffered logs</li>
             <li><code>DELETE /api/logs</code> - Clear logs</li>
+            <li><code>GET /api/stats</code> - Server statistics</li>
           </ul>
           <h2>Test</h2>
           <pre>curl -X POST http://localhost:${PORT}/api/logs \\
@@ -115,6 +144,77 @@ if (shouldServeDashboard) {
     `);
   });
 }
+
+// Server instance for graceful shutdown
+let server: ServerType | null = null;
+let isShuttingDown = false;
+
+/**
+ * Graceful shutdown handler
+ */
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (isShuttingDown) {
+    console.log('Shutdown already in progress...');
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+  const connectionManager = getConnectionManager();
+  const activeConnections = connectionManager.size;
+
+  if (activeConnections > 0) {
+    console.log(`Closing ${activeConnections} active SSE connections...`);
+  }
+
+  // Set a timeout for shutdown
+  const shutdownTimer = setTimeout(() => {
+    console.error('Shutdown timeout exceeded, forcing exit...');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT);
+
+  try {
+    // Close the HTTP server to stop accepting new connections
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server!.close((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      console.log('HTTP server closed');
+    }
+
+    // Clean up resources
+    resetConnectionManager();
+    resetRateLimiter();
+    resetLogBuffer();
+    resetIdPool();
+
+    clearTimeout(shutdownTimer);
+    console.log('Graceful shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    clearTimeout(shutdownTimer);
+    process.exit(1);
+  }
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+});
 
 // Start server
 const dashboardUrl = IS_DEV ? 'http://localhost:4001' : `http://localhost:${PORT}`;
@@ -129,7 +229,7 @@ console.log(`
   ╚═══════════════════════════════════════════╝
 `);
 
-serve({
+server = serve({
   fetch: app.fetch,
   port: PORT,
 });
@@ -137,4 +237,5 @@ serve({
 // Export for programmatic use
 export { app };
 export { getLogBuffer, resetLogBuffer } from './lib/log-buffer.js';
+export { getConnectionManager, resetConnectionManager } from './lib/connection-manager.js';
 export type { LogEntry, IncomingLog, LogLevelLabel } from './types.js';

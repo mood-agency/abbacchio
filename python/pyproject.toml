@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "abbacchio"
+version = "0.1.0"
+description = "Python logging transports for Abbacchio log viewer"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    { name = "Your Name", email = "your@email.com" }
+]
+keywords = ["logging", "structlog", "loguru", "monitoring", "debugging"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Logging",
+]
+
+dependencies = [
+    "httpx>=0.24.0",
+]
+
+[project.optional-dependencies]
+structlog = ["structlog>=21.0.0"]
+loguru = ["loguru>=0.6.0"]
+all = ["structlog>=21.0.0", "loguru>=0.6.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "structlog>=21.0.0",
+    "loguru>=0.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/pino-live"
+Repository = "https://github.com/yourusername/pino-live"
+Documentation = "https://github.com/yourusername/pino-live#readme"
+
+[tool.hatch.build.targets.wheel]
+packages = ["abbacchio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]

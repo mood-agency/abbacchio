@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { ingestLogs, streamLogs, clearLogs, getLogs, getChannels, generateKey } from './logs.handlers.js';
+import { ingestLogs, streamLogs, clearLogs, getLogs, getChannels, generateKey, getStats } from './logs.handlers.js';
 
 const routes = new Hono();
 
@@ -20,5 +20,8 @@ routes.get('/channels', getChannels);
 
 // Generate encryption key
 routes.get('/generate-key', generateKey);
+
+// Server statistics
+routes.get('/stats', getStats);
 
 export default routes;
