@@ -15,6 +15,37 @@ const HEARTBEAT_INTERVAL = 15000;
 /** Connection timeout check interval */
 const TIMEOUT_CHECK_INTERVAL = 60000;
 
+/** Map of connection IDs to their abort controllers for graceful disconnect */
+const connectionAbortControllers = new Map<string, AbortController>();
+
+/**
+ * Signal a connection to close gracefully
+ */
+export function signalDisconnect(connectionId: string): boolean {
+  const controller = connectionAbortControllers.get(connectionId);
+  if (controller) {
+    controller.abort();
+    connectionAbortControllers.delete(connectionId);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Signal all connections for a channel to close
+ */
+export function signalChannelDisconnect(channel: string): number {
+  const connectionManager = getConnectionManager();
+  const connections = connectionManager.getByChannel(channel);
+  let closed = 0;
+  for (const conn of connections) {
+    if (signalDisconnect(conn.id)) {
+      closed++;
+    }
+  }
+  return closed;
+}
+
 /**
  * Extract channel from request (header or query param)
  */
@@ -88,6 +119,10 @@ export async function streamLogs(c: Context) {
 
   // Check connection limit
   if (!connectionManager.canAcceptConnection()) {
+    console.warn(
+      `[SSE] Connection rejected: Maximum connections reached (${connectionManager.size}/${connectionManager.maxConnections})`,
+      { channel }
+    );
     return c.json(
       { error: 'Service Unavailable', message: 'Maximum connections reached' },
       503
@@ -98,8 +133,16 @@ export async function streamLogs(c: Context) {
   const connectionId = connectionManager.register(channel, clientIp);
 
   if (!connectionId) {
+    const currentIpConnections = connectionManager.getConnectionCountByIp(clientIp);
+    console.warn(
+      `[SSE] Connection rejected: IP limit reached for ${clientIp} (${currentIpConnections} connections)`,
+      { channel, clientIp }
+    );
     return c.json(
-      { error: 'Service Unavailable', message: 'Failed to register connection' },
+      {
+        error: 'Service Unavailable',
+        message: 'Too many connections from your IP. Please close some channels and try again.',
+      },
       503
     );
   }
@@ -109,6 +152,10 @@ export async function streamLogs(c: Context) {
     const messageQueue: Array<{ event: string; data: string; id?: string }> = [];
     let isWriting = false;
     let isClosed = false;
+
+    // Create abort controller for graceful disconnect
+    const abortController = new AbortController();
+    connectionAbortControllers.set(connectionId, abortController);
 
     /**
      * Process queued messages
@@ -147,6 +194,9 @@ export async function streamLogs(c: Context) {
       messageQueue.push({ event, data, id });
       processQueue();
     };
+
+    // Send initial ping immediately to confirm connection is open
+    queueMessage('ping', 'connected', 'init');
 
     // Send buffered logs first (always empty in streaming-only mode)
     const existingLogs = buffer.getAll(channel);
@@ -197,14 +247,15 @@ export async function streamLogs(c: Context) {
       buffer.off('batch', onBatch);
       buffer.off('channel:added', onChannelAdded);
       connectionManager.unregister(connectionId);
+      connectionAbortControllers.delete(connectionId);
       messageQueue.length = 0;
     };
 
-    // Register cleanup on abort
+    // Register cleanup on abort (from client or signal)
     stream.onAbort(cleanup);
+    abortController.signal.addEventListener('abort', cleanup);
 
     // Heartbeat and timeout check loop
-    let lastHeartbeat = Date.now();
     while (!isClosed) {
       await new Promise(resolve => setTimeout(resolve, HEARTBEAT_INTERVAL));
 
@@ -223,7 +274,6 @@ export async function streamLogs(c: Context) {
           data: 'ping',
         });
         connectionManager.touch(connectionId);
-        lastHeartbeat = Date.now();
       } catch {
         // Stream closed
         cleanup();
@@ -298,5 +348,25 @@ export function getStats(c: Context) {
   return c.json({
     connections: connectionManager.getStats(),
     channels: buffer.getStats(),
+  });
+}
+
+/**
+ * POST /api/logs/disconnect - Signal SSE connections to close
+ * Query params:
+ *   - channel: close all connections for this channel (required)
+ */
+export function disconnectChannel(c: Context) {
+  const channel = c.req.query('channel');
+
+  if (!channel) {
+    return c.json({ error: 'Channel parameter is required' }, 400);
+  }
+
+  const closedCount = signalChannelDisconnect(channel);
+
+  return c.json({
+    channel,
+    closedConnections: closedCount,
   });
 }

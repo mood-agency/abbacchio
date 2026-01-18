@@ -7,6 +7,7 @@
     "all": "All Namespaces"
   },
   "sidebar": {
+    "title": "Filters",
     "timeline": "Timeline",
     "levels": "Levels",
     "namespaces": "Namespaces",
@@ -39,6 +40,7 @@
     "addChannel": "Add channel",
     "pause": "Pause incoming logs",
     "resume": "Resume incoming logs",
-    "moreOptions": "More options"
+    "moreOptions": "More options",
+    "channelOptions": "Channel options"
   }
 }

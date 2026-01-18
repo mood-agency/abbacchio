@@ -17,6 +17,9 @@
   "labels": {
     "optional": "(optional)"
   },
+  "settings": {
+    "title": "Settings"
+  },
   "session": {
     "clearPassword": "Clear saved password from session",
     "passwordCleared": "Session password cleared"

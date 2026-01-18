@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import {
   Sidebar,
+  SidebarHeader,
   SidebarContent,
   SidebarSection,
   SidebarSectionTitle,
@@ -64,6 +65,9 @@ export function LogSidebar({
 
   return (
     <Sidebar>
+      <SidebarHeader>
+        <span className="font-semibold text-sm">{t('sidebar.title')}</span>
+      </SidebarHeader>
       <SidebarContent>
         {/* Timeline filter */}
         <SidebarSection>

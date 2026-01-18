@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lock, AlertTriangle, ShieldCheck, ShieldOff, ShieldAlert } from 'lucide-react';
+import { Lock, AlertTriangle, ShieldCheck, ShieldOff, ShieldAlert, Check } from 'lucide-react';
 
 interface LogRowProps {
   log: LogEntry;
@@ -126,19 +126,20 @@ export const LogRow = memo(function LogRow({
   // Check if message was originally sent encrypted (persists after decryption)
   const wasSentEncrypted = log.wasEncrypted === true;
 
-  const handleRowClick = useCallback((e: React.MouseEvent) => {
-    // Handle row selection for copy functionality
+  // Handle clicking on the row content to open drawer
+  const handleRowClick = useCallback(() => {
+    if (onDataClick) {
+      onDataClick(log);
+    }
+  }, [onDataClick, log]);
+
+  // Handle clicking on the selection area for multi-select
+  const handleSelectionClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
     if (onSelect && rowIndex !== undefined) {
       onSelect(rowIndex, e.shiftKey);
     }
   }, [onSelect, rowIndex]);
-
-  const handleDataClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onDataClick && (showData || decryptionFailed)) {
-      onDataClick(log);
-    }
-  }, [onDataClick, showData, decryptionFailed, log]);
 
   // Determine row styling based on encryption state, new status, and selection
   const rowClasses = [
@@ -150,11 +151,26 @@ export const LogRow = memo(function LogRow({
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={rowClasses} onClick={handleRowClick}>
+    <div className={rowClasses}>
       {/* Main row */}
-      <div className="flex items-center gap-3 px-4 py-2 text-sm">
-        {/* Date/Time */}
-        <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
+      <div className="flex items-center text-sm">
+        {/* Selection area */}
+        <div
+          className="w-10 flex-shrink-0 flex items-center justify-center py-2 cursor-pointer hover:bg-muted/80 border-r border-border"
+          onClick={handleSelectionClick}
+        >
+          <div className={`w-4 h-4 rounded border ${isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/50'} flex items-center justify-center transition-colors`}>
+            {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+          </div>
+        </div>
+
+        {/* Clickable row content */}
+        <div
+          className="flex-1 flex items-center gap-3 px-4 py-2 cursor-pointer"
+          onClick={handleRowClick}
+        >
+          {/* Date/Time */}
+          <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
           {formatDateTime(log.time)}
         </span>
 
@@ -246,27 +262,23 @@ export const LogRow = memo(function LogRow({
           </Tooltip>
         </div>
 
-        {/* Data column - clickable to open drawer */}
-        <div
-          className={`flex-1 font-mono text-xs text-muted-foreground min-w-0 ${
-            (showData || decryptionFailed) && onDataClick ? 'cursor-pointer hover:text-foreground' : ''
-          }`}
-          onClick={handleDataClick}
-        >
-          {isEncrypted || decryptionFailed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className={`inline-flex items-center ${decryptionFailed ? 'text-destructive' : 'text-yellow-500'}`}>
-                  <Lock className="w-4 h-4" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
-              </TooltipContent>
-            </Tooltip>
-          ) : showData ? (
-            <span className="truncate block">{highlightData(log.data, searchQuery, caseSensitive)}</span>
-          ) : null}
+          {/* Data column */}
+          <div className="flex-1 font-mono text-xs text-muted-foreground min-w-0">
+            {isEncrypted || decryptionFailed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={`inline-flex items-center ${decryptionFailed ? 'text-destructive' : 'text-yellow-500'}`}>
+                    <Lock className="w-4 h-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
+                </TooltipContent>
+              </Tooltip>
+            ) : showData ? (
+              <span className="truncate block">{highlightData(log.data, searchQuery, caseSensitive)}</span>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

@@ -17,6 +17,9 @@
   "labels": {
     "optional": "(opcional)"
   },
+  "settings": {
+    "title": "Configuración"
+  },
   "session": {
     "clearPassword": "Eliminar contraseña guardada de la sesión",
     "passwordCleared": "Contraseña de sesión eliminada"

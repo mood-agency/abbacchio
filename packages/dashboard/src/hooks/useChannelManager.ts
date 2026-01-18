@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
 import type { LogEntry, LogLevelLabel } from '../types';
 import { decryptLog, isCryptoAvailable } from '../lib/crypto';
 import { useSecureStorage } from '../contexts/SecureStorageContext';
@@ -446,7 +447,7 @@ export function useChannelManager(): UseChannelManagerResult {
 
   // Connect to a channel's SSE stream
   const connectChannel = useCallback(
-    (channelId: string, channelName: string) => {
+    async (channelId: string, channelName: string) => {
       debug('connectChannel called', { channelId, channelName });
       // Close existing connection and cleanup ping interval if any
       const existingSource = eventSourcesRef.current.get(channelId);
@@ -469,6 +470,33 @@ export function useChannelManager(): UseChannelManagerResult {
       );
 
       const streamUrl = `/api/logs/stream?channel=${encodeURIComponent(channelName)}`;
+
+      // Pre-check connection availability before establishing SSE
+      try {
+        const checkResponse = await fetch(streamUrl, { method: 'HEAD' });
+        if (checkResponse.status === 503) {
+          // Try to get error details from a GET request
+          const errorResponse = await fetch(streamUrl);
+          const errorData = await errorResponse.json().catch(() => ({}));
+          const errorMessage = errorData.message || 'Connection limit reached';
+
+          console.warn(`[SSE] Connection rejected for channel "${channelName}":`, errorMessage);
+          toast.error(`Channel "${channelName}": ${errorMessage}`);
+
+          setChannels((prev) =>
+            prev.map((ch) =>
+              ch.id === channelId
+                ? { ...ch, isConnecting: false, isConnected: false, connectionError: errorMessage }
+                : ch
+            )
+          );
+          return;
+        }
+      } catch {
+        // HEAD check failed, proceed with SSE anyway (might work)
+        debug('HEAD check failed, proceeding with SSE connection');
+      }
+
       const eventSource = new EventSource(streamUrl);
       eventSourcesRef.current.set(channelId, eventSource);
 
@@ -636,7 +664,20 @@ export function useChannelManager(): UseChannelManagerResult {
 
   // Remove a channel
   const removeChannel = useCallback((id: string) => {
-    // Close SSE connection
+    // Get channel name before removing (for API call)
+    const channel = channelsRef.current.find((ch) => ch.id === id);
+    const channelName = channel?.name;
+
+    // Signal server to close SSE connection (fire and forget)
+    if (channelName) {
+      fetch(`/api/logs/disconnect?channel=${encodeURIComponent(channelName)}`, {
+        method: 'POST',
+      }).catch(() => {
+        // Ignore errors - server will cleanup eventually
+      });
+    }
+
+    // Close SSE connection locally
     const eventSource = eventSourcesRef.current.get(id);
     if (eventSource) {
       eventSource.close();

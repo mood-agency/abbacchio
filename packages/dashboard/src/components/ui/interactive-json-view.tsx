@@ -1,6 +1,13 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { Copy } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface InteractiveJsonViewProps {
   data: Record<string, unknown>;
@@ -29,13 +36,37 @@ export function InteractiveJsonView({ data }: InteractiveJsonViewProps) {
     }
   }, [t]);
 
+  const handleCopyAll = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+      toast.success(t('toast.dataCopied'));
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, [data, t]);
+
   return (
-    <pre
-      className="text-xs rounded p-3 overflow-x-auto font-mono"
-      style={{ background: 'transparent', margin: 0 }}
-    >
-      <JsonNode value={data} onCopy={handleCopy} indent={0} />
-    </pre>
+    <div className="relative">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 h-7 w-7 text-white/60 hover:text-white hover:bg-white/10"
+            onClick={handleCopyAll}
+          >
+            <Copy className="w-4 h-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('tooltips.copyJson')}</TooltipContent>
+      </Tooltip>
+      <pre
+        className="text-xs rounded p-3 overflow-x-auto font-mono"
+        style={{ background: 'transparent', margin: 0 }}
+      >
+        <JsonNode value={data} onCopy={handleCopy} indent={0} />
+      </pre>
+    </div>
   );
 }
 

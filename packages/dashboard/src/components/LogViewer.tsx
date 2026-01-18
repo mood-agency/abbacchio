@@ -47,6 +47,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeBlock } from '@/components/ui/code-block';
 import { InteractiveJsonView } from '@/components/ui/interactive-json-view';
@@ -55,17 +62,27 @@ import {
   Sun,
   Moon,
   RefreshCw,
-  Copy,
   AlertTriangle,
   FileText,
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Plug,
   Radio,
   LockOpen,
+  Check,
+  Minus,
+  Save,
+  SaveOff,
+  MoreVertical,
+  Key,
+  Link,
+  Trash2,
+  Unplug,
+  Settings,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -198,6 +215,29 @@ export function LogViewer() {
       setSelectionEnd(null);
     }
   }, [selectionStart]);
+
+  // Handle select all / deselect all
+  const handleSelectAll = useCallback(() => {
+    if (logs.length === 0) return;
+
+    const allSelected = selectedIndices.size === logs.length;
+    if (allSelected) {
+      // Deselect all
+      setSelectionStart(null);
+      setSelectionEnd(null);
+    } else {
+      // Select all
+      setSelectionStart(0);
+      setSelectionEnd(logs.length - 1);
+    }
+  }, [logs.length, selectedIndices.size]);
+
+  // Determine checkbox state: all selected, some selected, or none
+  const selectAllState = useMemo(() => {
+    if (logs.length === 0 || selectedIndices.size === 0) return 'none';
+    if (selectedIndices.size === logs.length) return 'all';
+    return 'some';
+  }, [logs.length, selectedIndices.size]);
 
   // Copy selected logs to clipboard
   const copySelectedLogs = useCallback(async () => {
@@ -432,14 +472,45 @@ export function LogViewer() {
                   <span className="font-semibold text-foreground">{t('appName')}</span>
                 </div>
               </BreadcrumbItem>
-              {activeChannel && (
+              {channels.length > 0 && (
                 <>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbPage className="flex items-center gap-1.5">
-                      <Radio className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span>{activeChannel.name}</span>
-                    </BreadcrumbPage>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded-md hover:bg-muted transition-colors">
+                          <Radio className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>{activeChannel?.name}</span>
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {channels.map((channel) => (
+                          <DropdownMenuItem
+                            key={channel.id}
+                            onClick={() => setActiveChannelId(channel.id)}
+                            className={channel.id === activeChannelId ? 'bg-accent' : ''}
+                          >
+                            <Radio className="w-3.5 h-3.5 mr-2" />
+                            <span className="truncate max-w-[200px]">{channel.name}</span>
+                            {channel.id === activeChannelId && (
+                              <Check className="w-3.5 h-3.5 ml-auto" />
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setNewChannelName('');
+                            setNewChannelKey('');
+                            setShowAddChannelDialog(true);
+                          }}
+                        >
+                          <Plug className="w-3.5 h-3.5 mr-2" />
+                          {tFilters('tooltips.addChannel')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </BreadcrumbItem>
                 </>
               )}
@@ -447,24 +518,6 @@ export function LogViewer() {
           </Breadcrumb>
 
           <div className="flex items-center gap-2">
-            {/* Clear session password button */}
-            {isPasswordInSession && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      clearFromSession();
-                      toast.success(t('session.passwordCleared'));
-                    }}
-                  >
-                    <LockOpen className="w-5 h-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('session.clearPassword')}</TooltipContent>
-              </Tooltip>
-            )}
             {/* Language switcher */}
             <LanguageSwitcher />
             {/* Theme toggle */}
@@ -483,123 +536,219 @@ export function LogViewer() {
               </TooltipTrigger>
               <TooltipContent>{t('theme.toggleDarkMode')}</TooltipContent>
             </Tooltip>
+            {/* Settings menu (gear icon) */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <Settings className="w-5 h-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>{t('settings.title')}</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                {/* Persistence toggle */}
+                <DropdownMenuItem
+                  onClick={() => {
+                    const newValue = !persistLogs;
+                    setPersistLogs(newValue);
+                    toast(newValue ? tLogs('persistence.enabled') : tLogs('persistence.disabled'), {
+                      description: newValue
+                        ? tLogs('persistence.enabledDescription')
+                        : tLogs('persistence.disabledDescription'),
+                    });
+                  }}
+                >
+                  {persistLogs ? <Save className="w-4 h-4 mr-2" /> : <SaveOff className="w-4 h-4 mr-2 text-yellow-600 dark:text-yellow-400" />}
+                  {persistLogs ? tFilters('tooltips.disablePersistence') : tFilters('tooltips.enablePersistence')}
+                </DropdownMenuItem>
+                {/* Clear session password */}
+                {isPasswordInSession && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      clearFromSession();
+                      toast.success(t('session.passwordCleared'));
+                    }}
+                  >
+                    <LockOpen className="w-4 h-4 mr-2" />
+                    {t('session.clearPassword')}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Channel options menu (three dots) - only shown when channel is active */}
+            {activeChannel && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreVertical className="w-5 h-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>{tFilters('tooltips.channelOptions')}</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end">
+                  {/* Key manager */}
+                  <DropdownMenuItem onClick={openKeyDialog}>
+                    <Key className={`w-4 h-4 mr-2 ${
+                      activeChannel.secretKey
+                        ? 'text-green-600 dark:text-green-400'
+                        : activeChannel.hasEncryptedLogs
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : ''
+                    }`} />
+                    {tFilters('tooltips.manageKey')}
+                  </DropdownMenuItem>
+                  {/* Copy link */}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      params.set('channel', activeChannel.name);
+                      if (activeChannel.secretKey) params.set('key', activeChannel.secretKey);
+                      const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+                      navigator.clipboard.writeText(link);
+                      toast.success(tLogs('toast.linkCopied'));
+                    }}
+                  >
+                    <Link className="w-4 h-4 mr-2" />
+                    {tFilters('tooltips.copyLink')}
+                  </DropdownMenuItem>
+                  {/* Clear logs */}
+                  <DropdownMenuItem onClick={() => setShowDeleteDialog(true)}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {tFilters('tooltips.clearLogs')}
+                  </DropdownMenuItem>
+                  {/* Disconnect */}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const channelName = activeChannel.name;
+                      removeChannel(activeChannelId!);
+                      toast(tLogs('toast.disconnected', { channel: channelName }));
+                    }}
+                  >
+                    <Unplug className="w-4 h-4 mr-2" />
+                    {tFilters('tooltips.disconnect')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </header>
 
-        {/* Channel Tabs */}
-        <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-muted/30 overflow-x-auto">
-          {channels.map((channel) => (
-            <div
-              key={channel.id}
-              className={`group flex items-center gap-1.5 px-3 py-1 rounded-md text-sm cursor-pointer transition-colors ${
-                channel.id === activeChannelId
-                  ? 'bg-background shadow-sm border border-border'
-                  : 'hover:bg-muted'
-              }`}
-              onClick={() => setActiveChannelId(channel.id)}
-            >
-              <span className="truncate max-w-[120px]">{channel.name}</span>
-            </div>
-          ))}
-          {/* Add tab button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-muted text-muted-foreground"
-                onClick={() => {
-                  setNewChannelName('');
-                  setNewChannelKey('');
-                  setShowAddChannelDialog(true);
-                }}
-              >
-                <Plug className="w-4 h-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{tFilters('tooltips.addChannel')}</TooltipContent>
-          </Tooltip>
-        </div>
-
         {/* Main content with sidebar */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar with filters */}
-          <LogSidebar
-            levelFilters={levelFilters}
-            toggleLevel={toggleLevel}
-            clearLevels={() => setLevels([])}
-            levelCounts={levelCounts}
-            namespaceFilters={namespaceFilters}
-            toggleNamespace={toggleNamespace}
-            clearNamespaces={() => setNamespaces([])}
-            availableNamespaces={availableNamespaces}
-            namespaceCounts={namespaceCounts}
-            timeRange={timeRange}
-            setTimeRange={setTimeRange}
-          />
+          {/* Sidebar with filters - only shown when connected and has logs */}
+          {activeChannel?.isConnected && logs.length > 0 && (
+            <LogSidebar
+              levelFilters={levelFilters}
+              toggleLevel={toggleLevel}
+              clearLevels={() => setLevels([])}
+              levelCounts={levelCounts}
+              namespaceFilters={namespaceFilters}
+              toggleNamespace={toggleNamespace}
+              clearNamespaces={() => setNamespaces([])}
+              availableNamespaces={availableNamespaces}
+              namespaceCounts={namespaceCounts}
+              timeRange={timeRange}
+              setTimeRange={setTimeRange}
+            />
+          )}
 
           {/* Log content area */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            {/* Filter bar (search, actions) */}
-            <FilterBar
-              ref={searchInputRef}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              matchCount={matchCount}
-              caseSensitive={caseSensitive}
-              setCaseSensitive={setCaseSensitive}
-              onClearFilters={clearFilters}
-              levelFilters={levelFilters}
-              namespaceFilters={namespaceFilters}
-              onCopyLink={() => {
-                if (!activeChannel) return;
-                const params = new URLSearchParams();
-                params.set('channel', activeChannel.name);
-                if (activeChannel.secretKey) params.set('key', activeChannel.secretKey);
-                const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-                navigator.clipboard.writeText(link);
-                toast.success(tLogs('toast.linkCopied'));
-              }}
-              persistLogs={persistLogs}
-              onTogglePersist={() => {
-                const newValue = !persistLogs;
-                setPersistLogs(newValue);
-                toast(newValue ? tLogs('persistence.enabled') : tLogs('persistence.disabled'), {
-                  description: newValue
-                    ? tLogs('persistence.enabledDescription')
-                    : tLogs('persistence.disabledDescription'),
-                });
-              }}
-              onClearLogs={() => setShowDeleteDialog(true)}
-              onDisconnect={() => {
-                if (activeChannelId) {
-                  const channelName = activeChannel?.name;
-                  removeChannel(activeChannelId);
-                  toast(tLogs('toast.disconnected', { channel: channelName }));
-                }
-              }}
-              onManageKey={openKeyDialog}
-              hasSecretKey={!!activeChannel?.secretKey}
-              hasEncryptedLogs={!!activeChannel?.hasEncryptedLogs}
-              isPaused={isPaused}
-              onTogglePause={() => setIsPaused(!isPaused)}
-            />
+            {/* Show filter bar and table only when there are logs */}
+            {logs.length > 0 ? (
+              <>
+                {/* Filter bar (search, actions) */}
+                <FilterBar
+                  ref={searchInputRef}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  matchCount={matchCount}
+                  caseSensitive={caseSensitive}
+                  setCaseSensitive={setCaseSensitive}
+                  onClearFilters={clearFilters}
+                  levelFilters={levelFilters}
+                  namespaceFilters={namespaceFilters}
+                  isPaused={isPaused}
+                  onTogglePause={() => setIsPaused(!isPaused)}
+                />
 
-          {/* Column headers */}
-          <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground tracking-wider border-b border-border bg-muted relative z-10">
-            <span className="w-36 flex-shrink-0">Date/Time</span>
-            <span className="w-16 flex-shrink-0">Level</span>
-            <span className="w-28 flex-shrink-0">Namespace</span>
-            <span className="w-48 flex-shrink-0">Message</span>
-            <span className="w-5 flex-shrink-0"></span>
-            <span className="flex-1">Data</span>
-          </div>
+                {/* Column headers */}
+                <div className="flex items-center text-xs font-medium text-muted-foreground tracking-wider border-y border-border bg-background relative z-10">
+                  {/* Select all checkbox */}
+                  <div
+                    className="w-10 flex-shrink-0 border-r border-border py-2 flex items-center justify-center cursor-pointer hover:bg-muted/50"
+                    onClick={handleSelectAll}
+                  >
+                    <div className={`w-4 h-4 rounded border ${selectAllState !== 'none' ? 'bg-primary border-primary' : 'border-muted-foreground/50'} flex items-center justify-center transition-colors`}>
+                      {selectAllState === 'all' && <Check className="w-3 h-3 text-primary-foreground" />}
+                      {selectAllState === 'some' && <Minus className="w-3 h-3 text-primary-foreground" />}
+                    </div>
+                  </div>
+                  {/* Header labels */}
+                  <div className="flex-1 flex items-center gap-3 px-4 py-2">
+                    <span className="w-36 flex-shrink-0">Date/Time</span>
+                    <span className="w-16 flex-shrink-0">Level</span>
+                    <span className="w-28 flex-shrink-0">Namespace</span>
+                    <span className="w-48 flex-shrink-0">Message</span>
+                    <span className="w-5 flex-shrink-0"></span>
+                    <span className="flex-1">Data</span>
+                  </div>
+                </div>
 
-          {/* Log list */}
-          <ScrollArea
-            className="flex-1"
-            viewPortRef={scrollContainerRef}
-          >
-            {logs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
+                {/* Log list */}
+                <ScrollArea
+                  className="flex-1"
+                  viewPortRef={scrollContainerRef}
+                >
+                  <div
+                    style={{
+                      height: `${rowVirtualizer.getTotalSize()}px`,
+                      width: '100%',
+                      position: 'relative',
+                    }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+                      const log = logs[virtualItem.index];
+                      if (!log) return null;
+                      return (
+                        <div
+                          key={`${log.id}-${searchQuery}`}
+                          data-index={virtualItem.index}
+                          ref={rowVirtualizer.measureElement}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualItem.start}px)`,
+                          }}
+                        >
+                          <LogRow
+                            log={log}
+                            showChannel={false}
+                            searchQuery={searchQuery}
+                            caseSensitive={caseSensitive}
+                            isNew={newLogIds.has(log.id)}
+                            isSelected={selectedIndices.has(virtualItem.index)}
+                            rowIndex={virtualItem.index}
+                            onSelect={handleRowSelect}
+                            onDataClick={setDrawerLog}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </>
+            ) : (
+              /* Empty state - no logs */
+              <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground">
                 {isLoading ? (
                   <>
                     <Loader2 className="w-16 h-16 mb-4 opacity-50 animate-spin" />
@@ -616,14 +765,6 @@ export function LogViewer() {
                   <>
                     <Loader2 className="w-16 h-16 mb-4 opacity-50 animate-spin" />
                     <p className="text-lg">{tLogs('empty.connecting', { channel: activeChannel.name })}</p>
-                  </>
-                ) : totalCount > 0 && (searchQuery || levelFilters.length > 0 || namespaceFilters.length > 0 || timeRange !== 'all') ? (
-                  <>
-                    <FileText className="w-16 h-16 mb-4 opacity-50" />
-                    <p className="text-lg font-medium">{tLogs('empty.noMatches.title')}</p>
-                    <p className="text-sm mt-1 text-muted-foreground">
-                      {tLogs('empty.noMatches.description')}
-                    </p>
                   </>
                 ) : (
                   <div className="text-center w-[625px] px-6 py-8">
@@ -776,47 +917,7 @@ logger.info("Hello from structlog!")`}
                   </div>
                 )}
               </div>
-            ) : (
-              <div
-                style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
-                }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-                  const log = logs[virtualItem.index];
-                  if (!log) return null;
-                  return (
-                    <div
-                      key={`${log.id}-${searchQuery}`}
-                      data-index={virtualItem.index}
-                      ref={rowVirtualizer.measureElement}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <LogRow
-                        log={log}
-                        showChannel={false}
-                        searchQuery={searchQuery}
-                        caseSensitive={caseSensitive}
-                        isNew={newLogIds.has(log.id)}
-                        isSelected={selectedIndices.has(virtualItem.index)}
-                        rowIndex={virtualItem.index}
-                        onSelect={handleRowSelect}
-                        onDataClick={setDrawerLog}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
             )}
-          </ScrollArea>
           </div>
         </div>
 
@@ -1106,29 +1207,7 @@ logger.info("Hello from structlog!")`}
         <Sheet open={drawerLog !== null} onOpenChange={(open) => !open && setDrawerLog(null)}>
           <SheetContent side="right" className="w-[625px] sm:max-w-[625px] flex flex-col">
             <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
-                {tLogs('drawer.title')}
-                {drawerLog && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          if (drawerLog) {
-                            navigator.clipboard.writeText(JSON.stringify(drawerLog.data, null, 2));
-                            toast.success(tLogs('toast.dataCopied'));
-                          }
-                        }}
-                      >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{tLogs('tooltips.copyJson')}</TooltipContent>
-                  </Tooltip>
-                )}
-              </SheetTitle>
+              <SheetTitle>{tLogs('drawer.title')}</SheetTitle>
               {drawerLog && (
                 <div className="space-y-2 mt-2">
                   <div className="flex items-center gap-3 text-sm">

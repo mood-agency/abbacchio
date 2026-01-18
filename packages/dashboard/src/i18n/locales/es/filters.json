@@ -7,6 +7,7 @@
     "all": "Todos los namespaces"
   },
   "sidebar": {
+    "title": "Filtros",
     "timeline": "Cronología",
     "levels": "Niveles",
     "namespaces": "Namespaces",
@@ -39,6 +40,7 @@
     "addChannel": "Agregar canal",
     "pause": "Pausar logs entrantes",
     "resume": "Reanudar logs entrantes",
-    "moreOptions": "Más opciones"
+    "moreOptions": "Más opciones",
+    "channelOptions": "Opciones del canal"
   }
 }

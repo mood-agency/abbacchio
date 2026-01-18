@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { ingestLogs, streamLogs, clearLogs, getLogs, getChannels, generateKey, getStats } from './logs.handlers.js';
+import { ingestLogs, streamLogs, clearLogs, getLogs, getChannels, generateKey, getStats, disconnectChannel } from './logs.handlers.js';
 
 const routes = new Hono();
 
@@ -8,6 +8,9 @@ routes.post('/logs', ingestLogs);
 
 // SSE stream
 routes.get('/logs/stream', streamLogs);
+
+// Disconnect SSE stream
+routes.post('/logs/disconnect', disconnectChannel);
 
 // Get buffered logs
 routes.get('/logs', getLogs);
