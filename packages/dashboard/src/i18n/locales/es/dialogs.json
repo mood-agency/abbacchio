@@ -25,8 +25,11 @@
     "newPassword": "Nueva Contraseña",
     "changePassword": "Cambiar Contraseña",
     "resetStorage": "Restablecer Todos los Datos",
+    "resetStorageDescription": "¿Olvidaste tu contraseña? Restablece todos los datos para empezar de nuevo.",
     "resetWarning": "Esto eliminará todos los canales guardados y sus claves de cifrado.",
-    "reset": "Restablecer"
+    "reset": "Restablecer",
+    "saveToSession": "Recordar contraseña para esta sesión",
+    "saveToSessionDescription": "Tu contraseña se guardará en el almacenamiento de sesión y se eliminará cuando cierres el navegador."
   },
   "addChannel": {
     "title": "Agregar Canal",

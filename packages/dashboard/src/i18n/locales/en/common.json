@@ -16,5 +16,9 @@
   },
   "labels": {
     "optional": "(optional)"
+  },
+  "session": {
+    "clearPassword": "Clear saved password from session",
+    "passwordCleared": "Session password cleared"
   }
 }

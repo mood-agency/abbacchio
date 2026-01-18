@@ -5,7 +5,17 @@ import type { LogLevelLabel, FilterLevel } from '../types';
  * Used across the sidebar filters and table badges for consistency.
  */
 
-// Base color palette for each log level
+// Hex color values for log level chips
+export const LOG_LEVEL_HEX: Record<LogLevelLabel, { bg: string; text: string }> = {
+  fatal: { bg: '#8B0000', text: '#FFFFFF' },  // Dark Red - Critical failure
+  error: { bg: '#FF0000', text: '#FFFFFF' },  // Bright Red - Non-fatal error
+  warn:  { bg: '#FFA500', text: '#000000' },  // Orange/Amber - Warning
+  info:  { bg: '#0000FF', text: '#FFFFFF' },  // Blue - Normal operational
+  debug: { bg: '#808080', text: '#FFFFFF' },  // Grey - Diagnostic info
+  trace: { bg: '#D3D3D3', text: '#000000' },  // Light Grey - Step-by-step execution
+};
+
+// Base color palette for each log level (Tailwind classes for non-badge uses)
 export const LOG_LEVEL_COLORS = {
   trace: {
     base: 'slate',
@@ -22,18 +32,18 @@ export const LOG_LEVEL_COLORS = {
     accent: 'text-slate-500',
   },
   debug: {
-    base: 'cyan',
+    base: 'gray',
     light: {
-      bg: 'bg-cyan-100',
-      text: 'text-cyan-700',
-      hover: 'hover:bg-cyan-200',
+      bg: 'bg-gray-100',
+      text: 'text-gray-700',
+      hover: 'hover:bg-gray-200',
     },
     dark: {
-      bg: 'dark:bg-cyan-900',
-      text: 'dark:text-cyan-300',
-      hover: 'dark:hover:bg-cyan-800',
+      bg: 'dark:bg-gray-800',
+      text: 'dark:text-gray-300',
+      hover: 'dark:hover:bg-gray-700',
     },
-    accent: 'text-cyan-500',
+    accent: 'text-gray-500',
   },
   info: {
     base: 'blue',
@@ -50,18 +60,18 @@ export const LOG_LEVEL_COLORS = {
     accent: 'text-blue-500',
   },
   warn: {
-    base: 'amber',
+    base: 'orange',
     light: {
-      bg: 'bg-amber-100',
-      text: 'text-amber-700',
-      hover: 'hover:bg-amber-200',
+      bg: 'bg-orange-100',
+      text: 'text-orange-700',
+      hover: 'hover:bg-orange-200',
     },
     dark: {
-      bg: 'dark:bg-amber-900',
-      text: 'dark:text-amber-300',
-      hover: 'dark:hover:bg-amber-800',
+      bg: 'dark:bg-orange-900',
+      text: 'dark:text-orange-300',
+      hover: 'dark:hover:bg-orange-800',
     },
-    accent: 'text-amber-500',
+    accent: 'text-orange-500',
   },
   error: {
     base: 'red',
@@ -80,14 +90,14 @@ export const LOG_LEVEL_COLORS = {
   fatal: {
     base: 'rose',
     light: {
-      bg: 'bg-rose-600',
-      text: 'text-white',
-      hover: 'hover:bg-rose-700',
+      bg: 'bg-rose-100',
+      text: 'text-rose-700',
+      hover: 'hover:bg-rose-200',
     },
     dark: {
-      bg: 'dark:bg-rose-700',
-      text: 'dark:text-white',
-      hover: 'dark:hover:bg-rose-600',
+      bg: 'dark:bg-rose-900',
+      text: 'dark:text-rose-300',
+      hover: 'dark:hover:bg-rose-800',
     },
     accent: 'text-rose-500',
   },

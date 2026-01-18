@@ -31,3 +31,23 @@ export interface LogEntry {
 }
 
 export type FilterLevel = 'all' | LogLevelLabel;
+
+/** Array of selected log levels for multi-select filtering */
+export type FilterLevels = LogLevelLabel[];
+
+/** Array of selected namespaces for multi-select filtering */
+export type FilterNamespaces = string[];
+
+/** Time range options for filtering logs */
+export const TIME_RANGE_OPTIONS = {
+  '30m': 30 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '12h': 12 * 60 * 60 * 1000,
+  '1d': 24 * 60 * 60 * 1000,
+  '3d': 3 * 24 * 60 * 60 * 1000,
+  '1w': 7 * 24 * 60 * 60 * 1000,
+  '2w': 14 * 24 * 60 * 60 * 1000,
+  'all': 0,
+} as const;
+
+export type TimeRange = keyof typeof TIME_RANGE_OPTIONS;

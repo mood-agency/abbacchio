@@ -11,18 +11,21 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   hasEncryptedStorage,
   loadSecureChannels,
   saveSecureChannels,
   clearSecureStorage,
+  hasPasswordInSession,
+  getPasswordFromSession,
   type SecureChannelConfig,
 } from '@/lib/secure-storage';
 
 export type MasterPasswordMode = 'unlock' | 'create' | 'hidden';
 
 interface MasterPasswordDialogProps {
-  onUnlock: (password: string, channels: SecureChannelConfig[]) => void;
+  onUnlock: (password: string, channels: SecureChannelConfig[], saveToSession: boolean) => void;
 }
 
 export function MasterPasswordDialog({
@@ -37,18 +40,43 @@ export function MasterPasswordDialog({
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [saveToSession, setSaveToSession] = useState(false);
 
   // Determine initial mode on mount
   // Only show dialog if encrypted data exists (unlock mode)
   // Create mode is now handled by the onboarding wizard
   useEffect(() => {
     if (hasEncryptedStorage()) {
+      // Check if password is already saved in session
+      if (hasPasswordInSession()) {
+        const sessionPassword = getPasswordFromSession();
+        if (sessionPassword) {
+          // Auto-unlock with session password
+          (async () => {
+            setIsLoading(true);
+            try {
+              const result = await loadSecureChannels(sessionPassword);
+              if (result.channels !== null) {
+                onUnlock(sessionPassword, result.channels, false);
+                setMode('hidden');
+                return;
+              }
+            } catch {
+              // Session password invalid, show dialog
+            } finally {
+              setIsLoading(false);
+            }
+            setMode('unlock');
+          })();
+          return;
+        }
+      }
       setMode('unlock');
     } else {
       // No encrypted storage - onboarding wizard will handle setup
       setMode('hidden');
     }
-  }, []);
+  }, [onUnlock]);
 
   const handleUnlock = async () => {
     if (!password) {
@@ -68,7 +96,7 @@ export function MasterPasswordDialog({
         return;
       }
 
-      onUnlock(password, result.channels);
+      onUnlock(password, result.channels, saveToSession);
       setMode('hidden');
     } catch {
       setError(t('masterPassword.wrongPassword'));
@@ -100,7 +128,7 @@ export function MasterPasswordDialog({
         return;
       }
 
-      onUnlock(password, []);
+      onUnlock(password, [], saveToSession);
       setMode('hidden');
     } catch {
       setError(t('masterPassword.encryptionFailed'));
@@ -226,6 +254,24 @@ export function MasterPasswordDialog({
             </div>
           )}
 
+          {/* Save to session checkbox */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="save-to-session"
+              checked={saveToSession}
+              onCheckedChange={(checked) => setSaveToSession(checked === true)}
+            />
+            <label
+              htmlFor="save-to-session"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+            >
+              {t('masterPassword.saveToSession')}
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t('masterPassword.saveToSessionDescription')}
+          </p>
+
           {/* Error message */}
           {error && (
             <p className="text-sm text-destructive flex items-center gap-1">
@@ -236,7 +282,10 @@ export function MasterPasswordDialog({
 
           {/* Reset option (for unlock mode when password is forgotten) */}
           {mode === 'unlock' && !showResetConfirm && (
-            <div className="pt-2 border-t">
+            <div className="pt-2 border-t space-y-1">
+              <p className="text-xs text-muted-foreground">
+                {t('masterPassword.resetStorageDescription')}
+              </p>
               <button
                 type="button"
                 onClick={() => setShowResetConfirm(true)}

@@ -6,6 +6,22 @@
     "placeholder": "Todos los namespaces",
     "all": "Todos los namespaces"
   },
+  "sidebar": {
+    "timeline": "Cronología",
+    "levels": "Niveles",
+    "namespaces": "Namespaces",
+    "clear": "Limpiar"
+  },
+  "timeRange": {
+    "30m": "Últimos 30 minutos",
+    "1h": "Última hora",
+    "12h": "Últimas 12 horas",
+    "1d": "Último día",
+    "3d": "Últimos 3 días",
+    "1w": "Última semana",
+    "2w": "Últimas 2 semanas",
+    "all": "Todo el tiempo"
+  },
   "search": {
     "placeholder": "Buscar logs... (Ctrl+F)",
     "match": "{{count}} coincidencia",

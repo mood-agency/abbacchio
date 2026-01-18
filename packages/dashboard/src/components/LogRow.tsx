@@ -19,6 +19,12 @@ interface LogRowProps {
   isNew?: boolean;
   /** Disable row expansion (useful for compact views like onboarding) */
   disableExpand?: boolean;
+  /** Whether this row is selected for copy */
+  isSelected?: boolean;
+  /** Index of this row in the list */
+  rowIndex?: number;
+  /** Callback for row selection */
+  onSelect?: (index: number, shiftKey: boolean) => void;
 }
 
 function formatDateTime(timestamp: number): string {
@@ -104,7 +110,17 @@ function highlightData(
   return highlightText(dataString, query, caseSensitive);
 }
 
-export const LogRow = memo(function LogRow({ log, showChannel = false, searchQuery = '', caseSensitive = false, isNew = false, disableExpand = false }: LogRowProps) {
+export const LogRow = memo(function LogRow({
+  log,
+  showChannel = false,
+  searchQuery = '',
+  caseSensitive = false,
+  isNew = false,
+  disableExpand = false,
+  isSelected = false,
+  rowIndex,
+  onSelect,
+}: LogRowProps) {
   const { t } = useTranslation('logs');
   const { t: tDialogs } = useTranslation('dialogs');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -116,28 +132,39 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
   // Whether expansion is allowed
   const canExpand = !disableExpand && (showData || decryptionFailed);
 
-  const toggleExpand = useCallback(() => {
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    // If shift key is pressed or onSelect is provided, handle selection
+    if (onSelect && rowIndex !== undefined) {
+      onSelect(rowIndex, e.shiftKey);
+      // Don't expand if we're selecting
+      if (e.shiftKey) {
+        e.preventDefault();
+        return;
+      }
+    }
+    // Normal click - toggle expand
     if (canExpand) {
       setIsExpanded((prev) => !prev);
     }
-  }, [canExpand]);
+  }, [canExpand, onSelect, rowIndex]);
 
   const copyToClipboard = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard.writeText(JSON.stringify(log.data, null, 2));
   }, [log.data]);
 
-  // Determine row styling based on encryption state and new status
+  // Determine row styling based on encryption state, new status, and selection
   const rowClasses = [
-    'border-b border-border hover:bg-muted/50 transition-colors',
+    'border-b border-border hover:bg-muted/50 transition-colors select-none',
     canExpand ? 'cursor-pointer' : '',
     decryptionFailed ? 'bg-destructive/5' : '',
     isEncrypted ? 'bg-yellow-500/5' : '',
     isNew ? 'animate-highlight' : '',
+    isSelected ? 'bg-primary/10 border-primary/30' : '',
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={rowClasses} onClick={toggleExpand}>
+    <div className={rowClasses} onClick={handleClick}>
       {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-2 text-sm">
         {/* Date/Time */}

@@ -150,8 +150,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       case 'queryLogs': {
         const options = payload as {
           search?: string;
-          level?: string;
-          namespace?: string;
+          levels?: string[];
+          namespaces?: string[];
+          minTime?: number;
           channel?: string;
           limit?: number;
           offset?: number;
@@ -164,6 +165,12 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         if (options.channel) {
           conditions.push(`logs.channel = ?`);
           params.push(options.channel);
+        }
+
+        // Filter by time range
+        if (options.minTime && options.minTime > 0) {
+          conditions.push(`logs.time >= ?`);
+          params.push(options.minTime);
         }
 
         if (options.search?.trim()) {
@@ -180,15 +187,18 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           }
         }
 
-        if (options.level && options.level !== 'all') {
-          conditions.push(`logs.level_label = ?`);
-          params.push(options.level);
+        // Filter by multiple levels (empty array = all levels)
+        if (options.levels && options.levels.length > 0) {
+          const placeholders = options.levels.map(() => '?').join(', ');
+          conditions.push(`logs.level_label IN (${placeholders})`);
+          params.push(...options.levels);
         }
 
-        if (options.namespace) {
-          conditions.push(`(logs.namespace LIKE ? OR logs.channel LIKE ?)`);
-          const pattern = `%${options.namespace}%`;
-          params.push(pattern, pattern);
+        // Filter by multiple namespaces (empty array = all namespaces)
+        if (options.namespaces && options.namespaces.length > 0) {
+          const placeholders = options.namespaces.map(() => '?').join(', ');
+          conditions.push(`logs.namespace IN (${placeholders})`);
+          params.push(...options.namespaces);
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -218,8 +228,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       case 'getFilteredCount': {
         const options = payload as {
           search?: string;
-          level?: string;
-          namespace?: string;
+          levels?: string[];
+          namespaces?: string[];
+          minTime?: number;
           channel?: string;
         };
 
@@ -230,6 +241,12 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         if (options.channel) {
           conditions.push(`logs.channel = ?`);
           params.push(options.channel);
+        }
+
+        // Filter by time range
+        if (options.minTime && options.minTime > 0) {
+          conditions.push(`logs.time >= ?`);
+          params.push(options.minTime);
         }
 
         if (options.search?.trim()) {
@@ -246,15 +263,18 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           }
         }
 
-        if (options.level && options.level !== 'all') {
-          conditions.push(`logs.level_label = ?`);
-          params.push(options.level);
+        // Filter by multiple levels (empty array = all levels)
+        if (options.levels && options.levels.length > 0) {
+          const placeholders = options.levels.map(() => '?').join(', ');
+          conditions.push(`logs.level_label IN (${placeholders})`);
+          params.push(...options.levels);
         }
 
-        if (options.namespace) {
-          conditions.push(`(logs.namespace LIKE ? OR logs.channel LIKE ?)`);
-          const pattern = `%${options.namespace}%`;
-          params.push(pattern, pattern);
+        // Filter by multiple namespaces (empty array = all namespaces)
+        if (options.namespaces && options.namespaces.length > 0) {
+          const placeholders = options.namespaces.map(() => '?').join(', ');
+          conditions.push(`logs.namespace IN (${placeholders})`);
+          params.push(...options.namespaces);
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -363,13 +383,19 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       }
 
       case 'getLevelCounts': {
-        const options = payload as { channel?: string };
+        const options = payload as { channel?: string; minTime?: number };
         const conditions: string[] = [];
         const params: (string | number | null)[] = [];
 
         if (options?.channel) {
           conditions.push(`channel = ?`);
           params.push(options.channel);
+        }
+
+        // Apply time range filter so counts reflect the selected time window
+        if (options?.minTime && options.minTime > 0) {
+          conditions.push(`time >= ?`);
+          params.push(options.minTime);
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -401,6 +427,40 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
             if (r.level_label in counts) {
               counts[r.level_label] = r.count;
             }
+          },
+        });
+
+        self.postMessage({ id, success: true, result: counts });
+        break;
+      }
+
+      case 'getNamespaceCounts': {
+        const options = payload as { channel?: string; minTime?: number };
+        const conditions: string[] = ['namespace IS NOT NULL'];
+        const params: (string | number | null)[] = [];
+
+        if (options?.channel) {
+          conditions.push(`channel = ?`);
+          params.push(options.channel);
+        }
+
+        // Apply time range filter so counts reflect the selected time window
+        if (options?.minTime && options.minTime > 0) {
+          conditions.push(`time >= ?`);
+          params.push(options.minTime);
+        }
+
+        const where = `WHERE ${conditions.join(' AND ')}`;
+        const counts: Record<string, number> = {};
+
+        // Get counts per namespace
+        db.exec({
+          sql: `SELECT namespace, COUNT(*) as count FROM logs ${where} GROUP BY namespace ORDER BY namespace`,
+          bind: params,
+          rowMode: 'object',
+          callback: (row) => {
+            const r = row as { namespace: string; count: number };
+            counts[r.namespace] = r.count;
           },
         });
 

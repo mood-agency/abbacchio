@@ -1,23 +1,33 @@
 import { useSearchParams } from 'react-router-dom';
 import { useCallback, useMemo } from 'react';
-import type { FilterLevel } from '../types';
+import type { LogLevelLabel, FilterLevels, FilterNamespaces, TimeRange } from '../types';
+import { TIME_RANGE_OPTIONS } from '../types';
 
-const VALID_LEVELS = ['all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
+const VALID_LEVELS: LogLevelLabel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+const VALID_TIME_RANGES = Object.keys(TIME_RANGE_OPTIONS) as TimeRange[];
 
-function isValidLevel(level: string): level is FilterLevel {
-  return VALID_LEVELS.includes(level as FilterLevel);
+function isValidLevel(level: string): level is LogLevelLabel {
+  return VALID_LEVELS.includes(level as LogLevelLabel);
+}
+
+function isValidTimeRange(range: string): range is TimeRange {
+  return VALID_TIME_RANGES.includes(range as TimeRange);
 }
 
 export interface FilterParams {
-  level: FilterLevel;
-  namespace: string;
+  levels: FilterLevels;
+  namespaces: FilterNamespaces;
+  timeRange: TimeRange;
   search: string;
   caseSensitive: boolean;
 }
 
 export interface UseFilterParamsResult extends FilterParams {
-  setLevel: (level: FilterLevel) => void;
-  setNamespace: (namespace: string) => void;
+  setLevels: (levels: FilterLevels) => void;
+  toggleLevel: (level: LogLevelLabel) => void;
+  setNamespaces: (namespaces: FilterNamespaces) => void;
+  toggleNamespace: (namespace: string) => void;
+  setTimeRange: (range: TimeRange) => void;
   setSearch: (search: string) => void;
   setCaseSensitive: (caseSensitive: boolean) => void;
   clearFilters: () => void;
@@ -28,8 +38,9 @@ export interface UseFilterParamsResult extends FilterParams {
  * Hook to sync filter state with URL query parameters using react-router-dom
  *
  * URL params:
- * - level: Log level filter (trace, debug, info, warn, error, fatal)
- * - namespace: Namespace filter
+ * - levels: Comma-separated log levels (trace,debug,info,warn,error,fatal)
+ * - namespaces: Comma-separated namespaces
+ * - time: Time range (30m, 1h, 12h, 1d, 3d, 1w, 2w, all)
  * - q: Search query
  * - case: Case sensitivity (1 for true)
  */
@@ -38,13 +49,23 @@ export function useFilterParams(): UseFilterParamsResult {
 
   // Parse current params
   const params = useMemo((): FilterParams => {
-    const levelParam = searchParams.get('level') || 'all';
-    const level = isValidLevel(levelParam) ? levelParam : 'all';
-    const namespace = searchParams.get('namespace') || '';
+    const levelsParam = searchParams.get('levels') || '';
+    const levels = levelsParam
+      .split(',')
+      .filter((l) => l && isValidLevel(l)) as FilterLevels;
+
+    const namespacesParam = searchParams.get('namespaces') || '';
+    const namespaces = namespacesParam
+      .split(',')
+      .filter((n) => n.trim() !== '') as FilterNamespaces;
+
+    const timeParam = searchParams.get('time') || 'all';
+    const timeRange = isValidTimeRange(timeParam) ? timeParam : 'all';
+
     const search = searchParams.get('q') || '';
     const caseSensitive = searchParams.get('case') === '1';
 
-    return { level, namespace, search, caseSensitive };
+    return { levels, namespaces, timeRange, search, caseSensitive };
   }, [searchParams]);
 
   // Update a single param while preserving others (including channel/key)
@@ -53,7 +74,7 @@ export function useFilterParams(): UseFilterParamsResult {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (value === null || value === '' || value === 'all' || value === '0') {
+          if (value === null || value === '') {
             next.delete(key);
           } else {
             next.set(key, value);
@@ -66,13 +87,46 @@ export function useFilterParams(): UseFilterParamsResult {
     [setSearchParams]
   );
 
-  const setLevel = useCallback(
-    (level: FilterLevel) => updateParam('level', level === 'all' ? null : level),
+  const setLevels = useCallback(
+    (levels: FilterLevels) => {
+      updateParam('levels', levels.length > 0 ? levels.join(',') : null);
+    },
     [updateParam]
   );
 
-  const setNamespace = useCallback(
-    (namespace: string) => updateParam('namespace', namespace || null),
+  const toggleLevel = useCallback(
+    (level: LogLevelLabel) => {
+      const currentLevels = params.levels;
+      const newLevels = currentLevels.includes(level)
+        ? currentLevels.filter((l) => l !== level)
+        : [...currentLevels, level];
+      setLevels(newLevels);
+    },
+    [params.levels, setLevels]
+  );
+
+  const setNamespaces = useCallback(
+    (namespaces: FilterNamespaces) => {
+      updateParam('namespaces', namespaces.length > 0 ? namespaces.join(',') : null);
+    },
+    [updateParam]
+  );
+
+  const toggleNamespace = useCallback(
+    (namespace: string) => {
+      const currentNamespaces = params.namespaces;
+      const newNamespaces = currentNamespaces.includes(namespace)
+        ? currentNamespaces.filter((n) => n !== namespace)
+        : [...currentNamespaces, namespace];
+      setNamespaces(newNamespaces);
+    },
+    [params.namespaces, setNamespaces]
+  );
+
+  const setTimeRange = useCallback(
+    (range: TimeRange) => {
+      updateParam('time', range === 'all' ? null : range);
+    },
     [updateParam]
   );
 
@@ -90,8 +144,9 @@ export function useFilterParams(): UseFilterParamsResult {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.delete('level');
-        next.delete('namespace');
+        next.delete('levels');
+        next.delete('namespaces');
+        next.delete('time');
         next.delete('q');
         next.delete('case');
         return next;
@@ -101,15 +156,19 @@ export function useFilterParams(): UseFilterParamsResult {
   }, [setSearchParams]);
 
   const hasFilters =
-    params.level !== 'all' ||
-    params.namespace !== '' ||
+    params.levels.length > 0 ||
+    params.namespaces.length > 0 ||
+    params.timeRange !== 'all' ||
     params.search !== '' ||
     params.caseSensitive;
 
   return {
     ...params,
-    setLevel,
-    setNamespace,
+    setLevels,
+    toggleLevel,
+    setNamespaces,
+    toggleNamespace,
+    setTimeRange,
     setSearch,
     setCaseSensitive,
     clearFilters,

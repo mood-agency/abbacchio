@@ -1,13 +1,13 @@
 {
   "masterPassword": {
     "title": "Master Password",
-    "unlockTitle": "Unlock Dashboard",
+    "unlockTitle": "Unlock Abbacchio",
     "unlockDescription": "Enter your master password to decrypt your saved channels.",
     "createTitle": "Create Master Password",
     "createDescription": "Set a master password to encrypt your channel configurations. This keeps your encryption keys secure.",
     "migrationTitle": "Secure Your Channels",
     "migrationDescription": "Your channels are stored without encryption. Set a master password to protect them, or continue without persistence.",
-    "passwordLabel": "Password",
+    "passwordLabel": "Master Password",
     "confirmLabel": "Confirm Password",
     "passwordPlaceholder": "Enter master password",
     "confirmPlaceholder": "Confirm password",
@@ -25,8 +25,11 @@
     "newPassword": "New Password",
     "changePassword": "Change Password",
     "resetStorage": "Reset All Data",
+    "resetStorageDescription": "Forgot your password? Reset all data to start fresh.",
     "resetWarning": "This will delete all saved channels and their encryption keys.",
-    "reset": "Reset"
+    "reset": "Reset",
+    "saveToSession": "Remember password for this session",
+    "saveToSessionDescription": "Your password will be saved in session storage and cleared when you close the browser."
   },
   "addChannel": {
     "title": "Add Channel",

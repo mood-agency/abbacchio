@@ -6,6 +6,22 @@
     "placeholder": "All Namespaces",
     "all": "All Namespaces"
   },
+  "sidebar": {
+    "timeline": "Timeline",
+    "levels": "Levels",
+    "namespaces": "Namespaces",
+    "clear": "Clear"
+  },
+  "timeRange": {
+    "30m": "Last 30 minutes",
+    "1h": "Last hour",
+    "12h": "Last 12 hours",
+    "1d": "Last day",
+    "3d": "Last 3 days",
+    "1w": "Last week",
+    "2w": "Last 2 weeks",
+    "all": "All time"
+  },
   "search": {
     "placeholder": "Search logs... (Ctrl+F)",
     "match": "{{count}} match",

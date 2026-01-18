@@ -1,4 +1,4 @@
-import type { LogEntry, FilterLevel } from '../types';
+import type { LogEntry, FilterLevels, FilterNamespaces } from '../types';
 import SqliteWorker from './sqlite-worker?worker';
 
 let worker: Worker | null = null;
@@ -78,8 +78,10 @@ export async function clearLogsForChannel(channel: string): Promise<void> {
 
 export interface QueryOptions {
   search?: string;
-  level?: FilterLevel;
-  namespace?: string;
+  levels?: FilterLevels;
+  namespaces?: FilterNamespaces;
+  /** Minimum timestamp (ms) for time range filtering */
+  minTime?: number;
   channel?: string;
   limit?: number;
   offset?: number;
@@ -130,6 +132,18 @@ export async function getFilteredCount(options: QueryOptions = {}): Promise<numb
 export async function getDistinctNamespaces(channel?: string): Promise<string[]> {
   await initDatabase();
   return sendMessage<string[]>('getDistinctNamespaces', { channel });
+}
+
+export type NamespaceCounts = Record<string, number>;
+
+/**
+ * Get counts of logs by namespace
+ */
+export async function getNamespaceCounts(options?: CountFilterOptions | string): Promise<NamespaceCounts> {
+  await initDatabase();
+  // Support both old string signature and new options object
+  const payload = typeof options === 'string' ? { channel: options } : options;
+  return sendMessage<NamespaceCounts>('getNamespaceCounts', payload);
 }
 
 /**
@@ -184,10 +198,17 @@ export interface LevelCounts {
   fatal: number;
 }
 
+export interface CountFilterOptions {
+  channel?: string;
+  minTime?: number;
+}
+
 /**
  * Get counts of logs by level
  */
-export async function getLevelCounts(channel?: string): Promise<LevelCounts> {
+export async function getLevelCounts(options?: CountFilterOptions | string): Promise<LevelCounts> {
   await initDatabase();
-  return sendMessage<LevelCounts>('getLevelCounts', { channel });
+  // Support both old string signature and new options object
+  const payload = typeof options === 'string' ? { channel: options } : options;
+  return sendMessage<LevelCounts>('getLevelCounts', payload);
 }

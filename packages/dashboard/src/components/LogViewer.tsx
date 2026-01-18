@@ -6,12 +6,14 @@ import { useChannelManager } from '../hooks/useChannelManager';
 import { useChannelLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useChannelLogStream';
 import { useFilterParams } from '../hooks/useFilterParams';
 import { FilterBar } from './FilterBar';
+import { LogSidebar } from './LogSidebar';
 import { LogRow } from './LogRow';
 import { CommandPalette } from './CommandPalette';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { OnboardingWizard } from './OnboardingWizard';
 import { useSecureStorage } from '@/contexts/SecureStorageContext';
 import { saveSecureChannels, type SecureChannelConfig } from '@/lib/secure-storage';
+import { formatLogsForClipboard } from '@/lib/format-logs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -52,7 +54,16 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Plug,
+  Radio,
+  LockOpen,
 } from 'lucide-react';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 
 export function LogViewer() {
   const { t } = useTranslation();
@@ -61,16 +72,20 @@ export function LogViewer() {
   const { t: tFilters } = useTranslation('filters');
 
   // Secure storage for master password
-  const { isReady, setMasterPassword, setReady, setInitialChannels, hasExistingStorage } = useSecureStorage();
+  const { isReady, setMasterPassword, setReady, setInitialChannels, hasExistingStorage, isPasswordInSession, clearFromSession } = useSecureStorage();
 
   // URL params for filters
   const {
-    level: levelFilter,
-    namespace: namespaceFilter,
+    levels: levelFilters,
+    namespaces: namespaceFilters,
+    timeRange,
     search: searchQuery,
     caseSensitive,
-    setLevel: setLevelFilter,
-    setNamespace: setNamespaceFilter,
+    setLevels,
+    toggleLevel,
+    setNamespaces,
+    toggleNamespace,
+    setTimeRange,
     setSearch: setSearchQuery,
     setCaseSensitive,
     clearFilters,
@@ -106,12 +121,14 @@ export function LogViewer() {
     totalPages,
     availableNamespaces,
     levelCounts,
+    namespaceCounts,
     newLogIds,
     isLoading,
   } = useChannelLogStream({
     channelName: activeChannel?.name || null,
-    levelFilter,
-    namespaceFilter,
+    levelFilters,
+    namespaceFilters,
+    timeRange,
     searchQuery,
     onNewLogs,
     onClear,
@@ -139,6 +156,78 @@ export function LogViewer() {
   const [showAddChannelDialog, setShowAddChannelDialog] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelKey, setNewChannelKey] = useState('');
+
+  // Row selection state for copy
+  const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+
+  // Calculate selected indices
+  const selectedIndices = useMemo(() => {
+    if (selectionStart === null) return new Set<number>();
+    const end = selectionEnd ?? selectionStart;
+    const start = Math.min(selectionStart, end);
+    const endIdx = Math.max(selectionStart, end);
+    const indices = new Set<number>();
+    for (let i = start; i <= endIdx; i++) {
+      indices.add(i);
+    }
+    return indices;
+  }, [selectionStart, selectionEnd]);
+
+  // Handle row selection (click or shift+click)
+  const handleRowSelect = useCallback((index: number, shiftKey: boolean) => {
+    if (shiftKey && selectionStart !== null) {
+      // Shift+click: extend selection
+      setSelectionEnd(index);
+    } else {
+      // Regular click: start new selection
+      setSelectionStart(index);
+      setSelectionEnd(null);
+    }
+  }, [selectionStart]);
+
+  // Copy selected logs to clipboard
+  const copySelectedLogs = useCallback(async () => {
+    if (selectedIndices.size === 0) return;
+
+    const selectedLogs = logs.filter((_, idx) => selectedIndices.has(idx));
+    const formatted = formatLogsForClipboard(selectedLogs);
+
+    try {
+      await navigator.clipboard.writeText(formatted);
+      toast.success(tLogs('toast.logsCopied', { count: selectedLogs.length }));
+      // Clear selection after copy
+      setSelectionStart(null);
+      setSelectionEnd(null);
+    } catch (err) {
+      console.error('Failed to copy logs:', err);
+      toast.error(tLogs('toast.copyFailed'));
+    }
+  }, [selectedIndices, logs, tLogs]);
+
+  // Keyboard shortcut: Ctrl+C to copy selected, Escape to clear selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedIndices.size > 0) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+          e.preventDefault();
+          copySelectedLogs();
+        } else if (e.key === 'Escape') {
+          setSelectionStart(null);
+          setSelectionEnd(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIndices, copySelectedLogs]);
+
+  // Clear selection when page or filters change
+  useEffect(() => {
+    setSelectionStart(null);
+    setSelectionEnd(null);
+  }, [currentPage, levelFilters, namespaceFilters, searchQuery, timeRange]);
 
   const generateNewKey = async () => {
     setIsGeneratingKey(true);
@@ -356,10 +445,48 @@ export function LogViewer() {
     <TooltipProvider>
       <div className="flex flex-col h-screen">
         {/* Header */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background relative z-20">
-          <h1 className="text-lg font-semibold text-foreground">{t('appName')}</h1>
+        <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-background relative z-20">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <div className="flex items-center gap-2">
+                  <img src="/favicon.svg" alt="" className="w-5 h-5" />
+                  <span className="font-semibold text-foreground">{t('appName')}</span>
+                </div>
+              </BreadcrumbItem>
+              {activeChannel && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage className="flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>{activeChannel.name}</span>
+                    </BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+            </BreadcrumbList>
+          </Breadcrumb>
 
           <div className="flex items-center gap-2">
+            {/* Clear session password button */}
+            {isPasswordInSession && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      clearFromSession();
+                      toast.success(t('session.passwordCleared'));
+                    }}
+                  >
+                    <LockOpen className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('session.clearPassword')}</TooltipContent>
+              </Tooltip>
+            )}
             {/* Language switcher */}
             <LanguageSwitcher />
             {/* Theme toggle */}
@@ -414,54 +541,67 @@ export function LogViewer() {
           </Tooltip>
         </div>
 
-        {/* Main content */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Filter bar with level tabs */}
-          <FilterBar
-            ref={searchInputRef}
-            namespaceFilter={namespaceFilter}
-            setNamespaceFilter={setNamespaceFilter}
-            availableNamespaces={availableNamespaces}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            matchCount={matchCount}
-            caseSensitive={caseSensitive}
-            setCaseSensitive={setCaseSensitive}
-            onClearFilters={clearFilters}
-            levelFilter={levelFilter}
-            setLevelFilter={setLevelFilter}
+        {/* Main content with sidebar */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Sidebar with filters */}
+          <LogSidebar
+            levelFilters={levelFilters}
+            toggleLevel={toggleLevel}
+            clearLevels={() => setLevels([])}
             levelCounts={levelCounts}
-            onCopyLink={() => {
-              if (!activeChannel) return;
-              const params = new URLSearchParams();
-              params.set('channel', activeChannel.name);
-              if (activeChannel.secretKey) params.set('key', activeChannel.secretKey);
-              const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-              navigator.clipboard.writeText(link);
-              toast.success(tLogs('toast.linkCopied'));
-            }}
-            persistLogs={persistLogs}
-            onTogglePersist={() => {
-              const newValue = !persistLogs;
-              setPersistLogs(newValue);
-              toast(newValue ? tLogs('persistence.enabled') : tLogs('persistence.disabled'), {
-                description: newValue
-                  ? tLogs('persistence.enabledDescription')
-                  : tLogs('persistence.disabledDescription'),
-              });
-            }}
-            onClearLogs={() => setShowDeleteDialog(true)}
-            onDisconnect={() => {
-              if (activeChannelId) {
-                const channelName = activeChannel?.name;
-                removeChannel(activeChannelId);
-                toast(tLogs('toast.disconnected', { channel: channelName }));
-              }
-            }}
-            onManageKey={openKeyDialog}
-            hasSecretKey={!!activeChannel?.secretKey}
-            hasEncryptedLogs={!!activeChannel?.hasEncryptedLogs}
+            namespaceFilters={namespaceFilters}
+            toggleNamespace={toggleNamespace}
+            clearNamespaces={() => setNamespaces([])}
+            availableNamespaces={availableNamespaces}
+            namespaceCounts={namespaceCounts}
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
           />
+
+          {/* Log content area */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {/* Filter bar (search, actions) */}
+            <FilterBar
+              ref={searchInputRef}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              matchCount={matchCount}
+              caseSensitive={caseSensitive}
+              setCaseSensitive={setCaseSensitive}
+              onClearFilters={clearFilters}
+              levelFilters={levelFilters}
+              namespaceFilters={namespaceFilters}
+              onCopyLink={() => {
+                if (!activeChannel) return;
+                const params = new URLSearchParams();
+                params.set('channel', activeChannel.name);
+                if (activeChannel.secretKey) params.set('key', activeChannel.secretKey);
+                const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+                navigator.clipboard.writeText(link);
+                toast.success(tLogs('toast.linkCopied'));
+              }}
+              persistLogs={persistLogs}
+              onTogglePersist={() => {
+                const newValue = !persistLogs;
+                setPersistLogs(newValue);
+                toast(newValue ? tLogs('persistence.enabled') : tLogs('persistence.disabled'), {
+                  description: newValue
+                    ? tLogs('persistence.enabledDescription')
+                    : tLogs('persistence.disabledDescription'),
+                });
+              }}
+              onClearLogs={() => setShowDeleteDialog(true)}
+              onDisconnect={() => {
+                if (activeChannelId) {
+                  const channelName = activeChannel?.name;
+                  removeChannel(activeChannelId);
+                  toast(tLogs('toast.disconnected', { channel: channelName }));
+                }
+              }}
+              onManageKey={openKeyDialog}
+              hasSecretKey={!!activeChannel?.secretKey}
+              hasEncryptedLogs={!!activeChannel?.hasEncryptedLogs}
+            />
 
           {/* Column headers */}
           <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground tracking-wider border-b border-border bg-muted relative z-10">
@@ -497,7 +637,7 @@ export function LogViewer() {
                     <Loader2 className="w-16 h-16 mb-4 opacity-50 animate-spin" />
                     <p className="text-lg">{tLogs('empty.connecting', { channel: activeChannel.name })}</p>
                   </>
-                ) : totalCount > 0 && (searchQuery || levelFilter !== 'all' || namespaceFilter) ? (
+                ) : totalCount > 0 && (searchQuery || levelFilters.length > 0 || namespaceFilters.length > 0 || timeRange !== 'all') ? (
                   <>
                     <FileText className="w-16 h-16 mb-4 opacity-50" />
                     <p className="text-lg font-medium">{tLogs('empty.noMatches.title')}</p>
@@ -686,6 +826,9 @@ logger.info("Hello from structlog!")`}
                         searchQuery={searchQuery}
                         caseSensitive={caseSensitive}
                         isNew={newLogIds.has(log.id)}
+                        isSelected={selectedIndices.has(virtualItem.index)}
+                        rowIndex={virtualItem.index}
+                        onSelect={handleRowSelect}
                       />
                     </div>
                   );
@@ -693,6 +836,7 @@ logger.info("Hello from structlog!")`}
               </div>
             )}
           </ScrollArea>
+          </div>
         </div>
 
         {/* Pagination controls */}

@@ -81,6 +81,8 @@
     "invalidKeyFormat": "Formato de clave inválido",
     "invalidKeyDescription": "La clave debe tener exactamente 43 caracteres (codificación base64url)",
     "channelNameRequired": "Nombre de canal requerido",
-    "channelNameRequiredDescription": "Por favor ingresa un nombre de canal para conectar"
+    "channelNameRequiredDescription": "Por favor ingresa un nombre de canal para conectar",
+    "logsCopied": "{{count}} log(s) copiado(s) al portapapeles",
+    "copyFailed": "Error al copiar logs"
   }
 }

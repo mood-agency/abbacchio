@@ -81,6 +81,8 @@
     "invalidKeyFormat": "Invalid key format",
     "invalidKeyDescription": "Key must be exactly 43 characters (base64url encoded)",
     "channelNameRequired": "Channel name required",
-    "channelNameRequiredDescription": "Please enter a channel name to connect"
+    "channelNameRequiredDescription": "Please enter a channel name to connect",
+    "logsCopied": "{{count}} log(s) copied to clipboard",
+    "copyFailed": "Failed to copy logs"
   }
 }

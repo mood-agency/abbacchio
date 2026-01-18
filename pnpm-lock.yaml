@@ -84,6 +84,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@sqlite.org/sqlite-wasm':
+        specifier: 3.51.1-build2
+        version: 3.51.1-build2
       '@tanstack/react-virtual':
         specifier: ^3.13.18
         version: 3.13.18(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -132,9 +135,6 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      sql.js:
-        specifier: ^1.13.0
-        version: 1.13.0
       tailwind-merge:
         specifier: ^3.4.0
         version: 3.4.0
@@ -1166,6 +1166,10 @@ packages:
   '@so-ric/colorspace@1.1.6':
     resolution: {integrity: sha512-/KiKkpHNOBgkFJwu9sh48LkHSMYGyuTcSFK/qMBdnOAlrRJzRSXAOFB5qwzaVQuDl8wAvHVMkaASQDReTahxuw==}
 
+  '@sqlite.org/sqlite-wasm@3.51.1-build2':
+    resolution: {integrity: sha512-lVPTBlFsEijJ3wuoIbMfC9QMZKfL8huHN8D/lijNKoVxPqUDNvDtXse0wafe7USSmyfKAMb1JZ3ISSr/Vgbn5w==}
+    hasBin: true
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -2035,9 +2039,6 @@ packages:
   split2@4.2.0:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
-
-  sql.js@1.13.0:
-    resolution: {integrity: sha512-RJbVP1HRDlUUXahJ7VMTcu9Rm1Nzw+EBpoPr94vnbD4LwR715F3CcxE2G2k45PewcaZ57pjetYa+LoSJLAASgA==}
 
   stack-trace@0.0.10:
     resolution: {integrity: sha512-KGzahc7puUKkzyMt+IqAep+TVNbKP+k2Lmwhub39m1AsTSkaDutx56aDCo+HLDzf/D26BIHTJWNiTG1KAJiQCg==}
@@ -3100,6 +3101,8 @@ snapshots:
       color: 5.0.3
       text-hex: 1.0.0
 
+  '@sqlite.org/sqlite-wasm@3.51.1-build2': {}
+
   '@standard-schema/spec@1.1.0': {}
 
   '@tanstack/react-virtual@3.13.18(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -3986,8 +3989,6 @@ snapshots:
   source-map-js@1.2.1: {}
 
   split2@4.2.0: {}
-
-  sql.js@1.13.0: {}
 
   stack-trace@0.0.10: {}
 

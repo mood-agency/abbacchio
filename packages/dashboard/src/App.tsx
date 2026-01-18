@@ -7,7 +7,7 @@ import { MasterPasswordDialog } from './components/MasterPasswordDialog';
 import type { SecureChannelConfig } from './lib/secure-storage';
 
 function AppContent() {
-  const { setReady, setMasterPassword, setInitialChannels } = useSecureStorage();
+  const { setReady, setMasterPassword, setInitialChannels, saveToSession } = useSecureStorage();
 
   // Initialize dark mode from system preference
   useEffect(() => {
@@ -16,11 +16,14 @@ function AppContent() {
     }
   }, []);
 
-  const handleUnlock = useCallback((password: string, channels: SecureChannelConfig[]) => {
+  const handleUnlock = useCallback((password: string, channels: SecureChannelConfig[], shouldSaveToSession: boolean) => {
     setMasterPassword(password);
     setInitialChannels(channels);
+    if (shouldSaveToSession) {
+      saveToSession(password);
+    }
     setReady(true);
-  }, [setMasterPassword, setInitialChannels, setReady]);
+  }, [setMasterPassword, setInitialChannels, setReady, saveToSession]);
 
   return (
     <>

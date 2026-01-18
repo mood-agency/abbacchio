@@ -1,17 +1,18 @@
 import type { LogLevelLabel } from '../../types';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { LEVEL_BADGE_CLASSES } from '@/lib/log-level-colors';
+import { LOG_LEVEL_HEX } from '@/lib/log-level-colors';
 
 interface LevelBadgeProps {
   level: LogLevelLabel;
 }
 
 export function LevelBadge({ level }: LevelBadgeProps) {
+  const colors = LOG_LEVEL_HEX[level];
   return (
     <Badge
       variant="secondary"
-      className={cn('uppercase border-0', LEVEL_BADGE_CLASSES[level])}
+      className="uppercase border-0"
+      style={{ backgroundColor: colors.bg, color: colors.text }}
     >
       {level}
     </Badge>

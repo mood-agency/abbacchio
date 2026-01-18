@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Abbacchio Browser Test</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 {
+      color: #00d9ff;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #aaa;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: #16213e;
+      color: #eee;
+      font-size: 14px;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #00d9ff;
+    }
+    button {
+      padding: 12px 24px;
+      background: #00d9ff;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #00b8d9;
+    }
+    button:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    .log-output {
+      background: #0f0f23;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 15px;
+      margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 12px;
+    }
+    .log-entry {
+      margin-bottom: 5px;
+      padding: 5px;
+      border-radius: 3px;
+    }
+    .log-entry.success {
+      background: rgba(0, 255, 0, 0.1);
+      border-left: 3px solid #0f0;
+    }
+    .log-entry.error {
+      background: rgba(255, 0, 0, 0.1);
+      border-left: 3px solid #f00;
+    }
+    .log-entry.info {
+      background: rgba(0, 217, 255, 0.1);
+      border-left: 3px solid #00d9ff;
+    }
+    .row {
+      display: flex;
+      gap: 15px;
+    }
+    .row .form-group {
+      flex: 1;
+    }
+    .section {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #00d9ff;
+      font-size: 16px;
+    }
+    .preset-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .preset-buttons button {
+      padding: 8px 16px;
+      background: #333;
+      color: #eee;
+      font-size: 12px;
+    }
+    .preset-buttons button:hover {
+      background: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔴 Abbacchio Browser Test</h1>
+  <p>Send test logs to Abbacchio from your browser.</p>
+
+  <div class="section">
+    <h2>Connection Settings</h2>
+    <div class="row">
+      <div class="form-group">
+        <label for="apiUrl">API URL</label>
+        <input type="text" id="apiUrl" value="http://localhost:4000/api/logs">
+      </div>
+      <div class="form-group">
+        <label for="channel">Channel</label>
+        <input type="text" id="channel" value="browser-test">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="secretKey">Secret Key (optional, for encryption)</label>
+      <input type="text" id="secretKey" placeholder="Leave empty for unencrypted logs">
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Log Message</h2>
+    <div class="row">
+      <div class="form-group">
+        <label for="level">Level</label>
+        <select id="level">
+          <option value="10">trace (10)</option>
+          <option value="20">debug (20)</option>
+          <option value="30" selected>info (30)</option>
+          <option value="40">warn (40)</option>
+          <option value="50">error (50)</option>
+          <option value="60">fatal (60)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="name">Logger Name</label>
+        <input type="text" id="name" value="browser-app">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="message">Message</label>
+      <input type="text" id="message" value="Hello from the browser!">
+    </div>
+    <div class="form-group">
+      <label for="extraFields">Extra Fields (JSON)</label>
+      <textarea id="extraFields" rows="3" placeholder='{"userId": 123, "action": "click"}'>{}</textarea>
+    </div>
+
+    <div class="preset-buttons">
+      <button onclick="sendPreset('userLogin')">User Login</button>
+      <button onclick="sendPreset('apiRequest')">API Request</button>
+      <button onclick="sendPreset('errorLog')">Error Log</button>
+      <button onclick="sendPreset('performance')">Performance</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Batch Send</h2>
+    <div class="row">
+      <div class="form-group">
+        <label for="batchCount">Number of Logs</label>
+        <input type="number" id="batchCount" value="10" min="1" max="100">
+      </div>
+      <div class="form-group">
+        <label for="batchDelay">Delay (ms)</label>
+        <input type="number" id="batchDelay" value="100" min="0" max="5000">
+      </div>
+    </div>
+  </div>
+
+  <button onclick="sendLog()">Send Single Log</button>
+  <button onclick="sendBatch()">Send Batch</button>
+  <button onclick="clearOutput()">Clear Output</button>
+
+  <div class="log-output" id="output">
+    <div class="log-entry info">Ready to send logs...</div>
+  </div>
+
+  <script>
+    /**
+     * Web Crypto encryption - compatible with dashboard's crypto.ts decryption
+     *
+     * Wire format: base64(salt + iv + authTag + ciphertext)
+     * - salt: 32 bytes (for PBKDF2 key derivation)
+     * - iv: 16 bytes (initialization vector)
+     * - authTag: 16 bytes (GCM authentication tag)
+     * - ciphertext: variable length
+     *
+     * This matches the format expected by packages/dashboard/src/lib/crypto.ts
+     */
+    const ALGORITHM = 'AES-GCM';
+    const IV_LENGTH = 16;
+    const SALT_LENGTH = 32;
+    const AUTH_TAG_LENGTH = 16;
+    const PBKDF2_ITERATIONS = 100000;
+
+    async function deriveKey(password, salt) {
+      const encoder = new TextEncoder();
+      const passwordKey = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+      );
+
+      return crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt: salt.buffer,
+          iterations: PBKDF2_ITERATIONS,
+          hash: 'SHA-256'
+        },
+        passwordKey,
+        { name: ALGORITHM, length: 256 },
+        false,
+        ['encrypt']
+      );
+    }
+
+    async function encrypt(data, secretKey) {
+      const encoder = new TextEncoder();
+      const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+      const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+      const key = await deriveKey(secretKey, salt);
+
+      // Web Crypto encrypt returns ciphertext with authTag appended
+      const encrypted = await crypto.subtle.encrypt(
+        { name: ALGORITHM, iv: iv },
+        key,
+        encoder.encode(data)
+      );
+
+      // Web Crypto AES-GCM: result = ciphertext + authTag (tag is last 16 bytes)
+      const encryptedArray = new Uint8Array(encrypted);
+      const ciphertext = encryptedArray.slice(0, -AUTH_TAG_LENGTH);
+      const authTag = encryptedArray.slice(-AUTH_TAG_LENGTH);
+
+      // Combine in wire format: salt + iv + authTag + ciphertext
+      // This matches packages/dashboard/src/lib/crypto.ts decrypt expectations
+      const combined = new Uint8Array(SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH + ciphertext.length);
+      combined.set(salt, 0);
+      combined.set(iv, SALT_LENGTH);
+      combined.set(authTag, SALT_LENGTH + IV_LENGTH);
+      combined.set(ciphertext, SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH);
+
+      return btoa(String.fromCharCode(...combined));
+    }
+
+    function logOutput(message, type = 'info') {
+      const output = document.getElementById('output');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toISOString()}] ${message}`;
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearOutput() {
+      document.getElementById('output').innerHTML = '<div class="log-entry info">Output cleared...</div>';
+    }
+
+    function buildLogObject(overrides = {}) {
+      const level = parseInt(document.getElementById('level').value);
+      const name = document.getElementById('name').value || 'browser-app';
+      const message = document.getElementById('message').value || 'Test log';
+      let extraFields = {};
+
+      try {
+        const extraText = document.getElementById('extraFields').value.trim();
+        if (extraText) {
+          extraFields = JSON.parse(extraText);
+        }
+      } catch (e) {
+        logOutput(`Invalid JSON in extra fields: ${e.message}`, 'error');
+      }
+
+      return {
+        level,
+        time: Date.now(),
+        name,
+        msg: message,
+        pid: 0,
+        hostname: window.location.hostname,
+        ...extraFields,
+        ...overrides
+      };
+    }
+
+    async function sendToServer(logs) {
+      const apiUrl = document.getElementById('apiUrl').value;
+      const channel = document.getElementById('channel').value || 'browser-test';
+      const secretKey = document.getElementById('secretKey').value.trim();
+      const isEncrypted = secretKey.length > 0;
+
+      let processedLogs = logs;
+      if (isEncrypted) {
+        processedLogs = await Promise.all(
+          logs.map(async log => ({
+            encrypted: await encrypt(JSON.stringify(log), secretKey)
+          }))
+        );
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Encrypted': isEncrypted ? 'true' : 'false',
+          'X-Channel': channel
+        },
+        body: JSON.stringify({ logs: processedLogs })
+      });
+
+      return response;
+    }
+
+    async function sendLog() {
+      try {
+        const log = buildLogObject();
+        logOutput(`Sending: ${JSON.stringify(log)}`, 'info');
+
+        const response = await sendToServer([log]);
+
+        if (response.ok) {
+          logOutput(`✓ Log sent successfully (${response.status})`, 'success');
+        } else {
+          logOutput(`✗ Failed to send log: ${response.status} ${response.statusText}`, 'error');
+        }
+      } catch (e) {
+        logOutput(`✗ Error: ${e.message}`, 'error');
+      }
+    }
+
+    async function sendBatch() {
+      const count = parseInt(document.getElementById('batchCount').value) || 10;
+      const delay = parseInt(document.getElementById('batchDelay').value) || 100;
+
+      logOutput(`Starting batch send: ${count} logs with ${delay}ms delay...`, 'info');
+
+      const levels = [10, 20, 30, 30, 30, 40, 50]; // Weighted towards info
+      const messages = [
+        'User navigated to page',
+        'Button clicked',
+        'Form submitted',
+        'Data loaded successfully',
+        'Cache miss - fetching from server',
+        'Warning: slow response time',
+        'Error processing request',
+        'Session expired',
+        'Feature flag checked',
+        'Analytics event tracked'
+      ];
+
+      for (let i = 0; i < count; i++) {
+        const log = buildLogObject({
+          level: levels[Math.floor(Math.random() * levels.length)],
+          msg: messages[Math.floor(Math.random() * messages.length)],
+          batchIndex: i + 1,
+          batchTotal: count
+        });
+
+        try {
+          const response = await sendToServer([log]);
+          if (response.ok) {
+            logOutput(`✓ [${i + 1}/${count}] Sent: ${log.msg}`, 'success');
+          } else {
+            logOutput(`✗ [${i + 1}/${count}] Failed: ${response.status}`, 'error');
+          }
+        } catch (e) {
+          logOutput(`✗ [${i + 1}/${count}] Error: ${e.message}`, 'error');
+        }
+
+        if (delay > 0 && i < count - 1) {
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+
+      logOutput(`Batch complete: ${count} logs sent`, 'info');
+    }
+
+    const presets = {
+      userLogin: {
+        level: 30,
+        msg: 'User logged in successfully',
+        extraFields: {
+          userId: 'user_' + Math.random().toString(36).substr(2, 9),
+          method: 'oauth',
+          provider: 'google',
+          duration_ms: Math.floor(Math.random() * 500) + 100
+        }
+      },
+      apiRequest: {
+        level: 30,
+        msg: 'API request completed',
+        extraFields: {
+          method: 'GET',
+          path: '/api/users',
+          status: 200,
+          duration_ms: Math.floor(Math.random() * 200) + 50,
+          responseSize: Math.floor(Math.random() * 5000) + 500
+        }
+      },
+      errorLog: {
+        level: 50,
+        msg: 'Failed to fetch user data',
+        extraFields: {
+          error: 'NetworkError',
+          stack: 'Error: Network request failed\n    at fetch (browser.js:123)\n    at getUserData (api.js:45)',
+          userId: 'user_abc123',
+          retryCount: 3
+        }
+      },
+      performance: {
+        level: 40,
+        msg: 'Slow page render detected',
+        extraFields: {
+          metric: 'FCP',
+          value_ms: Math.floor(Math.random() * 3000) + 2000,
+          page: '/dashboard',
+          deviceType: 'mobile',
+          connectionType: '4g'
+        }
+      }
+    };
+
+    function sendPreset(presetName) {
+      const preset = presets[presetName];
+      if (!preset) return;
+
+      document.getElementById('level').value = preset.level;
+      document.getElementById('message').value = preset.msg;
+      document.getElementById('extraFields').value = JSON.stringify(preset.extraFields, null, 2);
+
+      sendLog();
+    }
+
+    // Auto-focus message field
+    document.getElementById('message').focus();
+  </script>
+</body>
+</html>

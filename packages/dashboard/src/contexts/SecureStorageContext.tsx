@@ -2,6 +2,10 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 import {
   saveSecureChannels,
   hasEncryptedStorage,
+  savePasswordToSession,
+  getPasswordFromSession,
+  hasPasswordInSession,
+  clearPasswordFromSession,
   type SecureChannelConfig,
 } from '@/lib/secure-storage';
 
@@ -12,6 +16,8 @@ interface SecureStorageContextValue {
   masterPassword: string | null;
   /** Initial channels loaded from secure storage */
   initialChannels: SecureChannelConfig[];
+  /** Whether password is saved in session storage */
+  isPasswordInSession: boolean;
   /** Set the master password after unlock */
   setMasterPassword: (password: string | null) => void;
   /** Set initial channels after unlock */
@@ -22,6 +28,12 @@ interface SecureStorageContextValue {
   saveChannels: (channels: SecureChannelConfig[]) => Promise<boolean>;
   /** Check if encrypted storage exists */
   hasExistingStorage: () => boolean;
+  /** Save password to session storage */
+  saveToSession: (password: string) => void;
+  /** Clear password from session storage */
+  clearFromSession: () => void;
+  /** Get password from session if available */
+  getSessionPassword: () => string | null;
 }
 
 const SecureStorageContext = createContext<SecureStorageContextValue | null>(null);
@@ -30,6 +42,7 @@ export function SecureStorageProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false);
   const [masterPassword, setMasterPassword] = useState<string | null>(null);
   const [initialChannels, setInitialChannels] = useState<SecureChannelConfig[]>([]);
+  const [isPasswordInSession, setIsPasswordInSession] = useState(hasPasswordInSession());
 
   const saveChannels = useCallback(async (channels: SecureChannelConfig[]): Promise<boolean> => {
     if (!masterPassword) {
@@ -49,15 +62,33 @@ export function SecureStorageProvider({ children }: { children: ReactNode }) {
     return hasEncryptedStorage();
   }, []);
 
+  const saveToSession = useCallback((password: string) => {
+    savePasswordToSession(password);
+    setIsPasswordInSession(true);
+  }, []);
+
+  const clearFromSession = useCallback(() => {
+    clearPasswordFromSession();
+    setIsPasswordInSession(false);
+  }, []);
+
+  const getSessionPassword = useCallback(() => {
+    return getPasswordFromSession();
+  }, []);
+
   const value: SecureStorageContextValue = {
     isReady,
     masterPassword,
     initialChannels,
+    isPasswordInSession,
     setMasterPassword,
     setInitialChannels,
     setReady: setIsReady,
     saveChannels,
     hasExistingStorage,
+    saveToSession,
+    clearFromSession,
+    getSessionPassword,
   };
 
   return (

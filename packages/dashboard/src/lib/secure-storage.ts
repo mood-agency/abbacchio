@@ -6,6 +6,7 @@
 
 const STORAGE_KEY = 'abbacchio-channels-encrypted';
 const SALT_STORAGE_KEY = 'abbacchio-channels-salt';
+const SESSION_PASSWORD_KEY = 'abbacchio-master-password-session';
 const SALT_LENGTH = 32;
 const IV_LENGTH = 12;
 const PBKDF2_ITERATIONS = 100000;
@@ -205,4 +206,33 @@ export async function changeMasterPassword(
       error: e instanceof Error ? e.message : 'Failed to change password'
     };
   }
+}
+
+/**
+ * Save master password to session storage
+ * Password is only kept for the duration of the browser session
+ */
+export function savePasswordToSession(password: string): void {
+  sessionStorage.setItem(SESSION_PASSWORD_KEY, password);
+}
+
+/**
+ * Get master password from session storage
+ */
+export function getPasswordFromSession(): string | null {
+  return sessionStorage.getItem(SESSION_PASSWORD_KEY);
+}
+
+/**
+ * Check if master password is saved in session storage
+ */
+export function hasPasswordInSession(): boolean {
+  return sessionStorage.getItem(SESSION_PASSWORD_KEY) !== null;
+}
+
+/**
+ * Clear master password from session storage
+ */
+export function clearPasswordFromSession(): void {
+  sessionStorage.removeItem(SESSION_PASSWORD_KEY);
 }

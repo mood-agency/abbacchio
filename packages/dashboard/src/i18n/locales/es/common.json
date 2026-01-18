@@ -16,5 +16,9 @@
   },
   "labels": {
     "optional": "(opcional)"
+  },
+  "session": {
+    "clearPassword": "Eliminar contraseña guardada de la sesión",
+    "passwordCleared": "Contraseña de sesión eliminada"
   }
 }
