@@ -65,9 +65,10 @@
   },
   "drawer": {
     "title": "Datos del Payload",
-    "time": "Hora",
+    "timestamp": "Timestamp",
     "level": "Nivel",
-    "namespace": "Namespace"
+    "namespace": "Namespace",
+    "message": "Mensaje"
   },
   "install": "Instalar",
   "addChannel": "Agregar Canal",

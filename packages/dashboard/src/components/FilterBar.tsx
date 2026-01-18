@@ -66,45 +66,6 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
       {/* Divider */}
       <div className="h-6 w-px bg-border" />
 
-      {/* Selection indicator */}
-      {selectedCount > 0 && (
-        <>
-          <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-md px-3 py-1.5">
-            <span className="text-sm font-medium text-primary">
-              {t('selection.count', { count: selectedCount })}
-            </span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/20"
-                  onClick={onCopySelected}
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('selection.copy')}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/20"
-                  onClick={onClearSelection}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('selection.clear')}</TooltipContent>
-            </Tooltip>
-          </div>
-          {/* Divider */}
-          <div className="h-6 w-px bg-border" />
-        </>
-      )}
-
       {/* Search */}
       <div className="relative flex-1 max-w-md flex items-center gap-1">
         <div className="relative flex-1">
@@ -154,6 +115,41 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
           </Tooltip>
         )}
       </div>
+
+      {/* Selection indicator - right side */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-sm text-muted-foreground">
+            {t('selection.count', { count: selectedCount })}
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-primary"
+                onClick={onCopySelected}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('selection.copy')}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground"
+                onClick={onClearSelection}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('selection.clear')}</TooltipContent>
+          </Tooltip>
+        </div>
+      )}
     </div>
   );
 }));

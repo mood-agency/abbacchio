@@ -85,6 +85,9 @@ import {
   Unplug,
   Settings,
   SearchX,
+  ShieldCheck,
+  ShieldOff,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -184,10 +187,10 @@ export function LogViewer() {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelKey, setNewChannelKey] = useState('');
 
-  // Row selection state for copy - using Set for multi-select support
-  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
-  // Track last selected index for shift+click range selection
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  // Row selection state for copy - using Set of log IDs for stable selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Track last selected log ID for shift+click range selection
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   // Data drawer state
   const [drawerLog, setDrawerLog] = useState<LogEntry | null>(null);
@@ -206,97 +209,98 @@ export function LogViewer() {
   }, [searchQuery, levelFilters, namespaceFilters, timeRange]);
 
   // Handle row selection (click to toggle, shift+click for range)
-  const handleRowSelect = useCallback((index: number, shiftKey: boolean) => {
-    if (shiftKey && lastSelectedIndex !== null) {
+  const handleRowSelect = useCallback((logId: string, shiftKey: boolean) => {
+    if (shiftKey && lastSelectedId !== null) {
       // Shift+click: select range from last selected to current
-      const start = Math.min(lastSelectedIndex, index);
-      const end = Math.max(lastSelectedIndex, index);
-      const newSelection = new Set(selectedIndices);
-      for (let i = start; i <= end; i++) {
-        newSelection.add(i);
+      const lastIndex = logs.findIndex(log => log.id === lastSelectedId);
+      const currentIndex = logs.findIndex(log => log.id === logId);
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const newSelection = new Set(selectedIds);
+        for (let i = start; i <= end; i++) {
+          newSelection.add(logs[i].id);
+        }
+        setSelectedIds(newSelection);
       }
-      setSelectedIndices(newSelection);
     } else {
       // Regular click: toggle selection
-      const newSelection = new Set(selectedIndices);
-      if (newSelection.has(index)) {
-        newSelection.delete(index);
+      const newSelection = new Set(selectedIds);
+      if (newSelection.has(logId)) {
+        newSelection.delete(logId);
       } else {
-        newSelection.add(index);
+        newSelection.add(logId);
       }
-      setSelectedIndices(newSelection);
-      setLastSelectedIndex(newSelection.has(index) ? index : null);
+      setSelectedIds(newSelection);
+      setLastSelectedId(newSelection.has(logId) ? logId : null);
     }
-  }, [selectedIndices, lastSelectedIndex]);
+  }, [selectedIds, lastSelectedId, logs]);
 
   // Handle select all / deselect all
   const handleSelectAll = useCallback(() => {
     if (logs.length === 0) return;
 
-    const allSelected = selectedIndices.size === logs.length;
+    const allSelected = selectedIds.size === logs.length;
     if (allSelected) {
       // Deselect all
-      setSelectedIndices(new Set());
-      setLastSelectedIndex(null);
+      setSelectedIds(new Set());
+      setLastSelectedId(null);
     } else {
       // Select all
-      const allIndices = new Set<number>();
-      for (let i = 0; i < logs.length; i++) {
-        allIndices.add(i);
-      }
-      setSelectedIndices(allIndices);
-      setLastSelectedIndex(logs.length - 1);
+      const allIds = new Set<string>(logs.map(log => log.id));
+      setSelectedIds(allIds);
+      setLastSelectedId(logs[logs.length - 1]?.id ?? null);
     }
-  }, [logs.length, selectedIndices.size]);
+  }, [logs, selectedIds.size]);
 
   // Determine checkbox state: all selected, some selected, or none
   const selectAllState = useMemo(() => {
-    if (logs.length === 0 || selectedIndices.size === 0) return 'none';
-    if (selectedIndices.size === logs.length) return 'all';
+    if (logs.length === 0 || selectedIds.size === 0) return 'none';
+    if (selectedIds.size === logs.length) return 'all';
     return 'some';
-  }, [logs.length, selectedIndices.size]);
+  }, [logs.length, selectedIds.size]);
 
   // Copy selected logs to clipboard
   const copySelectedLogs = useCallback(async () => {
-    if (selectedIndices.size === 0) return;
+    if (selectedIds.size === 0) return;
 
-    const selectedLogs = logs.filter((_, idx) => selectedIndices.has(idx));
+    const selectedLogs = logs.filter(log => selectedIds.has(log.id));
     const formatted = formatLogsForClipboard(selectedLogs);
 
     try {
       await navigator.clipboard.writeText(formatted);
       toast.success(tLogs('toast.logsCopied', { count: selectedLogs.length }));
       // Clear selection after copy
-      setSelectedIndices(new Set());
-      setLastSelectedIndex(null);
+      setSelectedIds(new Set());
+      setLastSelectedId(null);
     } catch (err) {
       console.error('Failed to copy logs:', err);
       toast.error(tLogs('toast.copyFailed'));
     }
-  }, [selectedIndices, logs, tLogs]);
+  }, [selectedIds, logs, tLogs]);
 
   // Keyboard shortcut: Ctrl+C to copy selected, Escape to clear selection
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (selectedIndices.size > 0) {
+      if (selectedIds.size > 0) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
           e.preventDefault();
           copySelectedLogs();
         } else if (e.key === 'Escape') {
-          setSelectedIndices(new Set());
-          setLastSelectedIndex(null);
+          setSelectedIds(new Set());
+          setLastSelectedId(null);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIndices, copySelectedLogs]);
+  }, [selectedIds, copySelectedLogs]);
 
   // Clear selection when page or filters change
   useEffect(() => {
-    setSelectedIndices(new Set());
-    setLastSelectedIndex(null);
+    setSelectedIds(new Set());
+    setLastSelectedId(null);
   }, [currentPage, levelFilters, namespaceFilters, searchQuery, timeRange]);
 
   // Open key dialog
@@ -519,7 +523,6 @@ export function LogViewer() {
                             onClick={() => setActiveChannelId(channel.id)}
                             className={channel.id === activeChannelId ? 'bg-accent' : ''}
                           >
-                            <Radio className="w-3.5 h-3.5 mr-2" />
                             <span className="truncate max-w-[200px]">{channel.name}</span>
                             {channel.id === activeChannelId && (
                               <Check className="w-3.5 h-3.5 ml-auto" />
@@ -534,7 +537,6 @@ export function LogViewer() {
                             setShowAddChannelDialog(true);
                           }}
                         >
-                          <Plug className="w-3.5 h-3.5 mr-2" />
                           {tFilters('tooltips.addChannel')}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -702,11 +704,11 @@ export function LogViewer() {
                 namespaceFilters={namespaceFilters}
                 isPaused={isPaused}
                 onTogglePause={() => setIsPaused(!isPaused)}
-                selectedCount={selectedIndices.size}
+                selectedCount={selectedIds.size}
                 onCopySelected={copySelectedLogs}
                 onClearSelection={() => {
-                  setSelectedIndices(new Set());
-                  setLastSelectedIndex(null);
+                  setSelectedIds(new Set());
+                  setLastSelectedId(null);
                 }}
               />
             )}
@@ -728,11 +730,11 @@ export function LogViewer() {
                   </div>
                   {/* Header labels */}
                   <div className="flex-1 flex items-center gap-3 px-4 py-2">
-                    <span className="w-36 flex-shrink-0">Date/Time</span>
+                    <span className="w-36 flex-shrink-0">{tLogs('drawer.timestamp')}</span>
+                    <span className="w-5 flex-shrink-0"></span>
                     <span className="w-16 flex-shrink-0">Level</span>
                     <span className="w-28 flex-shrink-0">Namespace</span>
                     <span className="w-48 flex-shrink-0">Message</span>
-                    <span className="w-5 flex-shrink-0"></span>
                     <span className="flex-1">Data</span>
                   </div>
                 </div>
@@ -771,8 +773,7 @@ export function LogViewer() {
                             searchQuery={searchQuery}
                             caseSensitive={caseSensitive}
                             isNew={newLogIds.has(log.id)}
-                            isSelected={selectedIndices.has(virtualItem.index)}
-                            rowIndex={virtualItem.index}
+                            isSelected={selectedIds.has(log.id)}
                             onSelect={handleRowSelect}
                             onDataClick={setDrawerLog}
                           />
@@ -1298,20 +1299,51 @@ logger.info("Hello from structlog!")`}
         <Sheet open={drawerLog !== null} onOpenChange={(open) => !open && setDrawerLog(null)}>
           <SheetContent side="right" className="w-[625px] sm:max-w-[625px] flex flex-col bg-background/80 backdrop-blur-xl border-l border-border">
             <SheetHeader>
-              <SheetTitle>{tLogs('drawer.title')}</SheetTitle>
+              <div className="flex items-center gap-2">
+                <SheetTitle>{tLogs('drawer.title')}</SheetTitle>
+                {drawerLog && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center">
+                        {drawerLog.decryptionFailed ? (
+                          <ShieldAlert className="w-4 h-4 text-yellow-500" />
+                        ) : drawerLog.wasEncrypted ? (
+                          <ShieldCheck className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <ShieldOff className="w-4 h-4 text-destructive" />
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {drawerLog.decryptionFailed
+                        ? tLogs('encryption.decryptionFailed')
+                        : drawerLog.wasEncrypted
+                          ? tLogs('encryption.encryptedAtSource')
+                          : tLogs('encryption.notEncrypted')}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
               {drawerLog && (
-                <div className="space-y-3 mt-3">
-                  <div className="flex flex-wrap items-center gap-4 text-sm">
-                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                      {new Date(drawerLog.time).toLocaleString()}
-                    </span>
-                    <LevelBadge level={drawerLog.levelLabel} />
-                    {drawerLog.namespace && (
-                      <span className="font-mono text-xs text-muted-foreground">
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 mt-3 text-sm">
+                  <span className="text-muted-foreground text-xs self-center">{tLogs('drawer.timestamp')}</span>
+                  <span className="font-mono text-xs tabular-nums text-foreground self-center">
+                    {new Date(drawerLog.time).toLocaleString()}
+                  </span>
+
+                  <span className="text-muted-foreground text-xs self-center">{tLogs('drawer.level')}</span>
+                  <div className="self-center"><LevelBadge level={drawerLog.levelLabel} /></div>
+
+                  {drawerLog.namespace && (
+                    <>
+                      <span className="text-muted-foreground text-xs self-center">{tLogs('drawer.namespace')}</span>
+                      <span className="font-mono text-xs text-foreground self-center">
                         {drawerLog.namespace}
                       </span>
-                    )}
-                  </div>
+                    </>
+                  )}
+
+                  <span className="text-muted-foreground text-xs self-start pt-0.5">{tLogs('drawer.message')}</span>
                   <SheetDescription className="font-mono text-xs">
                     {drawerLog.msg}
                   </SheetDescription>

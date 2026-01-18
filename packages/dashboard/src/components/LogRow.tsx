@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lock, AlertTriangle, Check } from 'lucide-react';
+import { Lock, AlertTriangle, Check, ShieldCheck, ShieldOff, ShieldAlert } from 'lucide-react';
 
 interface LogRowProps {
   log: LogEntry;
@@ -17,10 +17,8 @@ interface LogRowProps {
   isNew?: boolean;
   /** Whether this row is selected for copy */
   isSelected?: boolean;
-  /** Index of this row in the list */
-  rowIndex?: number;
-  /** Callback for row selection */
-  onSelect?: (index: number, shiftKey: boolean) => void;
+  /** Callback for row selection (receives log ID) */
+  onSelect?: (logId: string, shiftKey: boolean) => void;
   /** Callback when clicking on the data column to open drawer */
   onDataClick?: (log: LogEntry) => void;
 }
@@ -113,7 +111,6 @@ export const LogRow = memo(function LogRow({
   caseSensitive = false,
   isNew = false,
   isSelected = false,
-  rowIndex,
   onSelect,
   onDataClick,
 }: LogRowProps) {
@@ -121,6 +118,8 @@ export const LogRow = memo(function LogRow({
   const showData = hasData(log.data);
   const isEncrypted = log.encrypted && !log.decryptionFailed;
   const decryptionFailed = log.decryptionFailed;
+  // Check if message was originally sent encrypted (persists after decryption)
+  const wasSentEncrypted = log.wasEncrypted === true;
 
   // Cache the JSON stringified data to avoid recalculating on each render
   const dataString = useMemo(() => JSON.stringify(log.data), [log.data]);
@@ -146,10 +145,10 @@ export const LogRow = memo(function LogRow({
   // Handle clicking on the selection area for multi-select
   const handleSelectionClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onSelect && rowIndex !== undefined) {
-      onSelect(rowIndex, e.shiftKey);
+    if (onSelect) {
+      onSelect(log.id, e.shiftKey);
     }
-  }, [onSelect, rowIndex]);
+  }, [onSelect, log.id]);
 
   // Determine row styling based on encryption state, new status, and selection
   const rowClasses = [
@@ -181,10 +180,28 @@ export const LogRow = memo(function LogRow({
         >
           {/* Date/Time */}
           <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
-          {formatDateTime(log.time)}
-        </span>
+            {formatDateTime(log.time)}
+          </span>
 
-        {/* Level - show lock icon for encrypted logs since actual level is unknown */}
+          {/* Encryption status icon */}
+          <div className="w-5 flex-shrink-0 flex items-center justify-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {decryptionFailed ? (
+                  <ShieldAlert className="w-4 h-4 text-yellow-500" />
+                ) : wasSentEncrypted ? (
+                  <ShieldCheck className="w-4 h-4 text-green-500" />
+                ) : (
+                  <ShieldOff className="w-4 h-4 text-destructive" />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>
+                {decryptionFailed ? t('encryption.decryptionFailed') : wasSentEncrypted ? t('encryption.encryptedAtSource') : t('encryption.notEncrypted')}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* Level - show lock icon for encrypted logs since actual level is unknown */}
         <div className="w-16 flex-shrink-0">
           {isEncrypted || decryptionFailed ? (
             <Tooltip>

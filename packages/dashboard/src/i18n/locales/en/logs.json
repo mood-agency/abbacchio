@@ -65,9 +65,10 @@
   },
   "drawer": {
     "title": "Payload Data",
-    "time": "Time",
+    "timestamp": "Timestamp",
     "level": "Level",
-    "namespace": "Namespace"
+    "namespace": "Namespace",
+    "message": "Message"
   },
   "install": "Install",
   "addChannel": "Add Channel",
