@@ -117,40 +117,6 @@ export function hasEncryptedStorage(): boolean {
 }
 
 /**
- * Check if unencrypted (legacy) storage exists
- */
-export function hasLegacyStorage(): boolean {
-  const stored = localStorage.getItem('abbacchio-channels');
-  if (!stored) return false;
-  try {
-    const data = JSON.parse(stored);
-    return Array.isArray(data) && data.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Get legacy (unencrypted) channels - for migration
- */
-export function getLegacyChannels(): SecureChannelConfig[] {
-  try {
-    const stored = localStorage.getItem('abbacchio-channels');
-    if (!stored) return [];
-    return JSON.parse(stored) as SecureChannelConfig[];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Clear legacy storage after migration
- */
-export function clearLegacyStorage(): void {
-  localStorage.removeItem('abbacchio-channels');
-}
-
-/**
  * Save channels encrypted with master password
  */
 export async function saveSecureChannels(
@@ -237,32 +203,6 @@ export async function changeMasterPassword(
     return {
       success: false,
       error: e instanceof Error ? e.message : 'Failed to change password'
-    };
-  }
-}
-
-/**
- * Migrate legacy unencrypted storage to encrypted
- */
-export async function migrateLegacyStorage(password: string): Promise<SecureStorageResult> {
-  try {
-    const legacyChannels = getLegacyChannels();
-
-    if (legacyChannels.length === 0) {
-      return { success: true };
-    }
-
-    const result = await saveSecureChannels(legacyChannels, password);
-
-    if (result.success) {
-      clearLegacyStorage();
-    }
-
-    return result;
-  } catch (e) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : 'Migration failed'
     };
   }
 }

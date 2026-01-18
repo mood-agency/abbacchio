@@ -1,0 +1,53 @@
+{
+  "welcome": {
+    "title": "Welcome to Abbacchio",
+    "subtitle": "Real-time log viewer for any application",
+    "description": "Stream logs from your Node.js, Python, or any HTTP-capable application with optional end-to-end encryption. Let's get you set up in just a few steps.",
+    "features": {
+      "realtime": "Real-time streaming",
+      "multiChannel": "Multi-channel",
+      "encryption": "E2E encryption",
+      "filtering": "Advanced filtering"
+    },
+    "getStarted": "Get Started"
+  },
+  "channel": {
+    "title": "Create a Channel",
+    "description": "A channel is a named stream where your application sends logs. You can create multiple channels for different apps or environments.",
+    "channelName": "Channel Name",
+    "channelPlaceholder": "e.g., my-app-production",
+    "channelHint": "Use a descriptive name like your app name or environment",
+    "encryptionKey": "Encryption Key",
+    "keyPlaceholder": "Enter or generate a key",
+    "keyHint": "Save this key to encrypt your logs. You'll need it to view them later.",
+    "generateKey": "Generate"
+  },
+  "installation": {
+    "title": "Install the Transport",
+    "description": "Choose your platform and copy the code to start sending logs.",
+    "install": "Install",
+    "httpDescription": "No installation required. Send logs via HTTP POST from any language or tool.",
+    "yourConfig": "Your configuration",
+    "channel": "Channel",
+    "key": "Key"
+  },
+  "password": {
+    "title": "Secure Your Data",
+    "description": "Create a master password to protect your channel configurations.",
+    "masterPassword": "Master Password",
+    "masterPasswordHint": "Your master password encrypts your channel settings locally. Make sure to remember it.",
+    "confirmPassword": "Confirm Password",
+    "passwordPlaceholder": "Enter master password (min. 8 characters)",
+    "confirmPlaceholder": "Confirm password"
+  },
+  "finish": {
+    "title": "You're All Set!",
+    "description": "Your channel \"{{channel}}\" is ready. Start your application and watch the logs stream in real-time.",
+    "summary": "Configuration Summary",
+    "encryption": "Encryption",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "platform": "Platform",
+    "startMonitoring": "Start Monitoring"
+  }
+}

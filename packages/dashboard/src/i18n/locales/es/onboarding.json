@@ -1,0 +1,53 @@
+{
+  "welcome": {
+    "title": "Bienvenido a Abbacchio",
+    "subtitle": "Visor de logs en tiempo real para cualquier aplicación",
+    "description": "Transmite logs desde tus aplicaciones Node.js, Python o cualquier aplicación HTTP con cifrado opcional de extremo a extremo. Vamos a configurarte en unos pocos pasos.",
+    "features": {
+      "realtime": "Tiempo real",
+      "multiChannel": "Multi-canal",
+      "encryption": "Cifrado E2E",
+      "filtering": "Filtrado avanzado"
+    },
+    "getStarted": "Comenzar"
+  },
+  "channel": {
+    "title": "Crear un Canal",
+    "description": "Un canal es un flujo con nombre donde tu aplicación envía logs. Puedes crear múltiples canales para diferentes apps o entornos.",
+    "channelName": "Nombre del Canal",
+    "channelPlaceholder": "ej., mi-app-produccion",
+    "channelHint": "Usa un nombre descriptivo como el nombre de tu app o entorno",
+    "encryptionKey": "Clave de Cifrado",
+    "keyPlaceholder": "Ingresa o genera una clave",
+    "keyHint": "Guarda esta clave para cifrar tus logs. La necesitarás para verlos después.",
+    "generateKey": "Generar"
+  },
+  "installation": {
+    "title": "Instalar el Transport",
+    "description": "Elige tu plataforma y copia el código para empezar a enviar logs.",
+    "install": "Instalar",
+    "httpDescription": "No requiere instalación. Envía logs via HTTP POST desde cualquier lenguaje o herramienta.",
+    "yourConfig": "Tu configuración",
+    "channel": "Canal",
+    "key": "Clave"
+  },
+  "password": {
+    "title": "Protege Tus Datos",
+    "description": "Crea una contraseña maestra para proteger tus configuraciones de canales.",
+    "masterPassword": "Contraseña Maestra",
+    "masterPasswordHint": "Tu contraseña maestra cifra tus configuraciones de canales localmente. Asegúrate de recordarla.",
+    "confirmPassword": "Confirmar Contraseña",
+    "passwordPlaceholder": "Ingresa contraseña maestra (mín. 8 caracteres)",
+    "confirmPlaceholder": "Confirmar contraseña"
+  },
+  "finish": {
+    "title": "¡Todo Listo!",
+    "description": "Tu canal \"{{channel}}\" está listo. Inicia tu aplicación y observa los logs en tiempo real.",
+    "summary": "Resumen de Configuración",
+    "encryption": "Cifrado",
+    "enabled": "Habilitado",
+    "disabled": "Deshabilitado",
+    "platform": "Plataforma",
+    "startMonitoring": "Comenzar a Monitorear"
+  }
+}

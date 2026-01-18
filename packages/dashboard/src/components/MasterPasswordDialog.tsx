@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Lock, ShieldAlert, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -13,25 +13,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   hasEncryptedStorage,
-  hasLegacyStorage,
   loadSecureChannels,
   saveSecureChannels,
-  migrateLegacyStorage,
   clearSecureStorage,
-  clearLegacyStorage,
   type SecureChannelConfig,
 } from '@/lib/secure-storage';
 
-export type MasterPasswordMode = 'unlock' | 'create' | 'migrate' | 'hidden';
+export type MasterPasswordMode = 'unlock' | 'create' | 'hidden';
 
 interface MasterPasswordDialogProps {
   onUnlock: (password: string, channels: SecureChannelConfig[]) => void;
-  onSkipPersistence: () => void;
 }
 
 export function MasterPasswordDialog({
   onUnlock,
-  onSkipPersistence,
 }: MasterPasswordDialogProps) {
   const { t } = useTranslation('dialogs');
   const [mode, setMode] = useState<MasterPasswordMode>('hidden');
@@ -44,18 +39,16 @@ export function MasterPasswordDialog({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Determine initial mode on mount
+  // Only show dialog if encrypted data exists (unlock mode)
+  // Create mode is now handled by the onboarding wizard
   useEffect(() => {
     if (hasEncryptedStorage()) {
       setMode('unlock');
-    } else if (hasLegacyStorage()) {
-      setMode('migrate');
     } else {
-      // No storage - user can start fresh
-      // Let useChannelManager handle initial setup
+      // No encrypted storage - onboarding wizard will handle setup
       setMode('hidden');
-      onSkipPersistence();
     }
-  }, [onSkipPersistence]);
+  }, []);
 
   const handleUnlock = async () => {
     if (!password) {
@@ -116,65 +109,22 @@ export function MasterPasswordDialog({
     }
   };
 
-  const handleMigrate = async () => {
-    if (password.length < 8) {
-      setError(t('masterPassword.passwordTooShort'));
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError(t('masterPassword.passwordMismatch'));
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const result = await migrateLegacyStorage(password);
-
-      if (!result.success) {
-        setError(t('masterPassword.encryptionFailed'));
-        setIsLoading(false);
-        return;
-      }
-
-      // Load the migrated channels
-      const loadResult = await loadSecureChannels(password);
-
-      if (loadResult.channels) {
-        onUnlock(password, loadResult.channels);
-        setMode('hidden');
-      }
-    } catch {
-      setError(t('masterPassword.encryptionFailed'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSkip = () => {
-    // Clear any legacy storage since user chose not to persist
-    clearLegacyStorage();
-    onSkipPersistence();
-    setMode('hidden');
-  };
-
   const handleReset = () => {
     clearSecureStorage();
-    clearLegacyStorage();
     setShowResetConfirm(false);
-    setMode('hidden');
-    onSkipPersistence();
+    setMode('create');
+    setPassword('');
+    setConfirmPassword('');
+    setError('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isLoading) {
       if (mode === 'unlock') {
         handleUnlock();
-      } else if (mode === 'create' || mode === 'migrate') {
+      } else if (mode === 'create') {
         if (password && confirmPassword) {
-          mode === 'migrate' ? handleMigrate() : handleCreate();
+          handleCreate();
         }
       }
     }
@@ -184,7 +134,7 @@ export function MasterPasswordDialog({
     return null;
   }
 
-  const isNewPassword = mode === 'create' || mode === 'migrate';
+  const isNewPassword = mode === 'create';
 
   // Dialog is always open when we reach here (we returned early for 'hidden')
   return (
@@ -196,19 +146,13 @@ export function MasterPasswordDialog({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {mode === 'migrate' ? (
-              <ShieldAlert className="h-5 w-5 text-amber-500" />
-            ) : (
-              <Lock className="h-5 w-5" />
-            )}
+            <Lock className="h-5 w-5" />
             {mode === 'unlock' && t('masterPassword.unlockTitle')}
             {mode === 'create' && t('masterPassword.createTitle')}
-            {mode === 'migrate' && t('masterPassword.migrationTitle')}
           </DialogTitle>
           <DialogDescription>
             {mode === 'unlock' && t('masterPassword.unlockDescription')}
             {mode === 'create' && t('masterPassword.createDescription')}
-            {mode === 'migrate' && t('masterPassword.migrationDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -290,22 +234,6 @@ export function MasterPasswordDialog({
             </p>
           )}
 
-          {/* Skip persistence option */}
-          {(mode === 'create' || mode === 'migrate') && (
-            <div className="pt-2 border-t">
-              <button
-                type="button"
-                onClick={handleSkip}
-                className="text-sm text-muted-foreground hover:text-foreground underline"
-              >
-                {t('masterPassword.skipPersistence')}
-              </button>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('masterPassword.skipPersistenceDescription')}
-              </p>
-            </div>
-          )}
-
           {/* Reset option (for unlock mode when password is forgotten) */}
           {mode === 'unlock' && !showResetConfirm && (
             <div className="pt-2 border-t">
@@ -358,14 +286,6 @@ export function MasterPasswordDialog({
               disabled={isLoading || !password || !confirmPassword}
             >
               {isLoading ? '...' : t('masterPassword.create')}
-            </Button>
-          )}
-          {mode === 'migrate' && (
-            <Button
-              onClick={handleMigrate}
-              disabled={isLoading || !password || !confirmPassword}
-            >
-              {isLoading ? '...' : t('masterPassword.migrate')}
             </Button>
           )}
         </DialogFooter>

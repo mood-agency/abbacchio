@@ -7,7 +7,9 @@
     "copy": "Copiar",
     "delete": "Eliminar",
     "apply": "Aplicar",
-    "clear": "Limpiar"
+    "clear": "Limpiar",
+    "back": "Atrás",
+    "continue": "Continuar"
   },
   "theme": {
     "toggleDarkMode": "Cambiar modo oscuro"

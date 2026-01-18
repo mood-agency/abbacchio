@@ -7,7 +7,7 @@ import { MasterPasswordDialog } from './components/MasterPasswordDialog';
 import type { SecureChannelConfig } from './lib/secure-storage';
 
 function AppContent() {
-  const { setReady, setMasterPassword, setInitialChannels, setPersistenceEnabled } = useSecureStorage();
+  const { setReady, setMasterPassword, setInitialChannels } = useSecureStorage();
 
   // Initialize dark mode from system preference
   useEffect(() => {
@@ -19,23 +19,12 @@ function AppContent() {
   const handleUnlock = useCallback((password: string, channels: SecureChannelConfig[]) => {
     setMasterPassword(password);
     setInitialChannels(channels);
-    setPersistenceEnabled(true);
     setReady(true);
-  }, [setMasterPassword, setInitialChannels, setPersistenceEnabled, setReady]);
-
-  const handleSkipPersistence = useCallback(() => {
-    setMasterPassword(null);
-    setInitialChannels([]);
-    setPersistenceEnabled(false);
-    setReady(true);
-  }, [setMasterPassword, setInitialChannels, setPersistenceEnabled, setReady]);
+  }, [setMasterPassword, setInitialChannels, setReady]);
 
   return (
     <>
-      <MasterPasswordDialog
-        onUnlock={handleUnlock}
-        onSkipPersistence={handleSkipPersistence}
-      />
+      <MasterPasswordDialog onUnlock={handleUnlock} />
       <LogViewer />
       <Toaster position="bottom-right" />
     </>

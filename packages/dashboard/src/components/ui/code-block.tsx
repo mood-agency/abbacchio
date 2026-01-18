@@ -3,7 +3,7 @@ import { Highlight, themes } from 'prism-react-renderer';
 
 interface CodeBlockProps {
   code: string;
-  language: 'javascript' | 'bash' | 'typescript' | 'json';
+  language: 'javascript' | 'bash' | 'typescript' | 'json' | 'python';
 }
 
 export function CodeBlock({ code, language }: CodeBlockProps) {

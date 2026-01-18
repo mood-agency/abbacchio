@@ -7,12 +7,14 @@ import enFilters from './locales/en/filters.json';
 import enLogs from './locales/en/logs.json';
 import enDialogs from './locales/en/dialogs.json';
 import enCommands from './locales/en/commands.json';
+import enOnboarding from './locales/en/onboarding.json';
 
 import esCommon from './locales/es/common.json';
 import esFilters from './locales/es/filters.json';
 import esLogs from './locales/es/logs.json';
 import esDialogs from './locales/es/dialogs.json';
 import esCommands from './locales/es/commands.json';
+import esOnboarding from './locales/es/onboarding.json';
 
 export const defaultNS = 'common';
 export const resources = {
@@ -22,6 +24,7 @@ export const resources = {
     logs: enLogs,
     dialogs: enDialogs,
     commands: enCommands,
+    onboarding: enOnboarding,
   },
   es: {
     common: esCommon,
@@ -29,6 +32,7 @@ export const resources = {
     logs: esLogs,
     dialogs: esDialogs,
     commands: esCommands,
+    onboarding: esOnboarding,
   },
 } as const;
 

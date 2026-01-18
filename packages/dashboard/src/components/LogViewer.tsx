@@ -9,6 +9,9 @@ import { FilterBar } from './FilterBar';
 import { LogRow } from './LogRow';
 import { CommandPalette } from './CommandPalette';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { OnboardingWizard } from './OnboardingWizard';
+import { useSecureStorage } from '@/contexts/SecureStorageContext';
+import { saveSecureChannels, type SecureChannelConfig } from '@/lib/secure-storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -56,6 +59,9 @@ export function LogViewer() {
   const { t: tLogs } = useTranslation('logs');
   const { t: tDialogs } = useTranslation('dialogs');
   const { t: tFilters } = useTranslation('filters');
+
+  // Secure storage for master password
+  const { setMasterPassword, setReady, setInitialChannels } = useSecureStorage();
 
   // URL params for filters
   const {
@@ -307,76 +313,35 @@ export function LogViewer() {
   const showingStart = filteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
   const showingEnd = Math.min(currentPage * pageSize, filteredCount);
 
-  // Show welcome screen if no channels
+  // Show onboarding wizard if no channels
   if (channels.length === 0) {
     return (
-      <TooltipProvider>
-        <div className="flex flex-col items-center justify-center h-screen bg-background">
-          <div className="text-center max-w-md px-6">
-            <div className="text-6xl mb-6">🔌</div>
-            <h1 className="text-2xl font-bold text-foreground mb-4">
-              {tLogs('empty.welcome.title')}
-            </h1>
-            <p className="text-muted-foreground mb-6">
-              {tLogs('empty.welcome.description')}
-            </p>
-            <Button onClick={() => setShowAddChannelDialog(true)} size="lg">
-              <Plug className="w-5 h-5 mr-2" />
-              {tLogs('addChannel')}
-            </Button>
-            <div className="mt-8 bg-muted rounded-lg p-4 text-left font-mono text-sm">
-              <p className="text-muted-foreground mb-2">{tLogs('empty.welcome.urlHint')}</p>
-              <span className="text-foreground">
-                {window.location.origin}/?channel=<span className="text-green-500">my-channel-4827</span>&key=<span className="text-yellow-500">K7xQ2mN9pR4sT6vW8yZ0aB3cD5eF7gH9jL2nP4qS6tU</span>
-              </span>
-            </div>
-          </div>
+      <OnboardingWizard
+        onComplete={async (channelName, secretKey, masterPassword) => {
+          // Save the initial channel with master password
+          const channelConfig: SecureChannelConfig = {
+            id: crypto.randomUUID(),
+            name: channelName,
+            secretKey: secretKey,
+          };
 
-          {/* Add Channel Dialog */}
-          <Dialog open={showAddChannelDialog} onOpenChange={setShowAddChannelDialog}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>{tDialogs('addChannel.title')}</DialogTitle>
-                <DialogDescription>
-                  {tDialogs('addChannel.description')}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">{tDialogs('addChannel.channelName')}</label>
-                  <Input
-                    type="text"
-                    value={newChannelName}
-                    onChange={(e) => setNewChannelName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddChannel()}
-                    placeholder={tDialogs('addChannel.channelPlaceholder')}
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    {tDialogs('addChannel.encryptionKey')} <span className="text-muted-foreground font-normal">{t('labels.optional')}</span>
-                  </label>
-                  <SecretKeyInput
-                    value={newChannelKey}
-                    onChange={setNewChannelKey}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddChannel()}
-                    placeholder={tDialogs('addChannel.keyPlaceholder')}
-                  />
-                </div>
-              </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="ghost" onClick={() => setShowAddChannelDialog(false)}>
-                  {t('actions.cancel')}
-                </Button>
-                <Button onClick={handleAddChannel}>
-                  {t('actions.connect')}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </TooltipProvider>
+          // Initialize secure storage with master password
+          const result = await saveSecureChannels([channelConfig], masterPassword);
+
+          if (result.success) {
+            // Set the master password in context
+            setMasterPassword(masterPassword);
+            setInitialChannels([channelConfig]);
+            setReady(true);
+
+            // Add channel to the manager
+            addChannel(channelName, secretKey);
+            toast.success(tLogs('toast.connected', { channel: channelName }));
+          } else {
+            toast.error(tDialogs('masterPassword.encryptionFailed'));
+          }
+        }}
+      />
     );
   }
 
@@ -539,21 +504,26 @@ export function LogViewer() {
                     <p className="text-lg font-medium">{tLogs('empty.noLogs.title')}</p>
                     <p className="text-sm mt-1 mb-6">{tLogs('empty.noLogs.description')}</p>
 
-                    <div className="text-left mb-4 bg-muted/50 rounded-lg p-4">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{tLogs('install')}</p>
-                      <CodeBlock code="npm install @abbacchio/transport" language="bash" />
-                    </div>
-
-                    <Tabs defaultValue="pino" className="text-left">
+                    <Tabs defaultValue="nodejs" className="text-left">
                       <TabsList className="w-full">
-                        <TabsTrigger value="pino" className="flex-1">Pino</TabsTrigger>
-                        <TabsTrigger value="winston" className="flex-1">Winston</TabsTrigger>
-                        <TabsTrigger value="curl" className="flex-1">cURL</TabsTrigger>
+                        <TabsTrigger value="nodejs" className="flex-1">Node.js</TabsTrigger>
+                        <TabsTrigger value="python" className="flex-1">Python</TabsTrigger>
+                        <TabsTrigger value="http" className="flex-1">HTTP</TabsTrigger>
                       </TabsList>
-                      <TabsContent value="pino" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[280px]">
-                        <CodeBlock
-                          language="javascript"
-                          code={`import pino from "pino";
+                      <TabsContent value="nodejs" className="mt-2">
+                        <div className="bg-muted/50 rounded-lg p-4 mb-3">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{tLogs('install')}</p>
+                          <CodeBlock code="npm install @abbacchio/transport" language="bash" />
+                        </div>
+                        <Tabs defaultValue="pino">
+                          <TabsList className="w-full">
+                            <TabsTrigger value="pino" className="flex-1">Pino</TabsTrigger>
+                            <TabsTrigger value="winston" className="flex-1">Winston</TabsTrigger>
+                          </TabsList>
+                          <TabsContent value="pino" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[220px]">
+                            <CodeBlock
+                              language="javascript"
+                              code={`import pino from "pino";
 
 const logger = pino({
   transport: {
@@ -567,17 +537,17 @@ const logger = pino({
 });
 
 logger.info("Hello from Pino!");`}
-                        />
-                      </TabsContent>
-                      <TabsContent value="winston" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[280px]">
-                        <CodeBlock
-                          language="javascript"
-                          code={`import winston from "winston";
-import { winstonTransport } from "@abbacchio/transport/winston";
+                            />
+                          </TabsContent>
+                          <TabsContent value="winston" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[220px]">
+                            <CodeBlock
+                              language="javascript"
+                              code={`import winston from "winston";
+import { AbbacchioWinstonTransport } from "@abbacchio/transport/winston";
 
 const logger = winston.createLogger({
   transports: [
-    winstonTransport({
+    new AbbacchioWinstonTransport({
       url: "${window.location.origin}/api/logs",
       channel: "${activeChannel?.name || 'my-app'}",${activeChannel?.secretKey ? `
       secretKey: "${activeChannel.secretKey}",` : ''}
@@ -586,16 +556,94 @@ const logger = winston.createLogger({
 });
 
 logger.info("Hello from Winston!");`}
-                        />
+                            />
+                          </TabsContent>
+                        </Tabs>
                       </TabsContent>
-                      <TabsContent value="curl" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[280px]">
-                        <CodeBlock
-                          language="bash"
-                          code={`curl -X POST ${window.location.origin}/api/logs \\
+                      <TabsContent value="python" className="mt-2">
+                        <div className="bg-muted/50 rounded-lg p-4 mb-3">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{tLogs('install')}</p>
+                          <CodeBlock code="pip install abbacchio" language="bash" />
+                        </div>
+                        <Tabs defaultValue="logging">
+                          <TabsList className="w-full">
+                            <TabsTrigger value="logging" className="flex-1">logging</TabsTrigger>
+                            <TabsTrigger value="loguru" className="flex-1">loguru</TabsTrigger>
+                            <TabsTrigger value="structlog" className="flex-1">structlog</TabsTrigger>
+                          </TabsList>
+                          <TabsContent value="logging" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[220px]">
+                            <CodeBlock
+                              language="python"
+                              code={`import logging
+from abbacchio.logging import AbbacchioHandler
+
+handler = AbbacchioHandler(
+    url="${window.location.origin}/api/logs",
+    channel="${activeChannel?.name || 'my-app'}",${activeChannel?.secretKey ? `
+    secret_key="${activeChannel.secretKey}",` : ''}
+)
+
+logger = logging.getLogger(__name__)
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
+
+logger.info("Hello from Python!")`}
+                            />
+                          </TabsContent>
+                          <TabsContent value="loguru" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[220px]">
+                            <CodeBlock
+                              language="python"
+                              code={`from loguru import logger
+from abbacchio.loguru import AbbacchioSink
+
+sink = AbbacchioSink(
+    url="${window.location.origin}/api/logs",
+    channel="${activeChannel?.name || 'my-app'}",${activeChannel?.secretKey ? `
+    secret_key="${activeChannel.secretKey}",` : ''}
+)
+
+logger.add(sink, format="{message}", level="DEBUG")
+
+logger.info("Hello from loguru!")`}
+                            />
+                          </TabsContent>
+                          <TabsContent value="structlog" className="bg-muted/50 rounded-lg p-4 mt-2 min-h-[220px]">
+                            <CodeBlock
+                              language="python"
+                              code={`import structlog
+from abbacchio.structlog import AbbacchioProcessor
+
+processor = AbbacchioProcessor(
+    url="${window.location.origin}/api/logs",
+    channel="${activeChannel?.name || 'my-app'}",${activeChannel?.secretKey ? `
+    secret_key="${activeChannel.secretKey}",` : ''}
+)
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        processor,
+    ],
+)
+
+logger = structlog.get_logger()
+logger.info("Hello from structlog!")`}
+                            />
+                          </TabsContent>
+                        </Tabs>
+                      </TabsContent>
+                      <TabsContent value="http" className="mt-2">
+                        <p className="text-sm text-muted-foreground mb-3">{tLogs('empty.welcome.httpDescription')}</p>
+                        <div className="bg-muted/50 rounded-lg p-4">
+                          <CodeBlock
+                            language="bash"
+                            code={`curl -X POST ${window.location.origin}/api/logs \\
   -H "Content-Type: application/json" \\
   -H "X-Channel: ${activeChannel?.name || 'my-app'}" \\
   -d '{"level":30,"msg":"Hello from curl!"}'`}
-                        />
+                          />
+                        </div>
                       </TabsContent>
                     </Tabs>
                   </div>

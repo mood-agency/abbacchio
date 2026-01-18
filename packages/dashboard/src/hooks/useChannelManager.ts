@@ -108,7 +108,7 @@ export function useChannelManager(): UseChannelManagerResult {
   const [persistLogs, setPersistLogs] = useState(true);
 
   // Use secure storage context for encrypted persistence
-  const { isReady, initialChannels, saveChannels, persistenceEnabled } = useSecureStorage();
+  const { isReady, initialChannels, saveChannels } = useSecureStorage();
 
   // Update URL when active channel changes
   const setActiveChannelId = useCallback((id: string | null) => {
@@ -185,16 +185,10 @@ export function useChannelManager(): UseChannelManagerResult {
   // Sync channels to secure storage whenever they change
   // Only save after database is initialized to prevent overwriting with empty array on mount
   useEffect(() => {
-    debug('Sync effect triggered:', { isInitialized, channelsCount: channels.length, persistenceEnabled });
+    debug('Sync effect triggered:', { isInitialized, channelsCount: channels.length });
     // Don't save until database is initialized
     if (!isInitialized) {
       debug('Skipping save - not initialized yet');
-      return;
-    }
-
-    // Don't save if persistence is disabled
-    if (!persistenceEnabled) {
-      debug('Skipping save - persistence disabled');
       return;
     }
 
@@ -207,7 +201,7 @@ export function useChannelManager(): UseChannelManagerResult {
     saveChannels(configs).catch((e) => {
       console.error('[ChannelManager] Failed to save channels:', e);
     });
-  }, [channels, isInitialized, persistenceEnabled, saveChannels]);
+  }, [channels, isInitialized, saveChannels]);
 
   // Schedule flush using ref (survives HMR and callback recreation)
   const scheduleFlush = useCallback(() => {

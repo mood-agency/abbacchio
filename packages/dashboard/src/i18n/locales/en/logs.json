@@ -1,9 +1,30 @@
 {
   "empty": {
     "welcome": {
-      "title": "Connect to a Channel",
-      "description": "Add a channel to start receiving logs. You can connect to multiple channels simultaneously.",
-      "urlHint": "# Or visit with URL params:"
+      "title": "Welcome to Abbacchio",
+      "subtitle": "Real-time log viewer for any application",
+      "description": "Abbacchio is a powerful real-time log viewer with official support for Node.js (Pino, Winston) and Python, plus any language or tool that can send HTTP requests. Stream logs from your applications instantly with optional end-to-end encryption.",
+      "features": {
+        "title": "Key Features",
+        "realtime": "Real-time streaming",
+        "realtimeDesc": "See logs the instant they're emitted",
+        "multiChannel": "Multi-channel support",
+        "multiChannelDesc": "Monitor multiple apps at once",
+        "encryption": "End-to-end encryption",
+        "encryptionDesc": "Keep sensitive data secure",
+        "filtering": "Advanced filtering",
+        "filteringDesc": "Search, filter by level & namespace"
+      },
+      "quickStart": {
+        "title": "Quick Start",
+        "step1": "Click \"Add Channel\" below and enter a channel name",
+        "step2": "Install the transport for your platform (Node.js, Python, or use HTTP)",
+        "step3": "Configure your logger to send logs to Abbacchio",
+        "step4": "Start your app and watch the logs stream in!"
+      },
+      "urlHint": "Pro tip: You can also connect via URL params:",
+      "urlExample": "{{origin}}/?channel=<channel>&key=<key>",
+      "httpDescription": "No installation required. Send logs via HTTP POST request from any language or tool."
     },
     "noLogs": {
       "title": "No logs yet",
