@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lock, AlertTriangle, ShieldCheck, ShieldOff, ShieldAlert, Check } from 'lucide-react';
+import { Lock, AlertTriangle, Check } from 'lucide-react';
 
 interface LogRowProps {
   log: LogEntry;
@@ -121,8 +121,6 @@ export const LogRow = memo(function LogRow({
   const showData = hasData(log.data);
   const isEncrypted = log.encrypted && !log.decryptionFailed;
   const decryptionFailed = log.decryptionFailed;
-  // Check if message was originally sent encrypted (persists after decryption)
-  const wasSentEncrypted = log.wasEncrypted === true;
 
   // Cache the JSON stringified data to avoid recalculating on each render
   const dataString = useMemo(() => JSON.stringify(log.data), [log.data]);
@@ -254,24 +252,6 @@ export const LogRow = memo(function LogRow({
           <span className={`truncate ${decryptionFailed ? 'text-destructive' : isEncrypted ? 'text-yellow-400 italic' : ''}`}>
             {highlightedMsg}
           </span>
-        </div>
-
-        {/* Encryption status icon */}
-        <div className="w-5 flex-shrink-0 flex items-center justify-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {decryptionFailed ? (
-                <ShieldAlert className="w-4 h-4 text-yellow-500" />
-              ) : wasSentEncrypted ? (
-                <ShieldCheck className="w-4 h-4 text-green-500" />
-              ) : (
-                <ShieldOff className="w-4 h-4 text-destructive" />
-              )}
-            </TooltipTrigger>
-            <TooltipContent>
-              {decryptionFailed ? t('encryption.decryptionFailed') : wasSentEncrypted ? t('encryption.encryptedAtSource') : t('encryption.notEncrypted')}
-            </TooltipContent>
-          </Tooltip>
         </div>
 
           {/* Data column */}
