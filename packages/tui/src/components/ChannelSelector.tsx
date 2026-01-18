@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
-import type { ChannelConfig } from '../lib/database.js';
+import type { ChannelConfig } from '../lib/storage.js';
 
 interface ChannelSelectorProps {
   apiUrl: string;

@@ -1,15 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  initDatabase,
   getChannels,
   getChannel,
   upsertChannel,
   updateChannelKey,
   touchChannel,
   deleteChannel,
-  clearLogs,
   type ChannelConfig,
-} from '../lib/database.js';
+} from '../lib/storage.js';
+
+export type { ChannelConfig };
 
 export interface UseChannelConfigResult {
   /** All saved channels */
@@ -22,13 +22,11 @@ export interface UseChannelConfigResult {
   updateKey: (name: string, key: string) => void;
   /** Get key for a channel */
   getKey: (name: string) => string;
-  /** Delete a channel and its logs */
+  /** Delete a channel */
   removeChannel: (name: string) => void;
-  /** Clear logs for a channel */
-  clearChannelLogs: (name: string) => void;
   /** Refresh channels list */
   refreshChannels: () => void;
-  /** Whether the database is initialized */
+  /** Whether the storage is initialized */
   isInitialized: boolean;
 }
 
@@ -37,9 +35,8 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
   const [currentChannel, setCurrentChannelState] = useState<ChannelConfig | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize database and load channels
+  // Initialize and load channels
   useEffect(() => {
-    initDatabase();
     const loadedChannels = getChannels();
     setChannels(loadedChannels);
 
@@ -59,7 +56,7 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
     setIsInitialized(true);
   }, [initialChannel]);
 
-  // Refresh channels list from database
+  // Refresh channels list from storage
   const refreshChannels = useCallback(() => {
     setChannels(getChannels());
   }, []);
@@ -107,11 +104,6 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
     refreshChannels();
   }, [currentChannel, refreshChannels]);
 
-  // Clear logs for a channel
-  const clearChannelLogs = useCallback((name: string) => {
-    clearLogs(name);
-  }, []);
-
   return {
     channels,
     currentChannel,
@@ -119,7 +111,6 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
     updateKey,
     getKey,
     removeChannel,
-    clearChannelLogs,
     refreshChannels,
     isInitialized,
   };
