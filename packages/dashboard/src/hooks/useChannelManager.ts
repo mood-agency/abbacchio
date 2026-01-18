@@ -71,6 +71,10 @@ export interface UseChannelManagerResult {
   /** Persistence toggle */
   persistLogs: boolean;
   setPersistLogs: (persist: boolean) => void;
+  /** Whether log streaming is paused */
+  isPaused: boolean;
+  /** Toggle pause state */
+  setIsPaused: (paused: boolean) => void;
 }
 
 // Generate unique ID for channels
@@ -106,6 +110,7 @@ export function useChannelManager(): UseChannelManagerResult {
   const [isInitialized, setIsInitialized] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [persistLogs, setPersistLogs] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
 
   // Use secure storage context for encrypted persistence
   const { isReady, initialChannels, saveChannels } = useSecureStorage();
@@ -169,6 +174,7 @@ export function useChannelManager(): UseChannelManagerResult {
   const flushTimeoutRef = useRef<number | null>(null);
   const isFlushing = useRef(false);
   const persistLogsRef = useRef(persistLogs);
+  const isPausedRef = useRef(isPaused);
   const BATCH_INTERVAL_MS = 100;
   // Ref to always call the latest flushPendingLogs (survives HMR)
   const flushPendingLogsRef = useRef<() => void>(() => {});
@@ -177,6 +183,10 @@ export function useChannelManager(): UseChannelManagerResult {
   useEffect(() => {
     persistLogsRef.current = persistLogs;
   }, [persistLogs]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
   useEffect(() => {
     channelsRef.current = channels;
@@ -516,9 +526,11 @@ export function useChannelManager(): UseChannelManagerResult {
       });
 
       eventSource.addEventListener('log', async (event) => {
-        debug('SSE log event received', { channelId, channelName });
+        debug('SSE log event received', { channelId, channelName, isPaused: isPausedRef.current });
         // Any event means connection is alive
         lastPingRef.current.set(channelId, Date.now());
+        // Skip processing if paused
+        if (isPausedRef.current) return;
         try {
           const entry: LogEntry = JSON.parse(event.data);
           const processed = await processEntry(entry, channelId);
@@ -529,9 +541,11 @@ export function useChannelManager(): UseChannelManagerResult {
       });
 
       eventSource.addEventListener('batch', async (event) => {
-        debug('SSE batch event received', { channelId, channelName });
+        debug('SSE batch event received', { channelId, channelName, isPaused: isPausedRef.current });
         // Any event means connection is alive
         lastPingRef.current.set(channelId, Date.now());
+        // Skip processing if paused
+        if (isPausedRef.current) return;
         try {
           const entries: LogEntry[] = JSON.parse(event.data);
           const processed = await Promise.all(
@@ -779,5 +793,7 @@ export function useChannelManager(): UseChannelManagerResult {
     onClear,
     persistLogs,
     setPersistLogs,
+    isPaused,
+    setIsPaused,
   };
 }

@@ -63,6 +63,9 @@
   "tooltips": {
     "copyJson": "Copiar JSON"
   },
+  "drawer": {
+    "title": "Datos del Payload"
+  },
   "install": "Instalar",
   "addChannel": "Agregar Canal",
   "persistence": {
@@ -83,6 +86,9 @@
     "channelNameRequired": "Nombre de canal requerido",
     "channelNameRequiredDescription": "Por favor ingresa un nombre de canal para conectar",
     "logsCopied": "{{count}} log(s) copiado(s) al portapapeles",
-    "copyFailed": "Error al copiar logs"
+    "copyFailed": "Error al copiar logs",
+    "dataCopied": "Payload copiado al portapapeles",
+    "keyCopied": "Clave copiada al portapapeles",
+    "valueCopied": "Valor copiado al portapapeles"
   }
 }

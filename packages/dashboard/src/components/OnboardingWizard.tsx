@@ -793,7 +793,6 @@ logger.info("Hello from structlog!")`;
                           key={log.id}
                           log={log}
                           showChannel={false}
-                          disableExpand
                         />
                       ))
                     )}

@@ -36,6 +36,9 @@
     "disablePersistence": "Deshabilitar persistencia",
     "clearLogs": "Limpiar logs",
     "disconnect": "Desconectar canal",
-    "addChannel": "Agregar canal"
+    "addChannel": "Agregar canal",
+    "pause": "Pausar logs entrantes",
+    "resume": "Reanudar logs entrantes",
+    "moreOptions": "Más opciones"
   }
 }

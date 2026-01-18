@@ -7,7 +7,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Search, X, CaseSensitive, Link, Save, SaveOff, Trash2, Unplug, Key } from 'lucide-react';
+import { Search, X, CaseSensitive, Link, Save, SaveOff, Trash2, Unplug, Key, Pause, Play, MoreVertical } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type { FilterLevels, FilterNamespaces } from '../types';
 
 interface FilterBarProps {
@@ -28,6 +34,9 @@ interface FilterBarProps {
   onManageKey: () => void;
   hasSecretKey: boolean;
   hasEncryptedLogs: boolean;
+  // Pause/resume
+  isPaused: boolean;
+  onTogglePause: () => void;
 }
 
 export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar({
@@ -47,6 +56,8 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
   onManageKey,
   hasSecretKey,
   hasEncryptedLogs,
+  isPaused,
+  onTogglePause,
 }, ref) {
   const { t } = useTranslation('filters');
   const hasFilters = namespaceFilters.length > 0 || searchQuery !== '' || caseSensitive || levelFilters.length > 0;
@@ -108,6 +119,21 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
 
       {/* Right side actions */}
       <div className="flex items-center gap-1">
+        {/* Pause/Resume */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-muted-foreground'}`}
+              onClick={onTogglePause}
+            >
+              {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{isPaused ? t('tooltips.resume') : t('tooltips.pause')}</TooltipContent>
+        </Tooltip>
+
         {/* Key manager */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -144,50 +170,37 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
           <TooltipContent>{t('tooltips.copyLink')}</TooltipContent>
         </Tooltip>
 
-        {/* Toggle persistence */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-8 w-8 ${persistLogs ? 'text-primary' : 'text-muted-foreground'}`}
-              onClick={onTogglePersist}
-            >
-              {persistLogs ? <Save className="w-4 h-4" /> : <SaveOff className="w-4 h-4" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{persistLogs ? t('tooltips.disablePersistence') : t('tooltips.enablePersistence')}</TooltipContent>
-        </Tooltip>
-
-        {/* Clear logs */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={onClearLogs}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('tooltips.clearLogs')}</TooltipContent>
-        </Tooltip>
-
-        {/* Disconnect */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={onDisconnect}
-            >
-              <Unplug className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('tooltips.disconnect')}</TooltipContent>
-        </Tooltip>
+        {/* More options menu */}
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>{t('tooltips.moreOptions')}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onTogglePersist}>
+              {persistLogs ? <SaveOff className="w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              {persistLogs ? t('tooltips.disablePersistence') : t('tooltips.enablePersistence')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onClearLogs}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('tooltips.clearLogs')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDisconnect}>
+              <Unplug className="w-4 h-4 mr-2" />
+              {t('tooltips.disconnect')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

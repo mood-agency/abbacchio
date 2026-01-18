@@ -1,15 +1,13 @@
-import { useState, useCallback, memo } from 'react';
+import { useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LogEntry } from '../types';
 import { LevelBadge, ChannelBadge } from './ui/CustomBadge';
-import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { CodeBlock } from '@/components/ui/code-block';
-import { Lock, AlertTriangle, Copy, ChevronRight, ShieldCheck, ShieldOff, ShieldAlert } from 'lucide-react';
+import { Lock, AlertTriangle, ShieldCheck, ShieldOff, ShieldAlert } from 'lucide-react';
 
 interface LogRowProps {
   log: LogEntry;
@@ -17,14 +15,14 @@ interface LogRowProps {
   searchQuery?: string;
   caseSensitive?: boolean;
   isNew?: boolean;
-  /** Disable row expansion (useful for compact views like onboarding) */
-  disableExpand?: boolean;
   /** Whether this row is selected for copy */
   isSelected?: boolean;
   /** Index of this row in the list */
   rowIndex?: number;
   /** Callback for row selection */
   onSelect?: (index: number, shiftKey: boolean) => void;
+  /** Callback when clicking on the data column to open drawer */
+  onDataClick?: (log: LogEntry) => void;
 }
 
 function formatDateTime(timestamp: number): string {
@@ -116,47 +114,35 @@ export const LogRow = memo(function LogRow({
   searchQuery = '',
   caseSensitive = false,
   isNew = false,
-  disableExpand = false,
   isSelected = false,
   rowIndex,
   onSelect,
+  onDataClick,
 }: LogRowProps) {
   const { t } = useTranslation('logs');
-  const { t: tDialogs } = useTranslation('dialogs');
-  const [isExpanded, setIsExpanded] = useState(false);
   const showData = hasData(log.data);
   const isEncrypted = log.encrypted && !log.decryptionFailed;
   const decryptionFailed = log.decryptionFailed;
   // Check if message was originally sent encrypted (persists after decryption)
   const wasSentEncrypted = log.wasEncrypted === true;
-  // Whether expansion is allowed
-  const canExpand = !disableExpand && (showData || decryptionFailed);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    // If shift key is pressed or onSelect is provided, handle selection
+  const handleRowClick = useCallback((e: React.MouseEvent) => {
+    // Handle row selection for copy functionality
     if (onSelect && rowIndex !== undefined) {
       onSelect(rowIndex, e.shiftKey);
-      // Don't expand if we're selecting
-      if (e.shiftKey) {
-        e.preventDefault();
-        return;
-      }
     }
-    // Normal click - toggle expand
-    if (canExpand) {
-      setIsExpanded((prev) => !prev);
-    }
-  }, [canExpand, onSelect, rowIndex]);
+  }, [onSelect, rowIndex]);
 
-  const copyToClipboard = useCallback((e: React.MouseEvent) => {
+  const handleDataClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(JSON.stringify(log.data, null, 2));
-  }, [log.data]);
+    if (onDataClick && (showData || decryptionFailed)) {
+      onDataClick(log);
+    }
+  }, [onDataClick, showData, decryptionFailed, log]);
 
   // Determine row styling based on encryption state, new status, and selection
   const rowClasses = [
     'border-b border-border hover:bg-muted/50 transition-colors select-none',
-    canExpand ? 'cursor-pointer' : '',
     decryptionFailed ? 'bg-destructive/5' : '',
     isEncrypted ? 'bg-yellow-500/5' : '',
     isNew ? 'animate-highlight' : '',
@@ -164,31 +150,13 @@ export const LogRow = memo(function LogRow({
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={rowClasses} onClick={handleClick}>
+    <div className={rowClasses} onClick={handleRowClick}>
       {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-2 text-sm">
         {/* Date/Time */}
         <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
           {formatDateTime(log.time)}
         </span>
-
-        {/* Encryption status icon */}
-        <div className="w-5 flex-shrink-0 flex items-center justify-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {decryptionFailed ? (
-                <ShieldAlert className="w-4 h-4 text-yellow-500" />
-              ) : wasSentEncrypted ? (
-                <ShieldCheck className="w-4 h-4 text-green-500" />
-              ) : (
-                <ShieldOff className="w-4 h-4 text-destructive" />
-              )}
-            </TooltipTrigger>
-            <TooltipContent>
-              {decryptionFailed ? t('encryption.decryptionFailed') : wasSentEncrypted ? t('encryption.encryptedAtSource') : t('encryption.notEncrypted')}
-            </TooltipContent>
-          </Tooltip>
-        </div>
 
         {/* Level - show lock icon for encrypted logs since actual level is unknown */}
         <div className="w-16 flex-shrink-0">
@@ -234,11 +202,11 @@ export const LogRow = memo(function LogRow({
         </div>
 
         {/* Message */}
-        <div className="w-48 flex-shrink-0 truncate text-foreground flex items-center gap-2 font-mono text-xs">
+        <div className="w-48 flex-shrink-0 text-foreground flex items-center gap-2 font-mono text-xs min-w-0">
           {isEncrypted && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-1 text-yellow-500">
+                <span className="inline-flex items-center gap-1 text-yellow-500 flex-shrink-0">
                   <Lock className="w-4 h-4" />
                 </span>
               </TooltipTrigger>
@@ -248,20 +216,43 @@ export const LogRow = memo(function LogRow({
           {decryptionFailed && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-1 text-destructive">
+                <span className="inline-flex items-center gap-1 text-destructive flex-shrink-0">
                   <AlertTriangle className="w-4 h-4" />
                 </span>
               </TooltipTrigger>
               <TooltipContent>{t('encryption.checkYourKey')}</TooltipContent>
             </Tooltip>
           )}
-          <span className={decryptionFailed ? 'text-destructive' : isEncrypted ? 'text-yellow-400 italic' : ''}>
+          <span className={`truncate ${decryptionFailed ? 'text-destructive' : isEncrypted ? 'text-yellow-400 italic' : ''}`}>
             {highlightText(log.msg, searchQuery, caseSensitive)}
           </span>
         </div>
 
-        {/* Data column - expandable JSON payload */}
-        <div className="flex-1 font-mono text-xs text-muted-foreground min-w-0">
+        {/* Encryption status icon */}
+        <div className="w-5 flex-shrink-0 flex items-center justify-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {decryptionFailed ? (
+                <ShieldAlert className="w-4 h-4 text-yellow-500" />
+              ) : wasSentEncrypted ? (
+                <ShieldCheck className="w-4 h-4 text-green-500" />
+              ) : (
+                <ShieldOff className="w-4 h-4 text-destructive" />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>
+              {decryptionFailed ? t('encryption.decryptionFailed') : wasSentEncrypted ? t('encryption.encryptedAtSource') : t('encryption.notEncrypted')}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* Data column - clickable to open drawer */}
+        <div
+          className={`flex-1 font-mono text-xs text-muted-foreground min-w-0 ${
+            (showData || decryptionFailed) && onDataClick ? 'cursor-pointer hover:text-foreground' : ''
+          }`}
+          onClick={handleDataClick}
+        >
           {isEncrypted || decryptionFailed ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -274,58 +265,10 @@ export const LogRow = memo(function LogRow({
               </TooltipContent>
             </Tooltip>
           ) : showData ? (
-            isExpanded ? (
-              <div className="relative my-1" onClick={(e) => e.stopPropagation()}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={copyToClipboard}
-                      className="absolute top-1 left-1 h-6 w-6 z-10"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('tooltips.copyJson')}</TooltipContent>
-                </Tooltip>
-                <div className="pl-8">
-                  <CodeBlock
-                    code={JSON.stringify(log.data, null, 2)}
-                    language="json"
-                  />
-                </div>
-              </div>
-            ) : (
-              <span className="truncate block">{highlightData(log.data, searchQuery, caseSensitive)}</span>
-            )
+            <span className="truncate block">{highlightData(log.data, searchQuery, caseSensitive)}</span>
           ) : null}
         </div>
-
-        {/* Expand indicator */}
-        {canExpand && (
-          <div className="flex-shrink-0 text-muted-foreground">
-            <ChevronRight
-              className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-            />
-          </div>
-        )}
       </div>
-
-      {/* Decryption failed message */}
-      {isExpanded && decryptionFailed && (
-        <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 ml-24">
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
-              <span className="font-medium">{tDialogs('decryptionFailed.title')}</span>
-            </div>
-            <p className="text-sm text-destructive/80 mt-1">
-              {tDialogs('decryptionFailed.description')}
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 });

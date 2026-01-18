@@ -63,6 +63,9 @@
   "tooltips": {
     "copyJson": "Copy JSON"
   },
+  "drawer": {
+    "title": "Payload Data"
+  },
   "install": "Install",
   "addChannel": "Add Channel",
   "persistence": {
@@ -83,6 +86,9 @@
     "channelNameRequired": "Channel name required",
     "channelNameRequiredDescription": "Please enter a channel name to connect",
     "logsCopied": "{{count}} log(s) copied to clipboard",
-    "copyFailed": "Failed to copy logs"
+    "copyFailed": "Failed to copy logs",
+    "dataCopied": "Payload copied to clipboard",
+    "keyCopied": "Key copied to clipboard",
+    "valueCopied": "Value copied to clipboard"
   }
 }

@@ -36,6 +36,9 @@
     "disablePersistence": "Disable persistence",
     "clearLogs": "Clear logs",
     "disconnect": "Disconnect channel",
-    "addChannel": "Add channel"
+    "addChannel": "Add channel",
+    "pause": "Pause incoming logs",
+    "resume": "Resume incoming logs",
+    "moreOptions": "More options"
   }
 }

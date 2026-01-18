@@ -4,10 +4,12 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { useChannelManager } from '../hooks/useChannelManager';
 import { useChannelLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useChannelLogStream';
+import type { LogEntry } from '../types';
 import { useFilterParams } from '../hooks/useFilterParams';
 import { FilterBar } from './FilterBar';
 import { LogSidebar } from './LogSidebar';
 import { LogRow } from './LogRow';
+import { LevelBadge } from './ui/CustomBadge';
 import { CommandPalette } from './CommandPalette';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { OnboardingWizard } from './OnboardingWizard';
@@ -33,6 +35,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -40,6 +49,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeBlock } from '@/components/ui/code-block';
+import { InteractiveJsonView } from '@/components/ui/interactive-json-view';
 import { SecretKeyInput, isValidKey } from '@/components/ui/secret-key-input';
 import {
   Sun,
@@ -105,6 +115,8 @@ export function LogViewer() {
     onClear,
     persistLogs,
     setPersistLogs,
+    isPaused,
+    setIsPaused,
   } = useChannelManager();
 
   // Get active channel
@@ -140,9 +152,7 @@ export function LogViewer() {
 
   // Key dialog state
   const [showKeyDialog, setShowKeyDialog] = useState(false);
-  const [generatedKey, setGeneratedKey] = useState('');
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
-  const [copiedKey, setCopiedKey] = useState(false);
   const [keyInput, setKeyInput] = useState('');
 
   // Page jump input
@@ -160,6 +170,9 @@ export function LogViewer() {
   // Row selection state for copy
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+
+  // Data drawer state
+  const [drawerLog, setDrawerLog] = useState<LogEntry | null>(null);
 
   // Calculate selected indices
   const selectedIndices = useMemo(() => {
@@ -229,36 +242,9 @@ export function LogViewer() {
     setSelectionEnd(null);
   }, [currentPage, levelFilters, namespaceFilters, searchQuery, timeRange]);
 
-  const generateNewKey = async () => {
-    setIsGeneratingKey(true);
-    try {
-      const res = await fetch('/api/generate-key');
-      const data = await res.json();
-      if (data.key) {
-        setGeneratedKey(data.key);
-      }
-    } catch (err) {
-      console.error('Failed to generate key:', err);
-    } finally {
-      setIsGeneratingKey(false);
-    }
-  };
-
-  const copyKey = async () => {
-    if (!generatedKey) return;
-    try {
-      await navigator.clipboard.writeText(generatedKey);
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
   // Open key dialog
   const openKeyDialog = () => {
     setShowKeyDialog(true);
-    setCopiedKey(false);
     setKeyInput(activeChannel?.secretKey || '');
   };
 
@@ -275,14 +261,6 @@ export function LogViewer() {
       setShowKeyDialog(false);
       toast.success(tLogs('toast.keyUpdated'));
     }
-  };
-
-  // Clear the current decryption key
-  const clearKey = () => {
-    if (activeChannelId) {
-      updateChannelKey(activeChannelId, '');
-    }
-    setKeyInput('');
   };
 
   // Add new channel
@@ -601,15 +579,17 @@ export function LogViewer() {
               onManageKey={openKeyDialog}
               hasSecretKey={!!activeChannel?.secretKey}
               hasEncryptedLogs={!!activeChannel?.hasEncryptedLogs}
+              isPaused={isPaused}
+              onTogglePause={() => setIsPaused(!isPaused)}
             />
 
           {/* Column headers */}
           <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground tracking-wider border-b border-border bg-muted relative z-10">
             <span className="w-36 flex-shrink-0">Date/Time</span>
-            <span className="w-5 flex-shrink-0"></span>
             <span className="w-16 flex-shrink-0">Level</span>
             <span className="w-28 flex-shrink-0">Namespace</span>
             <span className="w-48 flex-shrink-0">Message</span>
+            <span className="w-5 flex-shrink-0"></span>
             <span className="flex-1">Data</span>
           </div>
 
@@ -829,6 +809,7 @@ logger.info("Hello from structlog!")`}
                         isSelected={selectedIndices.has(virtualItem.index)}
                         rowIndex={virtualItem.index}
                         onSelect={handleRowSelect}
+                        onDataClick={setDrawerLog}
                       />
                     </div>
                   );
@@ -955,113 +936,64 @@ logger.info("Hello from structlog!")`}
         )}
 
         {/* Key Dialog */}
-        <Dialog open={showKeyDialog} onOpenChange={(open) => {
-          setShowKeyDialog(open);
-          if (!open) {
-            setGeneratedKey('');
-            setCopiedKey(false);
-          }
-        }}>
+        <Dialog open={showKeyDialog} onOpenChange={setShowKeyDialog}>
           <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
             <DialogHeader>
-              <DialogTitle>{tDialogs('encryptionKey.title')}</DialogTitle>
+              <DialogTitle>{tDialogs('encryptionKey.decryption.title')}</DialogTitle>
+              <DialogDescription>
+                {tDialogs('encryptionKey.decryption.description')}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-6">
               {/* Decryption Key Section */}
               <div className="space-y-3">
-                <p className="text-sm font-medium">{tDialogs('encryptionKey.decryption.title')}</p>
-                <p className="text-sm text-muted-foreground">
-                  {tDialogs('encryptionKey.decryption.description')}
-                </p>
-                <SecretKeyInput
-                  value={keyInput}
-                  onChange={setKeyInput}
-                  onKeyDown={(e) => e.key === 'Enter' && applyKey()}
-                  placeholder={tDialogs('encryptionKey.decryption.placeholder')}
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={applyKey}
-                    disabled={!keyInput.trim()}
-                  >
-                    {tDialogs('encryptionKey.decryption.apply')}
-                  </Button>
-                  {activeChannel?.secretKey && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={clearKey}
-                    >
-                      {tDialogs('encryptionKey.decryption.clear')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t" />
-
-              {/* Key Generator Utility Section */}
-              <div className="space-y-3">
-                <p className="text-sm font-medium">{tDialogs('encryptionKey.generator.title')}</p>
-                <p className="text-sm text-muted-foreground">
-                  {tDialogs('encryptionKey.generator.description')}
-                </p>
-                {isGeneratingKey && !generatedKey ? (
-                  <div className="flex items-center justify-center py-4">
-                    <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : generatedKey ? (
-                  <div className="space-y-3">
-                    <SecretKeyInput
-                      value={generatedKey}
-                      readOnly
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={copyKey}
-                      >
-                        <Copy className="w-4 h-4 mr-1.5" />
-                        {copiedKey ? tDialogs('encryptionKey.generator.copied') : tDialogs('encryptionKey.generator.copyKey')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={generateNewKey}
-                        disabled={isGeneratingKey}
-                      >
-                        <RefreshCw className={`w-4 h-4 mr-1.5 ${isGeneratingKey ? 'animate-spin' : ''}`} />
-                        {tDialogs('encryptionKey.generator.regenerate')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
+                <div className="flex gap-2">
+                  <SecretKeyInput
+                    value={keyInput}
+                    onChange={setKeyInput}
+                    onKeyDown={(e) => e.key === 'Enter' && applyKey()}
+                    placeholder={tDialogs('encryptionKey.decryption.placeholder')}
+                    className="flex-1"
+                  />
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    onClick={generateNewKey}
+                    size="icon"
+                    onClick={async () => {
+                      setIsGeneratingKey(true);
+                      try {
+                        const res = await fetch('/api/generate-key');
+                        const data = await res.json();
+                        if (data.key) {
+                          setKeyInput(data.key);
+                        }
+                      } catch (err) {
+                        console.error('Failed to generate key:', err);
+                      } finally {
+                        setIsGeneratingKey(false);
+                      }
+                    }}
                     disabled={isGeneratingKey}
                   >
-                    <RefreshCw className="w-4 h-4 mr-1.5" />
-                    {tDialogs('encryptionKey.generator.generate')}
+                    <RefreshCw className={`w-4 h-4 ${isGeneratingKey ? 'animate-spin' : ''}`} />
                   </Button>
-                )}
+                </div>
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="gap-2 sm:gap-0">
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() => setShowKeyDialog(false)}
                 >
                   {t('actions.close')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={applyKey}
+                  disabled={!keyInput.trim()}
+                >
+                  {tDialogs('encryptionKey.decryption.apply')}
                 </Button>
               </DialogFooter>
             </div>
@@ -1123,12 +1055,33 @@ logger.info("Hello from structlog!")`}
                 <label className="text-sm font-medium">
                   {tDialogs('addChannel.encryptionKey')} <span className="text-muted-foreground font-normal">{t('labels.optional')}</span>
                 </label>
-                <SecretKeyInput
-                  value={newChannelKey}
-                  onChange={setNewChannelKey}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddChannel()}
-                  placeholder={tDialogs('addChannel.keyPlaceholder')}
-                />
+                <div className="flex gap-2">
+                  <SecretKeyInput
+                    value={newChannelKey}
+                    onChange={setNewChannelKey}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddChannel()}
+                    placeholder={tDialogs('addChannel.keyPlaceholder')}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/generate-key');
+                        const data = await res.json();
+                        if (data.key) {
+                          setNewChannelKey(data.key);
+                        }
+                      } catch (err) {
+                        console.error('Failed to generate key:', err);
+                      }
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
@@ -1148,6 +1101,60 @@ logger.info("Hello from structlog!")`}
           activeChannelId={activeChannelId}
           onSelectChannel={setActiveChannelId}
         />
+
+        {/* Data Drawer */}
+        <Sheet open={drawerLog !== null} onOpenChange={(open) => !open && setDrawerLog(null)}>
+          <SheetContent side="right" className="w-[625px] sm:max-w-[625px] flex flex-col">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2">
+                {tLogs('drawer.title')}
+                {drawerLog && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          if (drawerLog) {
+                            navigator.clipboard.writeText(JSON.stringify(drawerLog.data, null, 2));
+                            toast.success(tLogs('toast.dataCopied'));
+                          }
+                        }}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{tLogs('tooltips.copyJson')}</TooltipContent>
+                  </Tooltip>
+                )}
+              </SheetTitle>
+              {drawerLog && (
+                <div className="space-y-2 mt-2">
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                      {new Date(drawerLog.time).toLocaleString()}
+                    </span>
+                    <LevelBadge level={drawerLog.levelLabel} />
+                    {drawerLog.namespace && (
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {drawerLog.namespace}
+                      </span>
+                    )}
+                  </div>
+                  <SheetDescription className="font-mono text-xs">
+                    {drawerLog.msg}
+                  </SheetDescription>
+                </div>
+              )}
+            </SheetHeader>
+            <div className="flex-1 overflow-auto mt-4 bg-[#011627] rounded-lg">
+              {drawerLog && (
+                <InteractiveJsonView data={drawerLog.data} />
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </TooltipProvider>
   );
