@@ -20,10 +20,7 @@ export function LogRow({ log, search, maxWidth = 120, selected = false }: LogRow
   const nsWidth = log.namespace ? log.namespace.length + 2 : 0;
   const availableWidth = Math.max(20, maxWidth - fixedWidth - nsWidth);
 
-  let message = log.msg || '';
-  if (search) {
-    message = highlightSearch(message, search);
-  }
+  const message = log.msg || '';
 
   // Format data payload
   const dataKeys = Object.keys(log.data);
@@ -39,9 +36,13 @@ export function LogRow({ log, search, maxWidth = 120, selected = false }: LogRow
     }).join(' ');
   }
 
-  // Combine message and data
+  // Truncate message first (before adding ANSI codes from search highlight)
+  // Then apply search highlighting to the truncated result
   const fullContent = dataStr ? `${message} ${dataStr}` : message;
-  const displayContent = truncate(fullContent, availableWidth);
+  const truncatedContent = truncate(fullContent, availableWidth);
+
+  // Apply search highlighting after truncation to avoid ANSI code issues
+  const displayContent = search ? highlightSearch(truncatedContent, search) : truncatedContent;
 
   return (
     <Box flexDirection="row">
@@ -49,7 +50,7 @@ export function LogRow({ log, search, maxWidth = 120, selected = false }: LogRow
       <Text>{time} </Text>
       <Text>{level} </Text>
       {namespace && <Text>{namespace} </Text>}
-      <Text>{displayContent}</Text>
+      <Text wrap="truncate">{displayContent}</Text>
     </Box>
   );
 }

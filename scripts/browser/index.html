@@ -13,11 +13,11 @@
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
-      background: #1a1a2e;
-      color: #eee;
+      background: #fff;
+      color: #000;
     }
     h1 {
-      color: #00d9ff;
+      color: #000;
     }
     .form-group {
       margin-bottom: 15px;
@@ -25,25 +25,27 @@
     label {
       display: block;
       margin-bottom: 5px;
-      color: #aaa;
+      color: #000;
+      font-weight: 500;
     }
     input, select, textarea {
       width: 100%;
       padding: 10px;
-      border: 1px solid #333;
+      border: 1px solid #000;
       border-radius: 4px;
-      background: #16213e;
-      color: #eee;
+      background: #fff;
+      color: #000;
       font-size: 14px;
     }
     input:focus, select:focus, textarea:focus {
       outline: none;
-      border-color: #00d9ff;
+      border-color: #000;
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
     }
     button {
       padding: 12px 24px;
-      background: #00d9ff;
-      color: #1a1a2e;
+      background: #000;
+      color: #fff;
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -53,15 +55,15 @@
       margin-top: 10px;
     }
     button:hover {
-      background: #00b8d9;
+      background: #333;
     }
     button:disabled {
-      background: #555;
+      background: #999;
       cursor: not-allowed;
     }
     .log-output {
-      background: #0f0f23;
-      border: 1px solid #333;
+      background: #fff;
+      border: 1px solid #000;
       border-radius: 4px;
       padding: 15px;
       margin-top: 20px;
@@ -76,16 +78,19 @@
       border-radius: 3px;
     }
     .log-entry.success {
-      background: rgba(0, 255, 0, 0.1);
-      border-left: 3px solid #0f0;
+      background: #f0f0f0;
+      border-left: 3px solid #000;
+      color: #000;
     }
     .log-entry.error {
-      background: rgba(255, 0, 0, 0.1);
-      border-left: 3px solid #f00;
+      background: #f0f0f0;
+      border-left: 3px solid #000;
+      color: #000;
     }
     .log-entry.info {
-      background: rgba(0, 217, 255, 0.1);
-      border-left: 3px solid #00d9ff;
+      background: #f0f0f0;
+      border-left: 3px solid #000;
+      color: #000;
     }
     .row {
       display: flex;
@@ -95,14 +100,15 @@
       flex: 1;
     }
     .section {
-      background: #16213e;
+      background: #fff;
+      border: 1px solid #000;
       border-radius: 8px;
       padding: 20px;
       margin-bottom: 20px;
     }
     h2 {
       margin-top: 0;
-      color: #00d9ff;
+      color: #000;
       font-size: 16px;
     }
     .preset-buttons {
@@ -113,12 +119,13 @@
     }
     .preset-buttons button {
       padding: 8px 16px;
-      background: #333;
-      color: #eee;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
       font-size: 12px;
     }
     .preset-buttons button:hover {
-      background: #444;
+      background: #f0f0f0;
     }
   </style>
 </head>
@@ -135,7 +142,7 @@
       </div>
       <div class="form-group">
         <label for="channel">Channel</label>
-        <input type="text" id="channel" value="browser-test">
+        <input type="text" id="channel" value="API">
       </div>
     </div>
     <div class="form-group">
@@ -169,7 +176,7 @@
     </div>
     <div class="form-group">
       <label for="extraFields">Extra Fields (JSON)</label>
-      <textarea id="extraFields" rows="3" placeholder='{"userId": 123, "action": "click"}'>{}</textarea>
+      <textarea id="extraFields" rows="3" placeholder='{"userId": 123, "action": "click"}'>{"userId": "user_001", "requestId": "req_abc123", "duration": 142}</textarea>
     </div>
 
     <div class="preset-buttons">

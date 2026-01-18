@@ -98,22 +98,23 @@ class AbbacchioProcessor:
         msg = event_dict.get("event", "")
         timestamp = event_dict.get("timestamp")
 
-        # Get namespace from logger name
-        namespace = None
-        if hasattr(logger, "name"):
-            namespace = logger.name
-        elif "_logger_name" in event_dict:
-            namespace = event_dict["_logger_name"]
-
-        # Build extra fields (exclude standard structlog fields)
-        exclude_keys = {"event", "level", "timestamp", "_logger_name", "_record"}
+        # Build extra fields (exclude standard structlog fields and internal routing keys)
+        exclude_keys = {"event", "level", "timestamp", "_logger_name", "_record", "_channel"}
         extra = {k: v for k, v in event_dict.items() if k not in exclude_keys}
+
+        # Get name from extra if provided, otherwise use logger name
+        name = extra.pop("name", None)
+        if not name:
+            if hasattr(logger, "name"):
+                name = logger.name
+            elif "_logger_name" in event_dict:
+                name = event_dict["_logger_name"]
 
         # Create and send log entry
         entry = create_log_entry(
             level=LEVEL_MAP.get(level, 30) if isinstance(level, str) else level,
             msg=str(msg),
-            namespace=namespace,
+            name=name,
             **extra,
         )
 

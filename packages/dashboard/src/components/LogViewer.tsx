@@ -184,9 +184,10 @@ export function LogViewer() {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelKey, setNewChannelKey] = useState('');
 
-  // Row selection state for copy
-  const [selectionStart, setSelectionStart] = useState<number | null>(null);
-  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+  // Row selection state for copy - using Set for multi-select support
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  // Track last selected index for shift+click range selection
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
 
   // Data drawer state
   const [drawerLog, setDrawerLog] = useState<LogEntry | null>(null);
@@ -204,30 +205,29 @@ export function LogViewer() {
     );
   }, [searchQuery, levelFilters, namespaceFilters, timeRange]);
 
-  // Calculate selected indices
-  const selectedIndices = useMemo(() => {
-    if (selectionStart === null) return new Set<number>();
-    const end = selectionEnd ?? selectionStart;
-    const start = Math.min(selectionStart, end);
-    const endIdx = Math.max(selectionStart, end);
-    const indices = new Set<number>();
-    for (let i = start; i <= endIdx; i++) {
-      indices.add(i);
-    }
-    return indices;
-  }, [selectionStart, selectionEnd]);
-
-  // Handle row selection (click or shift+click)
+  // Handle row selection (click to toggle, shift+click for range)
   const handleRowSelect = useCallback((index: number, shiftKey: boolean) => {
-    if (shiftKey && selectionStart !== null) {
-      // Shift+click: extend selection
-      setSelectionEnd(index);
+    if (shiftKey && lastSelectedIndex !== null) {
+      // Shift+click: select range from last selected to current
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const newSelection = new Set(selectedIndices);
+      for (let i = start; i <= end; i++) {
+        newSelection.add(i);
+      }
+      setSelectedIndices(newSelection);
     } else {
-      // Regular click: start new selection
-      setSelectionStart(index);
-      setSelectionEnd(null);
+      // Regular click: toggle selection
+      const newSelection = new Set(selectedIndices);
+      if (newSelection.has(index)) {
+        newSelection.delete(index);
+      } else {
+        newSelection.add(index);
+      }
+      setSelectedIndices(newSelection);
+      setLastSelectedIndex(newSelection.has(index) ? index : null);
     }
-  }, [selectionStart]);
+  }, [selectedIndices, lastSelectedIndex]);
 
   // Handle select all / deselect all
   const handleSelectAll = useCallback(() => {
@@ -236,12 +236,16 @@ export function LogViewer() {
     const allSelected = selectedIndices.size === logs.length;
     if (allSelected) {
       // Deselect all
-      setSelectionStart(null);
-      setSelectionEnd(null);
+      setSelectedIndices(new Set());
+      setLastSelectedIndex(null);
     } else {
       // Select all
-      setSelectionStart(0);
-      setSelectionEnd(logs.length - 1);
+      const allIndices = new Set<number>();
+      for (let i = 0; i < logs.length; i++) {
+        allIndices.add(i);
+      }
+      setSelectedIndices(allIndices);
+      setLastSelectedIndex(logs.length - 1);
     }
   }, [logs.length, selectedIndices.size]);
 
@@ -263,8 +267,8 @@ export function LogViewer() {
       await navigator.clipboard.writeText(formatted);
       toast.success(tLogs('toast.logsCopied', { count: selectedLogs.length }));
       // Clear selection after copy
-      setSelectionStart(null);
-      setSelectionEnd(null);
+      setSelectedIndices(new Set());
+      setLastSelectedIndex(null);
     } catch (err) {
       console.error('Failed to copy logs:', err);
       toast.error(tLogs('toast.copyFailed'));
@@ -279,8 +283,8 @@ export function LogViewer() {
           e.preventDefault();
           copySelectedLogs();
         } else if (e.key === 'Escape') {
-          setSelectionStart(null);
-          setSelectionEnd(null);
+          setSelectedIndices(new Set());
+          setLastSelectedIndex(null);
         }
       }
     };
@@ -291,8 +295,8 @@ export function LogViewer() {
 
   // Clear selection when page or filters change
   useEffect(() => {
-    setSelectionStart(null);
-    setSelectionEnd(null);
+    setSelectedIndices(new Set());
+    setLastSelectedIndex(null);
   }, [currentPage, levelFilters, namespaceFilters, searchQuery, timeRange]);
 
   // Open key dialog
@@ -698,6 +702,12 @@ export function LogViewer() {
                 namespaceFilters={namespaceFilters}
                 isPaused={isPaused}
                 onTogglePause={() => setIsPaused(!isPaused)}
+                selectedCount={selectedIndices.size}
+                onCopySelected={copySelectedLogs}
+                onClearSelection={() => {
+                  setSelectedIndices(new Set());
+                  setLastSelectedIndex(null);
+                }}
               />
             )}
 
@@ -1286,18 +1296,18 @@ logger.info("Hello from structlog!")`}
 
         {/* Data Drawer */}
         <Sheet open={drawerLog !== null} onOpenChange={(open) => !open && setDrawerLog(null)}>
-          <SheetContent side="right" className="w-[625px] sm:max-w-[625px] flex flex-col">
+          <SheetContent side="right" className="w-[625px] sm:max-w-[625px] flex flex-col bg-background/80 backdrop-blur-xl border-l border-border">
             <SheetHeader>
               <SheetTitle>{tLogs('drawer.title')}</SheetTitle>
               {drawerLog && (
-                <div className="space-y-2 mt-2">
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                <div className="space-y-3 mt-3">
+                  <div className="flex flex-wrap items-center gap-4 text-sm">
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
                       {new Date(drawerLog.time).toLocaleString()}
                     </span>
                     <LevelBadge level={drawerLog.levelLabel} />
                     {drawerLog.namespace && (
-                      <span className="text-muted-foreground font-mono text-xs">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {drawerLog.namespace}
                       </span>
                     )}
@@ -1308,7 +1318,7 @@ logger.info("Hello from structlog!")`}
                 </div>
               )}
             </SheetHeader>
-            <div className="flex-1 overflow-auto mt-4 bg-[#011627] rounded-lg">
+            <div className="flex-1 overflow-auto mt-4 rounded-lg border border-border/50">
               {drawerLog && (
                 <InteractiveJsonView data={drawerLog.data} />
               )}

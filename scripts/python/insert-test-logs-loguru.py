@@ -39,11 +39,12 @@ def create_logger(channel: str) -> tuple[logger.__class__, AbbacchioSink, int]:
         flush_interval=0.1,
     )
 
-    # Remove default handler and add our sink
+    # Add sink with filter to only process logs bound to this channel
     handler_id = logger.add(
         sink,
         format="{message}",
         level="DEBUG",
+        filter=lambda record, ch=channel: record["extra"].get("_channel") == ch,
     )
 
     return logger, sink, handler_id
@@ -90,7 +91,8 @@ def main():
                 message = random_element(MESSAGES)
                 extras = generate_random_extras(level)
 
-                log_with_level(logger, level, message, extras, args.name)
+                # Bind _channel for routing to correct sink
+                log_with_level(logger.bind(_channel=channel), level, message, extras, args.name)
                 print(f"[{channel}] Sent log #{i + 1} (level: {level})")
 
                 if args.delay > 0:

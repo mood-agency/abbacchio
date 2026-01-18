@@ -30,20 +30,41 @@ from test_utils import (
 from abbacchio.structlog import AbbacchioProcessor
 
 
-def create_logger(channel: str) -> tuple[structlog.BoundLogger, AbbacchioProcessor]:
-    """Create a structlog logger with Abbacchio processor for the given channel."""
-    processor = AbbacchioProcessor(
-        url=API_URL,
-        channel=channel,
-        batch_size=1,
-        flush_interval=0.1,
-    )
+def create_processors(channels: list[str]) -> dict[str, AbbacchioProcessor]:
+    """Create Abbacchio processors for each channel."""
+    processors = {}
+    for channel in channels:
+        processors[channel] = AbbacchioProcessor(
+            url=API_URL,
+            channel=channel,
+            batch_size=1,
+            flush_interval=0.1,
+        )
+    return processors
+
+
+def create_routing_processor(processors: dict[str, AbbacchioProcessor]):
+    """Create a processor that routes logs to the correct channel processor."""
+    def routing_processor(logger, method_name, event_dict):
+        # Get the channel from the bound context
+        channel = event_dict.get("_channel")
+        if channel and channel in processors:
+            # Call the appropriate channel processor
+            processors[channel](logger, method_name, event_dict)
+        return event_dict
+    return routing_processor
+
+
+def configure_structlog(channels: list[str]) -> dict[str, AbbacchioProcessor]:
+    """Configure structlog with routing to multiple channels."""
+    processors = create_processors(channels)
+    routing_processor = create_routing_processor(processors)
 
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
-            processor,
+            routing_processor,
             structlog.dev.ConsoleRenderer(colors=False),
         ],
         wrapper_class=structlog.BoundLogger,
@@ -52,8 +73,7 @@ def create_logger(channel: str) -> tuple[structlog.BoundLogger, AbbacchioProcess
         cache_logger_on_first_use=False,
     )
 
-    logger = structlog.get_logger(channel)
-    return logger, processor
+    return processors
 
 
 def log_with_level(
@@ -81,7 +101,11 @@ def main():
     print("Using: structlog")
     print_config(args, channels)
 
-    loggers_and_processors = {channel: create_logger(channel) for channel in channels}
+    # Configure structlog once with all channel processors
+    processors = configure_structlog(channels)
+
+    # Get a single logger instance
+    logger = structlog.get_logger()
 
     try:
         for i in range(args.count):
@@ -90,8 +114,9 @@ def main():
                 message = random_element(MESSAGES)
                 extras = generate_random_extras(level)
 
-                logger, _ = loggers_and_processors[channel]
-                log_with_level(logger, level, message, extras, args.name)
+                # Bind _channel for routing to correct processor
+                channel_logger = logger.bind(_channel=channel)
+                log_with_level(channel_logger, level, message, extras, args.name)
                 print(f"[{channel}] Sent log #{i + 1} (level: {level})")
 
                 if args.delay > 0:
@@ -101,7 +126,7 @@ def main():
         print("\nDone!")
 
     finally:
-        for _, processor in loggers_and_processors.values():
+        for processor in processors.values():
             processor.shutdown()
 
 

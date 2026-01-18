@@ -116,9 +116,10 @@ class AbbacchioTransport:
             return
 
         try:
+            # Wrap in {logs: [...]} to match expected API format
             self._client.post(
                 self.url,
-                json=batch,
+                json={"logs": batch},
                 headers=self._headers,
             )
         except Exception:
@@ -141,7 +142,7 @@ class AbbacchioTransport:
 def create_log_entry(
     level: str | int,
     msg: str,
-    namespace: str | None = None,
+    name: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
     """
@@ -150,7 +151,7 @@ def create_log_entry(
     Args:
         level: Log level (string or numeric)
         msg: Log message
-        namespace: Optional namespace/logger name
+        name: Optional name/namespace for the log
         **extra: Additional fields to include
 
     Returns:
@@ -169,8 +170,8 @@ def create_log_entry(
         "msg": msg,
     }
 
-    if namespace:
-        entry["namespace"] = namespace
+    if name:
+        entry["name"] = name
 
     # Add extra fields
     if extra:

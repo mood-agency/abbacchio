@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { LogLevelNumber, LOG_LEVELS } from '../types/index.js';
 
@@ -9,6 +9,7 @@ interface FilterBarProps {
   onSearchChange: (search: string) => void;
   isSearching: boolean;
   onSearchSubmit: () => void;
+  onSearchCancel: () => void;
 }
 
 export function FilterBar({
@@ -17,7 +18,15 @@ export function FilterBar({
   onSearchChange,
   isSearching,
   onSearchSubmit,
+  onSearchCancel,
 }: FilterBarProps): React.ReactElement {
+  // Handle Escape to cancel search
+  useInput((input, key) => {
+    if (isSearching && key.escape) {
+      onSearchCancel();
+    }
+  });
+
   const levelLabel = levelFilter !== null
     ? (({ 10: 'TRACE', 20: 'DEBUG', 30: 'INFO', 40: 'WARN', 50: 'ERROR', 60: 'FATAL' } as const)[levelFilter as keyof typeof LOG_LEVELS] || 'ALL')
     : 'ALL';
@@ -37,7 +46,7 @@ export function FilterBar({
               value={search}
               onChange={onSearchChange}
               onSubmit={onSearchSubmit}
-              placeholder="Search logs..."
+              placeholder="Search logs... (Enter to confirm, Esc to cancel)"
             />
           </Box>
         ) : search ? (

@@ -8,8 +8,7 @@ import random
 
 API_URL = os.environ.get("API_URL", "http://localhost:4000/api/logs")
 
-DEFAULT_CHANNELS = ["Moody Blues", "bumblebee", "jazz"]
-
+DEFAULT_CHANNELS = ['API', 'Worker1', 'Worker2','Worker3','Worker4','Worker5','Worker6','Worker7']
 NAMESPACES = ["auth", "api", "db", "cache", "worker", "scheduler"]
 
 LEVEL_NAMES = ["debug", "info", "warning", "error", "critical"]

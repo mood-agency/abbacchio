@@ -13,6 +13,11 @@
     "namespaces": "Namespaces",
     "clear": "Limpiar"
   },
+  "selection": {
+    "count": "{{count}} seleccionados",
+    "copy": "Copiar logs seleccionados",
+    "clear": "Limpiar selección"
+  },
   "timeRange": {
     "30m": "Últimos 30 minutos",
     "1h": "Última hora",

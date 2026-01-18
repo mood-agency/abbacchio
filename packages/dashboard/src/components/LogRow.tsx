@@ -157,7 +157,7 @@ export const LogRow = memo(function LogRow({
     decryptionFailed ? 'bg-destructive/5' : '',
     isEncrypted ? 'bg-yellow-500/5' : '',
     isNew ? 'animate-highlight' : '',
-    isSelected ? 'bg-primary/10 border-primary/30' : '',
+    isSelected ? 'bg-primary/10' : '',
   ].filter(Boolean).join(' ');
 
   return (

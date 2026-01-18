@@ -87,11 +87,14 @@ class AbbacchioSink:
         level_name = record["level"].name
         level = LEVEL_MAP.get(level_name, 30)
 
-        # Get namespace from logger name or module
-        namespace = record.get("name") or record["module"]
-
         # Build extra fields from record["extra"]
         extra = dict(record.get("extra", {}))
+
+        # Remove internal routing key used for multi-channel support
+        extra.pop("_channel", None)
+
+        # Get name from extra if provided, otherwise use module name
+        name = extra.pop("name", None) or record.get("name") or record["module"]
 
         # Add source location
         extra["file"] = record["file"].name
@@ -102,7 +105,7 @@ class AbbacchioSink:
         entry = create_log_entry(
             level=level,
             msg=record["message"],
-            namespace=namespace,
+            name=name,
             **extra,
         )
 

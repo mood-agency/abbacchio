@@ -72,11 +72,45 @@ function escapeRegex(str: string): string {
 }
 
 /**
- * Truncate text with ellipsis
+ * Strip ANSI escape codes from text to get visible length
+ */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
+/**
+ * Truncate text with ellipsis, accounting for ANSI escape codes
  */
 export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1) + '\u2026';
+  const visibleLength = stripAnsi(text).length;
+  if (visibleLength <= maxLength) return text;
+
+  // Need to truncate while preserving ANSI codes
+  let visibleCount = 0;
+  let i = 0;
+  const ansiRegex = /\x1B\[[0-9;]*m/g;
+  let result = '';
+  let match;
+
+  // Process text character by character, skipping ANSI codes
+  while (i < text.length && visibleCount < maxLength - 1) {
+    ansiRegex.lastIndex = i;
+    match = ansiRegex.exec(text);
+
+    if (match && match.index === i) {
+      // Found ANSI code at current position, include it and skip
+      result += match[0];
+      i += match[0].length;
+    } else {
+      // Regular character
+      result += text[i];
+      visibleCount++;
+      i++;
+    }
+  }
+
+  return result + '\u2026' + '\x1B[0m'; // Add ellipsis and reset ANSI
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Search, X, CaseSensitive, Pause, Play } from 'lucide-react';
+import { Search, X, CaseSensitive, Pause, Play, Copy } from 'lucide-react';
 import type { FilterLevels, FilterNamespaces } from '../types';
 
 interface FilterBarProps {
@@ -22,6 +22,10 @@ interface FilterBarProps {
   // Pause/resume
   isPaused: boolean;
   onTogglePause: () => void;
+  // Selection
+  selectedCount?: number;
+  onCopySelected?: () => void;
+  onClearSelection?: () => void;
 }
 
 export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar({
@@ -35,6 +39,9 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
   namespaceFilters,
   isPaused,
   onTogglePause,
+  selectedCount = 0,
+  onCopySelected,
+  onClearSelection,
 }, ref) {
   const { t } = useTranslation('filters');
   const hasFilters = namespaceFilters.length > 0 || searchQuery !== '' || caseSensitive || levelFilters.length > 0;
@@ -58,6 +65,45 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
 
       {/* Divider */}
       <div className="h-6 w-px bg-border" />
+
+      {/* Selection indicator */}
+      {selectedCount > 0 && (
+        <>
+          <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-md px-3 py-1.5">
+            <span className="text-sm font-medium text-primary">
+              {t('selection.count', { count: selectedCount })}
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/20"
+                  onClick={onCopySelected}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('selection.copy')}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/20"
+                  onClick={onClearSelection}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('selection.clear')}</TooltipContent>
+            </Tooltip>
+          </div>
+          {/* Divider */}
+          <div className="h-6 w-px bg-border" />
+        </>
+      )}
 
       {/* Search */}
       <div className="relative flex-1 max-w-md flex items-center gap-1">

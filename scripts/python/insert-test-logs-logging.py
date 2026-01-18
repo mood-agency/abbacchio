@@ -49,7 +49,8 @@ def log_with_level(
 ) -> None:
     """Log a message at the specified level with extras."""
     namespace = name or random_element(NAMESPACES)
-    extra_with_name = {**extras, "name": namespace}
+    # Note: 'name' is a reserved LogRecord attribute, so we use 'log_name' instead
+    extra_with_name = {**extras, "log_name": namespace}
 
     level_map = {
         "debug": logging.DEBUG,

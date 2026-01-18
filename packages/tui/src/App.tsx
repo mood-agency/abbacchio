@@ -76,6 +76,8 @@ export function App({ options }: AppProps): React.ReactElement {
 
   // Key bindings handlers
   const handleQuit = useCallback(() => {
+    // Clear the screen before exiting
+    process.stdout.write('\x1B[2J\x1B[0f');
     exit();
   }, [exit]);
 
@@ -120,6 +122,10 @@ export function App({ options }: AppProps): React.ReactElement {
   }, []);
 
   const handleSearchSubmit = useCallback(() => {
+    setIsSearching(false);
+  }, []);
+
+  const handleSearchCancel = useCallback(() => {
     setIsSearching(false);
   }, []);
 
@@ -196,6 +202,7 @@ export function App({ options }: AppProps): React.ReactElement {
         onSearchChange={store.setSearch}
         isSearching={isSearching}
         onSearchSubmit={handleSearchSubmit}
+        onSearchCancel={handleSearchCancel}
       />
 
       <LogList

@@ -73,11 +73,14 @@ class AbbacchioHandler(logging.Handler):
             # Get extra fields from record
             extra = self._extract_extra(record)
 
+            # Use log_name from extra if provided, otherwise fall back to record.name
+            name = extra.pop("log_name", None) or record.name
+
             # Create log entry
             entry = create_log_entry(
                 level=LEVEL_MAP.get(record.levelno, 30),
-                msg=self.format(record),
-                namespace=record.name,
+                msg=record.getMessage(),
+                name=name,
                 **extra,
             )
 

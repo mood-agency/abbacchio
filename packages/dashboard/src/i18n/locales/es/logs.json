@@ -64,7 +64,10 @@
     "copyJson": "Copiar JSON"
   },
   "drawer": {
-    "title": "Datos del Payload"
+    "title": "Datos del Payload",
+    "time": "Hora",
+    "level": "Nivel",
+    "namespace": "Namespace"
   },
   "install": "Instalar",
   "addChannel": "Agregar Canal",
