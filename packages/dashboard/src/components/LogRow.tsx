@@ -17,6 +17,8 @@ interface LogRowProps {
   searchQuery?: string;
   caseSensitive?: boolean;
   isNew?: boolean;
+  /** Disable row expansion (useful for compact views like onboarding) */
+  disableExpand?: boolean;
 }
 
 function formatDateTime(timestamp: number): string {
@@ -102,7 +104,7 @@ function highlightData(
   return highlightText(dataString, query, caseSensitive);
 }
 
-export const LogRow = memo(function LogRow({ log, showChannel = false, searchQuery = '', caseSensitive = false, isNew = false }: LogRowProps) {
+export const LogRow = memo(function LogRow({ log, showChannel = false, searchQuery = '', caseSensitive = false, isNew = false, disableExpand = false }: LogRowProps) {
   const { t } = useTranslation('logs');
   const { t: tDialogs } = useTranslation('dialogs');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -111,12 +113,14 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
   const decryptionFailed = log.decryptionFailed;
   // Check if message was originally sent encrypted (persists after decryption)
   const wasSentEncrypted = log.wasEncrypted === true;
+  // Whether expansion is allowed
+  const canExpand = !disableExpand && (showData || decryptionFailed);
 
   const toggleExpand = useCallback(() => {
-    if (showData || decryptionFailed) {
+    if (canExpand) {
       setIsExpanded((prev) => !prev);
     }
-  }, [showData, decryptionFailed]);
+  }, [canExpand]);
 
   const copyToClipboard = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -126,7 +130,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
   // Determine row styling based on encryption state and new status
   const rowClasses = [
     'border-b border-border hover:bg-muted/50 transition-colors',
-    (showData || decryptionFailed) ? 'cursor-pointer' : '',
+    canExpand ? 'cursor-pointer' : '',
     decryptionFailed ? 'bg-destructive/5' : '',
     isEncrypted ? 'bg-yellow-500/5' : '',
     isNew ? 'animate-highlight' : '',
@@ -270,7 +274,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
         </div>
 
         {/* Expand indicator */}
-        {(showData || decryptionFailed) && (
+        {canExpand && (
           <div className="flex-shrink-0 text-muted-foreground">
             <ChevronRight
               className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}

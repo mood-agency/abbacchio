@@ -40,6 +40,15 @@
     "passwordPlaceholder": "Ingresa contraseña maestra (mín. 8 caracteres)",
     "confirmPlaceholder": "Confirmar contraseña"
   },
+  "preview": {
+    "title": "Prueba Tu Conexión",
+    "description": "Ejecuta tu aplicación y observa los logs aparecer abajo en tiempo real.",
+    "connecting": "Conectando...",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "waitingForLogs": "Esperando logs...",
+    "waitingHint": "Inicia tu aplicación para ver los logs aquí"
+  },
   "finish": {
     "title": "¡Todo Listo!",
     "description": "Tu canal \"{{channel}}\" está listo. Inicia tu aplicación y observa los logs en tiempo real.",

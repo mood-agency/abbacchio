@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeBlock } from '@/components/ui/code-block';
 import { SecretKeyInput, isValidKey } from '@/components/ui/secret-key-input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { LogRow } from './LogRow';
+import type { LogEntry, LogLevelLabel } from '../types';
+import { decryptLog, isCryptoAvailable } from '../lib/crypto';
 import {
   ArrowRight,
   ArrowLeft,
@@ -16,13 +20,18 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Loader2,
+  FileText,
 } from 'lucide-react';
+import {
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 
 interface OnboardingWizardProps {
   onComplete: (channelName: string, secretKey: string, masterPassword: string) => void;
 }
 
-type Step = 'welcome' | 'channel' | 'installation' | 'password' | 'finish';
+type Step = 'welcome' | 'channel' | 'installation' | 'password' | 'preview' | 'finish';
 
 function CopyableCodeBlock({
   code,
@@ -82,7 +91,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { t: tDialogs } = useTranslation('dialogs');
 
-  const steps: Step[] = ['welcome', 'channel', 'installation', 'password', 'finish'];
+  // Preview step state
+  const [previewLogs, setPreviewLogs] = useState<LogEntry[]>([]);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const steps: Step[] = ['welcome', 'channel', 'installation', 'password', 'preview', 'finish'];
   const currentStepIndex = steps.indexOf(currentStep);
 
   const generateKey = useCallback(async () => {
@@ -138,6 +154,127 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     }
     return true;
   };
+
+  // Log level mapping
+  const LOG_LEVELS: Record<number, LogLevelLabel> = {
+    10: 'trace',
+    20: 'debug',
+    30: 'info',
+    40: 'warn',
+    50: 'error',
+    60: 'fatal',
+  };
+
+  // Process incoming log entry (decrypt if needed)
+  const processLogEntry = useCallback(async (entry: LogEntry): Promise<LogEntry> => {
+    if (!entry.encrypted || !entry.encryptedData) {
+      return { ...entry, wasEncrypted: false };
+    }
+
+    if (!secretKey || !isCryptoAvailable()) {
+      return { ...entry, wasEncrypted: true, decryptionFailed: !secretKey };
+    }
+
+    try {
+      const decrypted = await decryptLog<{
+        level?: number;
+        time?: number;
+        msg?: string;
+        message?: string;
+        namespace?: string;
+        name?: string;
+        [key: string]: unknown;
+      }>(entry.encryptedData, secretKey);
+
+      if (!decrypted) {
+        return { ...entry, wasEncrypted: true, decryptionFailed: true };
+      }
+
+      const level = typeof decrypted.level === 'number' ? decrypted.level : 30;
+      const { level: _, time, msg, message, namespace, name, ...rest } = decrypted;
+
+      return {
+        ...entry,
+        level,
+        levelLabel: LOG_LEVELS[level as keyof typeof LOG_LEVELS] || 'info',
+        time: time || entry.time,
+        msg: msg || message || '',
+        namespace: namespace || name,
+        data: rest,
+        encrypted: false,
+        encryptedData: undefined,
+        wasEncrypted: true,
+      };
+    } catch {
+      return { ...entry, wasEncrypted: true, decryptionFailed: true };
+    }
+  }, [secretKey]);
+
+  // Connect to the log stream for preview
+  const connectToChannel = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    setIsConnecting(true);
+    setPreviewLogs([]);
+
+    const streamUrl = `/api/logs/stream?channel=${encodeURIComponent(channelName)}`;
+    const eventSource = new EventSource(streamUrl);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      setIsConnected(true);
+      setIsConnecting(false);
+    };
+
+    eventSource.addEventListener('log', async (event) => {
+      try {
+        const entry: LogEntry = JSON.parse(event.data);
+        const processed = await processLogEntry(entry);
+        setPreviewLogs((prev) => [processed, ...prev].slice(0, 100)); // Keep last 100 logs
+      } catch (e) {
+        console.error('Failed to parse log event:', e);
+      }
+    });
+
+    eventSource.addEventListener('batch', async (event) => {
+      try {
+        const entries: LogEntry[] = JSON.parse(event.data);
+        const processed = await Promise.all(entries.map(processLogEntry));
+        setPreviewLogs((prev) => [...processed.reverse(), ...prev].slice(0, 100));
+      } catch (e) {
+        console.error('Failed to parse batch event:', e);
+      }
+    });
+
+    eventSource.onerror = () => {
+      setIsConnected(false);
+      setIsConnecting(false);
+    };
+  }, [channelName, processLogEntry]);
+
+  // Connect when entering preview step
+  useEffect(() => {
+    if (currentStep === 'preview') {
+      connectToChannel();
+    } else {
+      // Disconnect when leaving preview step
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsConnected(false);
+      setIsConnecting(false);
+    }
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [currentStep, connectToChannel]);
 
   const goNext = () => {
     // Validate channel step before proceeding
@@ -581,7 +718,78 @@ logger.info("Hello from structlog!")`;
             </div>
           )}
 
-          {/* Step 5: Finish */}
+          {/* Step 5: Preview */}
+          {currentStep === 'preview' && (
+            <TooltipProvider>
+              <div className="animate-in fade-in duration-300">
+                <div className="text-center mb-6">
+                  <div className="text-5xl mb-4">📊</div>
+                  <h2 className="text-3xl font-bold text-foreground mb-2">
+                    {tOnboarding('preview.title')}
+                  </h2>
+                  <p className="text-muted-foreground">
+                    {tOnboarding('preview.description')}
+                  </p>
+                </div>
+
+                {/* Log table */}
+                <div className="border rounded-lg overflow-hidden bg-background mb-6">
+                  {/* Column headers */}
+                  <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground tracking-wider border-b border-border bg-muted">
+                    <span className="w-36 flex-shrink-0">Date/Time</span>
+                    <span className="w-5 flex-shrink-0"></span>
+                    <span className="w-16 flex-shrink-0">Level</span>
+                    <span className="w-28 flex-shrink-0">Namespace</span>
+                    <span className="w-48 flex-shrink-0">Message</span>
+                    <span className="flex-1">Data</span>
+                  </div>
+
+                  {/* Log rows */}
+                  <ScrollArea className="h-[300px]" viewPortRef={scrollContainerRef}>
+                    {previewLogs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full min-h-[280px] text-muted-foreground">
+                        {isConnecting ? (
+                          <>
+                            <Loader2 className="w-12 h-12 mb-3 opacity-50 animate-spin" />
+                            <p className="text-sm">{tOnboarding('preview.connecting')}</p>
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-12 h-12 mb-3 opacity-50" />
+                            <p className="text-sm">{tOnboarding('preview.waitingForLogs')}</p>
+                            <p className="text-xs mt-1 text-muted-foreground/70">{tOnboarding('preview.waitingHint')}</p>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      previewLogs.map((log) => (
+                        <LogRow
+                          key={log.id}
+                          log={log}
+                          showChannel={false}
+                          disableExpand
+                        />
+                      ))
+                    )}
+                  </ScrollArea>
+                </div>
+
+                {/* Navigation */}
+                <div className="flex justify-between max-w-md mx-auto">
+                  <Button variant="ghost" onClick={goBack}>
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    {t('actions.back')}
+                  </Button>
+                  <Button onClick={goNext}>
+                    {t('actions.continue')}
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              </div>
+            </TooltipProvider>
+          )}
+
+          {/* Step 6: Finish */}
           {currentStep === 'finish' && (
             <div className="text-center animate-in fade-in duration-300">
               <div className="text-7xl mb-6">🎉</div>

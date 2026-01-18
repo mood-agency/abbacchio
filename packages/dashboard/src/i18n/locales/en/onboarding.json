@@ -40,6 +40,15 @@
     "passwordPlaceholder": "Enter master password (min. 8 characters)",
     "confirmPlaceholder": "Confirm password"
   },
+  "preview": {
+    "title": "Test Your Connection",
+    "description": "Run your application and watch the logs appear below in real-time.",
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "waitingForLogs": "Waiting for logs...",
+    "waitingHint": "Start your application to see logs appear here"
+  },
   "finish": {
     "title": "You're All Set!",
     "description": "Your channel \"{{channel}}\" is ready. Start your application and watch the logs stream in real-time.",
