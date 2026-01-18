@@ -88,7 +88,7 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
       setFilteredCount(0);
       setAvailableNamespaces([]);
       setLevelCounts({ all: 0, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 });
-      setIsLoading(false);
+      // Keep isLoading true when no channel - we're waiting for channel selection
       return;
     }
 
@@ -116,7 +116,7 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
           namespace: namespaceFilter || undefined,
           channel: channelName,
         }),
-        getDistinctNamespaces(),
+        getDistinctNamespaces(channelName),
         getLevelCounts(channelName),
       ]);
 
@@ -142,6 +142,10 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
     if (isChannelChange) {
       isFirstLoadRef.current = true;
       prevChannelRef.current = channelName;
+      // Reset loading state when switching to a new channel
+      if (channelName) {
+        setIsLoading(true);
+      }
     }
 
     loadLogs(isFirstLoadRef.current);

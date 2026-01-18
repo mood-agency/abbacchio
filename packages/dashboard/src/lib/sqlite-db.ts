@@ -125,11 +125,11 @@ export async function getFilteredCount(options: QueryOptions = {}): Promise<numb
 }
 
 /**
- * Get distinct namespaces from all logs
+ * Get distinct namespaces from logs, optionally filtered by channel
  */
-export async function getDistinctNamespaces(): Promise<string[]> {
+export async function getDistinctNamespaces(channel?: string): Promise<string[]> {
   await initDatabase();
-  return sendMessage<string[]>('getDistinctNamespaces');
+  return sendMessage<string[]>('getDistinctNamespaces', { channel });
 }
 
 /**

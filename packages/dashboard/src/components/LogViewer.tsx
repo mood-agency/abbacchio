@@ -61,7 +61,7 @@ export function LogViewer() {
   const { t: tFilters } = useTranslation('filters');
 
   // Secure storage for master password
-  const { setMasterPassword, setReady, setInitialChannels } = useSecureStorage();
+  const { isReady, setMasterPassword, setReady, setInitialChannels, hasExistingStorage } = useSecureStorage();
 
   // URL params for filters
   const {
@@ -313,8 +313,15 @@ export function LogViewer() {
   const showingStart = filteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
   const showingEnd = Math.min(currentPage * pageSize, filteredCount);
 
-  // Show onboarding wizard if no channels
-  if (channels.length === 0) {
+  // If encrypted storage exists but not yet unlocked, show nothing
+  // (the MasterPasswordDialog will be shown by App.tsx)
+  if (!isReady && hasExistingStorage()) {
+    return null;
+  }
+
+  // Show onboarding wizard only if no channels AND no existing encrypted storage
+  // (new user who hasn't set up yet)
+  if (channels.length === 0 && !hasExistingStorage()) {
     return (
       <OnboardingWizard
         onComplete={async (channelName, secretKey, masterPassword) => {

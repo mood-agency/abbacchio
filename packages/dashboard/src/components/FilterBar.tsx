@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LevelBadge } from '@/components/ui/CustomBadge';
-import { Search, X, CaseSensitive, Link, Database, DatabaseBackup, Trash2, Unplug, Key } from 'lucide-react';
+import { Search, X, CaseSensitive, Link, Save, SaveOff, Trash2, Unplug, Key } from 'lucide-react';
 import type { FilterLevel } from '../types';
 
 interface LevelCounts {
@@ -228,7 +228,7 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
               className={`h-8 w-8 ${persistLogs ? 'text-primary' : 'text-muted-foreground'}`}
               onClick={onTogglePersist}
             >
-              {persistLogs ? <Database className="w-4 h-4" /> : <DatabaseBackup className="w-4 h-4" />}
+              {persistLogs ? <Save className="w-4 h-4" /> : <SaveOff className="w-4 h-4" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent>{persistLogs ? t('tooltips.disablePersistence') : t('tooltips.enablePersistence')}</TooltipContent>

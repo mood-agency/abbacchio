@@ -139,7 +139,7 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
   return (
     <div className={rowClasses} onClick={toggleExpand}>
       {/* Main row */}
-      <div className="flex items-start gap-3 px-4 py-2 text-sm">
+      <div className="flex items-center gap-3 px-4 py-2 text-sm">
         {/* Date/Time */}
         <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
           {formatDateTime(log.time)}
@@ -262,10 +262,12 @@ export const LogRow = memo(function LogRow({ log, showChannel = false, searchQue
                   </TooltipTrigger>
                   <TooltipContent>{t('tooltips.copyJson')}</TooltipContent>
                 </Tooltip>
-                <CodeBlock
-                  code={JSON.stringify(log.data, null, 2)}
-                  language="json"
-                />
+                <div className="pl-8">
+                  <CodeBlock
+                    code={JSON.stringify(log.data, null, 2)}
+                    language="json"
+                  />
+                </div>
               </div>
             ) : (
               <span className="truncate block">{highlightData(log.data, searchQuery, caseSensitive)}</span>

@@ -21,7 +21,7 @@ export function LanguageSwitcher() {
       value={i18n.language.split('-')[0]}
       onValueChange={(value) => i18n.changeLanguage(value)}
     >
-      <SelectTrigger className="w-[110px] h-8">
+      <SelectTrigger className="w-[165px] h-8">
         <Globe className="w-4 h-4 mr-2" />
         <SelectValue />
       </SelectTrigger>

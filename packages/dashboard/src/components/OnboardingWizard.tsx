@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -97,6 +98,16 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [isConnected, setIsConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const hasReceivedLogsRef = useRef(false);
+
+  // Fire confetti when first log arrives
+  const fireConfetti = useCallback(() => {
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+    });
+  }, []);
 
   const steps: Step[] = ['welcome', 'channel', 'installation', 'password', 'preview', 'finish'];
   const currentStepIndex = steps.indexOf(currentStep);
@@ -218,6 +229,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
     setIsConnecting(true);
     setPreviewLogs([]);
+    hasReceivedLogsRef.current = false;
 
     const streamUrl = `/api/logs/stream?channel=${encodeURIComponent(channelName)}`;
     const eventSource = new EventSource(streamUrl);
@@ -232,6 +244,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       try {
         const entry: LogEntry = JSON.parse(event.data);
         const processed = await processLogEntry(entry);
+        // Fire confetti on first log received
+        if (!hasReceivedLogsRef.current) {
+          hasReceivedLogsRef.current = true;
+          fireConfetti();
+        }
         setPreviewLogs((prev) => [processed, ...prev].slice(0, 100)); // Keep last 100 logs
       } catch (e) {
         console.error('Failed to parse log event:', e);
@@ -242,6 +259,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       try {
         const entries: LogEntry[] = JSON.parse(event.data);
         const processed = await Promise.all(entries.map(processLogEntry));
+        // Fire confetti on first log received
+        if (!hasReceivedLogsRef.current && processed.length > 0) {
+          hasReceivedLogsRef.current = true;
+          fireConfetti();
+        }
         setPreviewLogs((prev) => [...processed.reverse(), ...prev].slice(0, 100));
       } catch (e) {
         console.error('Failed to parse batch event:', e);
@@ -252,7 +274,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       setIsConnected(false);
       setIsConnecting(false);
     };
-  }, [channelName, processLogEntry]);
+  }, [channelName, processLogEntry, fireConfetti]);
 
   // Connect when entering preview step
   useEffect(() => {
@@ -730,6 +752,10 @@ logger.info("Hello from structlog!")`;
                   <p className="text-muted-foreground">
                     {tOnboarding('preview.description')}
                   </p>
+                  <div className="mt-3">
+                    <span className="text-sm text-muted-foreground">{tOnboarding('installation.channel')}: </span>
+                    <code className="bg-muted px-3 py-1 rounded text-sm font-medium">{channelName}</code>
+                  </div>
                 </div>
 
                 {/* Log table */}

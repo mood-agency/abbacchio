@@ -13,7 +13,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       <pre
         className="text-xs rounded p-3 overflow-x-auto"
         style={{
-          background: 'rgb(1, 22, 39)',
+          background: 'transparent',
           color: 'rgb(214, 222, 235)',
           margin: 0,
         }}
@@ -28,7 +28,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
           className="text-xs rounded p-3 overflow-x-auto"
-          style={{ ...style, margin: 0 }}
+          style={{ ...style, margin: 0, background: 'transparent' }}
         >
           {tokens.map((line, i) => (
             <div key={i} {...getLineProps({ line })}>

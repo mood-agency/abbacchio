@@ -282,12 +282,22 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       }
 
       case 'getDistinctNamespaces': {
+        const options = payload as { channel?: string } | undefined;
         const namespaces: string[] = [];
-        db.exec({
-          sql: `SELECT DISTINCT namespace FROM logs WHERE namespace IS NOT NULL ORDER BY namespace`,
-          rowMode: 'object',
-          callback: (row) => namespaces.push((row as { namespace: string }).namespace),
-        });
+        if (options?.channel) {
+          db.exec({
+            sql: `SELECT DISTINCT namespace FROM logs WHERE namespace IS NOT NULL AND channel = ? ORDER BY namespace`,
+            bind: [options.channel],
+            rowMode: 'object',
+            callback: (row) => namespaces.push((row as { namespace: string }).namespace),
+          });
+        } else {
+          db.exec({
+            sql: `SELECT DISTINCT namespace FROM logs WHERE namespace IS NOT NULL ORDER BY namespace`,
+            rowMode: 'object',
+            callback: (row) => namespaces.push((row as { namespace: string }).namespace),
+          });
+        }
         self.postMessage({ id, success: true, result: namespaces });
         break;
       }

@@ -19,7 +19,9 @@
       "Bash(timeout 10 npx vite:*)",
       "Bash(timeout 15 npx vite:*)",
       "Bash(pnpm install:*)",
-      "Bash(timeout 10 npm run dev:*)"
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(git -C \"C:\\\\Users\\\\argen\\\\Documents\\\\GitHub\\\\pino-live\" add -A)",
+      "Bash(git -C \"C:\\\\Users\\\\argen\\\\Documents\\\\GitHub\\\\pino-live\" commit -m \"Add confetti celebration, fix namespace filtering, and UI polish\n\n- Add confetti animation when first log is received during onboarding preview\n- Fix namespace filtering to be channel-specific in SQLite queries\n- Fix loading state handling when switching channels\n- Fix LogViewer to properly wait for master password unlock before rendering\n- Widen language switcher dropdown and show channel name in preview step\n- Make code block backgrounds transparent and align expanded JSON data\n- Vertically center log row items for better alignment\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")"
     ]
   }
 }
