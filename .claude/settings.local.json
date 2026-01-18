@@ -21,7 +21,8 @@
       "Bash(timeout 10 npx vite:*)",
       "Bash(timeout 8 npx vite:*)",
       "Bash(pnpm build:*)",
-      "Bash(pnpm remove:*)"
+      "Bash(pnpm remove:*)",
+      "Bash(npm run typecheck:*)"
     ]
   }
 }
