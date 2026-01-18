@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ interface FilterBarProps {
   onTogglePause: () => void;
 }
 
-export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar({
+export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar({
   searchQuery,
   setSearchQuery,
   matchCount,
@@ -110,4 +110,4 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
       </div>
     </div>
   );
-});
+}));

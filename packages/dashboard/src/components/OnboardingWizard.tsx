@@ -95,7 +95,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   // Preview step state
   const [previewLogs, setPreviewLogs] = useState<LogEntry[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [_isConnected, setIsConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const hasReceivedLogsRef = useRef(false);

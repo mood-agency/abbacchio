@@ -5,6 +5,15 @@ import { decryptLog, isCryptoAvailable } from '../lib/crypto';
 import { useSecureStorage } from '../contexts/SecureStorageContext';
 import CentrifugoWorker from '../lib/centrifugo-worker?worker';
 import type { WorkerOutgoingMessage } from '../lib/centrifugo-worker';
+import {
+  isTauri,
+  connectCentrifugo as tauriConnect,
+  subscribeChannel as tauriSubscribe,
+  unsubscribeChannel as tauriUnsubscribe,
+  disconnectCentrifugo as tauriDisconnect,
+  listenCentrifugoEvents,
+  type CentrifugoEvent,
+} from '../lib/tauri-centrifugo';
 
 // Debug logging - enable in browser console: window.__DEBUG_CHANNEL_MANAGER__ = true
 const debug = (...args: unknown[]) => {
@@ -12,6 +21,9 @@ const debug = (...args: unknown[]) => {
     console.log('[ChannelManager]', ...args);
   }
 };
+
+// Check if running in Tauri
+const IS_TAURI = isTauri();
 
 /**
  * Get the Centrifugo WebSocket URL based on current location
@@ -483,9 +495,128 @@ export function useChannelManager(): UseChannelManagerResult {
     processEntryRef.current = processEntry;
   }, [processEntry]);
 
-  // Initialize Centrifugo Web Worker connection (once)
+  // Ref to store Tauri event unlisten function
+  const tauriUnlistenRef = useRef<(() => void) | null>(null);
+
+  // Handle Tauri Centrifugo events
+  const handleTauriEvent = useCallback(async (event: CentrifugoEvent) => {
+    debug('[Tauri Centrifugo] Event:', event.type);
+
+    switch (event.type) {
+      case 'connected':
+        debug('[Tauri Centrifugo] Connected');
+        setIsCentrifugoConnected(true);
+        setChannels((prev) =>
+          prev.map((ch) => ({
+            ...ch,
+            isConnected: subscribedChannelsRef.current.has(ch.id),
+            isConnecting: false,
+            connectionError: null,
+          }))
+        );
+        break;
+
+      case 'disconnected':
+        debug('[Tauri Centrifugo] Disconnected:', event.reason);
+        setIsCentrifugoConnected(false);
+        setChannels((prev) =>
+          prev.map((ch) => ({
+            ...ch,
+            isConnected: false,
+            connectionError: event.reason || 'Disconnected',
+          }))
+        );
+        break;
+
+      case 'error':
+        console.error('[Tauri Centrifugo] Error:', event.error);
+        toast.error(`Connection error: ${event.error}`);
+        break;
+
+      case 'subscribed':
+        if (event.channel_id) {
+          debug('[Tauri Centrifugo] Subscribed to channel:', event.channel_id);
+          subscribedChannelsRef.current.add(event.channel_id);
+          setChannels((prev) =>
+            prev.map((ch) =>
+              ch.id === event.channel_id
+                ? { ...ch, isConnected: true, isConnecting: false, connectionError: null }
+                : ch
+            )
+          );
+          reconnectAttemptsRef.current.set(event.channel_id, 0);
+        }
+        break;
+
+      case 'subscription-error':
+        if (event.channel_id) {
+          debug('[Tauri Centrifugo] Subscription error:', event.channel_id, event.error);
+          setChannels((prev) =>
+            prev.map((ch) =>
+              ch.id === event.channel_id
+                ? { ...ch, isConnected: false, isConnecting: false, connectionError: event.error || 'Subscription error' }
+                : ch
+            )
+          );
+        }
+        break;
+
+      case 'publication':
+        if (isPausedRef.current) return;
+        if (event.channel_id && event.data) {
+          try {
+            const data = event.data as CentrifugoMessage;
+            const channelId = event.channel_id;
+            if (data.type === 'log') {
+              const entry = data.data as LogEntry;
+              const processed = await processEntryRef.current?.(entry, channelId);
+              if (processed) queueLogs([processed], channelId);
+            } else if (data.type === 'batch') {
+              const entries = data.data as LogEntry[];
+              const processed = await Promise.all(
+                entries.map((entry) => processEntryRef.current?.(entry, channelId))
+              );
+              queueLogs(processed.filter((p): p is LogEntry => p !== undefined), channelId);
+            }
+          } catch (e) {
+            console.error('Failed to process Tauri Centrifugo message:', e);
+          }
+        }
+        break;
+    }
+  }, [queueLogs]);
+
+  // Initialize Centrifugo connection (Tauri or Web Worker)
   useEffect(() => {
     let mounted = true;
+
+    const initTauri = async () => {
+      try {
+        debug('[Tauri Centrifugo] Initializing...');
+
+        // Set up event listener first
+        const unlisten = await listenCentrifugoEvents(handleTauriEvent);
+        if (!mounted) {
+          unlisten();
+          return;
+        }
+        tauriUnlistenRef.current = unlisten;
+
+        // Connect to Centrifugo via Tauri backend
+        const token = await fetchCentrifugoToken();
+        if (!mounted) return;
+
+        const url = getCentrifugoUrl();
+        debug('[Tauri Centrifugo] Connecting to:', url);
+        await tauriConnect(url, token);
+      } catch (error) {
+        if (mounted) {
+          const message = error instanceof Error ? error.message : 'Failed to connect';
+          console.error('[Tauri Centrifugo] Connection failed:', message);
+          toast.error(`Failed to connect: ${message}`);
+        }
+      }
+    };
 
     const initWorker = async () => {
       try {
@@ -601,23 +732,38 @@ export function useChannelManager(): UseChannelManagerResult {
       }
     };
 
-    initWorker();
+    // Use Tauri if available, otherwise use Web Worker
+    if (IS_TAURI) {
+      debug('[ChannelManager] Running in Tauri mode');
+      initTauri();
+    } else {
+      debug('[ChannelManager] Running in Web Worker mode');
+      initWorker();
+    }
 
     return () => {
       mounted = false;
-      if (workerRef.current) {
-        workerRef.current.postMessage({ type: 'disconnect' });
-        workerRef.current.terminate();
-        workerRef.current = null;
+      if (IS_TAURI) {
+        if (tauriUnlistenRef.current) {
+          tauriUnlistenRef.current();
+          tauriUnlistenRef.current = null;
+        }
+        tauriDisconnect().catch(console.error);
+      } else {
+        if (workerRef.current) {
+          workerRef.current.postMessage({ type: 'disconnect' });
+          workerRef.current.terminate();
+          workerRef.current = null;
+        }
       }
       subscribedChannelsRef.current.clear();
     };
-  }, [queueLogs]);
+  }, [queueLogs, handleTauriEvent]);
 
-  // Subscribe to a channel via Centrifugo Worker
+  // Subscribe to a channel via Centrifugo (Tauri or Worker)
   const connectChannel = useCallback(
     (channelId: string, channelName: string) => {
-      debug('connectChannel called', { channelId, channelName });
+      debug('connectChannel called', { channelId, channelName, isTauri: IS_TAURI });
 
       setChannels((prev) =>
         prev.map((ch) =>
@@ -627,25 +773,39 @@ export function useChannelManager(): UseChannelManagerResult {
         )
       );
 
-      // Wait for worker to be ready
-      if (!workerRef.current) {
-        debug('connectChannel: Worker not ready, will retry');
-        const timeout = window.setTimeout(() => {
-          const channel = channelsRef.current.find((ch) => ch.id === channelId);
-          if (channel) {
-            connectChannel(channelId, channelName);
-          }
-        }, 1000);
-        reconnectTimeoutsRef.current.set(channelId, timeout);
-        return;
-      }
+      if (IS_TAURI) {
+        // Subscribe via Tauri backend
+        tauriSubscribe(channelId, channelName).catch((error) => {
+          console.error('Tauri subscribe failed:', error);
+          setChannels((prev) =>
+            prev.map((ch) =>
+              ch.id === channelId
+                ? { ...ch, isConnecting: false, connectionError: String(error) }
+                : ch
+            )
+          );
+        });
+      } else {
+        // Wait for worker to be ready
+        if (!workerRef.current) {
+          debug('connectChannel: Worker not ready, will retry');
+          const timeout = window.setTimeout(() => {
+            const channel = channelsRef.current.find((ch) => ch.id === channelId);
+            if (channel) {
+              connectChannel(channelId, channelName);
+            }
+          }, 1000);
+          reconnectTimeoutsRef.current.set(channelId, timeout);
+          return;
+        }
 
-      // Send subscribe message to worker
-      workerRef.current.postMessage({
-        type: 'subscribe',
-        channelId,
-        channelName,
-      });
+        // Send subscribe message to worker
+        workerRef.current.postMessage({
+          type: 'subscribe',
+          channelId,
+          channelName,
+        });
+      }
     },
     []
   );
@@ -682,8 +842,10 @@ export function useChannelManager(): UseChannelManagerResult {
 
   // Remove a channel
   const removeChannel = useCallback((id: string) => {
-    // Unsubscribe from Centrifugo channel via worker
-    if (workerRef.current) {
+    // Unsubscribe from Centrifugo channel
+    if (IS_TAURI) {
+      tauriUnsubscribe(id).catch(console.error);
+    } else if (workerRef.current) {
       workerRef.current.postMessage({ type: 'unsubscribe', channelId: id });
     }
     subscribedChannelsRef.current.delete(id);

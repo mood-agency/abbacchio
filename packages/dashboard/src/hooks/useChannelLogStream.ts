@@ -90,6 +90,47 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
   const prevFiltersRef = useRef({ levelFilters, namespaceFilters, timeRange, searchQuery, channelName });
 
 
+  // Ref for debounced metadata loading
+  const metadataTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const METADATA_DEBOUNCE_MS = 300;
+
+  // Load metadata (counts) with debounce - these queries are expensive on large datasets
+  const loadMetadata = useCallback(async (channelName: string, currentMinTime: number | undefined) => {
+    const countFilterOptions = {
+      minTime: currentMinTime,
+      channel: channelName,
+    };
+
+    try {
+      const [namespaces, levelCountsResult, namespaceCountsResult] = await Promise.all([
+        getDistinctNamespaces(channelName),
+        getLevelCounts(countFilterOptions),
+        getNamespaceCounts(countFilterOptions),
+      ]);
+
+      setAvailableNamespaces(namespaces);
+      setLevelCounts(levelCountsResult);
+      setNamespaceCounts(namespaceCountsResult);
+    } catch (error) {
+      console.error('Failed to load metadata:', error);
+    }
+  }, []);
+
+  // Schedule debounced metadata load
+  const scheduleMetadataLoad = useCallback((channelName: string, currentMinTime: number | undefined, immediate = false) => {
+    if (metadataTimeoutRef.current) {
+      clearTimeout(metadataTimeoutRef.current);
+    }
+
+    if (immediate) {
+      loadMetadata(channelName, currentMinTime);
+    } else {
+      metadataTimeoutRef.current = setTimeout(() => {
+        loadMetadata(channelName, currentMinTime);
+      }, METADATA_DEBOUNCE_MS);
+    }
+  }, [loadMetadata]);
+
   // Load logs from SQLite with current filters
   const loadLogs = useCallback(async (isInitialLoad = false) => {
     if (!channelName) {
@@ -124,14 +165,8 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
     };
 
     try {
-      // Base filter options for counts (respects time range but not level/namespace filters)
-      // This way the sidebar shows what's available to filter within the time range
-      const countFilterOptions = {
-        minTime: currentMinTime,
-        channel: channelName,
-      };
-
-      const [fetchedLogs, count, namespaces, levelCountsResult, namespaceCountsResult] = await Promise.all([
+      // Load logs and filtered count immediately (needed for pagination)
+      const [fetchedLogs, count] = await Promise.all([
         queryLogs(queryOptions),
         getFilteredCount({
           search: searchQuery || undefined,
@@ -140,22 +175,28 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
           minTime: currentMinTime,
           channel: channelName,
         }),
-        getDistinctNamespaces(channelName),
-        getLevelCounts(countFilterOptions),
-        getNamespaceCounts(countFilterOptions),
       ]);
 
       setLogs(fetchedLogs);
       setFilteredCount(count);
-      setAvailableNamespaces(namespaces);
-      setLevelCounts(levelCountsResult);
-      setNamespaceCounts(namespaceCountsResult);
+
+      // Load metadata with debounce (or immediately on initial load)
+      scheduleMetadataLoad(channelName, currentMinTime, isInitialLoad);
     } catch (error) {
       console.error('Failed to load logs:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, levelFilters, namespaceFilters, timeRange, channelName]);
+  }, [currentPage, pageSize, searchQuery, levelFilters, namespaceFilters, timeRange, channelName, scheduleMetadataLoad]);
+
+  // Cleanup metadata timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (metadataTimeoutRef.current) {
+        clearTimeout(metadataTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Track if this is the first load for this channel
   const isFirstLoadRef = useRef(true);

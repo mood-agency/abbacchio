@@ -84,12 +84,12 @@ import {
   Trash2,
   Unplug,
   Settings,
+  SearchX,
 } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbList,
   BreadcrumbItem,
-  BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 
@@ -127,7 +127,6 @@ export function LogViewer() {
     addChannel,
     removeChannel,
     updateChannelKey,
-    totalCount,
     clearChannelLogs,
     onNewLogs,
     onClear,
@@ -194,6 +193,16 @@ export function LogViewer() {
 
   // Sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Check if any filters are active (to distinguish "no logs" from "no matching logs")
+  const hasActiveFilters = useMemo(() => {
+    return (
+      searchQuery.length > 0 ||
+      levelFilters.length > 0 ||
+      namespaceFilters.length > 0 ||
+      timeRange !== 'all'
+    );
+  }, [searchQuery, levelFilters, namespaceFilters, timeRange]);
 
   // Calculate selected indices
   const selectedIndices = useMemo(() => {
@@ -656,8 +665,8 @@ export function LogViewer() {
 
         {/* Main content with sidebar */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar with filters - only shown when connected, has logs, and sidebar is open */}
-          {activeChannel?.isConnected && logs.length > 0 && isSidebarOpen && (
+          {/* Sidebar with filters - shown when connected, has logs or active filters, and sidebar is open */}
+          {activeChannel?.isConnected && (logs.length > 0 || hasActiveFilters) && isSidebarOpen && (
             <LogSidebar
               levelFilters={levelFilters}
               toggleLevel={toggleLevel}
@@ -675,24 +684,26 @@ export function LogViewer() {
 
           {/* Log content area */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            {/* Show filter bar and table only when there are logs */}
+            {/* Show filter bar when there are logs or active filters */}
+            {(logs.length > 0 || hasActiveFilters) && (
+              <FilterBar
+                ref={searchInputRef}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                matchCount={matchCount}
+                caseSensitive={caseSensitive}
+                setCaseSensitive={setCaseSensitive}
+                onClearFilters={clearFilters}
+                levelFilters={levelFilters}
+                namespaceFilters={namespaceFilters}
+                isPaused={isPaused}
+                onTogglePause={() => setIsPaused(!isPaused)}
+              />
+            )}
+
+            {/* Show table when there are logs */}
             {logs.length > 0 ? (
               <>
-                {/* Filter bar (search, actions) */}
-                <FilterBar
-                  ref={searchInputRef}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  matchCount={matchCount}
-                  caseSensitive={caseSensitive}
-                  setCaseSensitive={setCaseSensitive}
-                  onClearFilters={clearFilters}
-                  levelFilters={levelFilters}
-                  namespaceFilters={namespaceFilters}
-                  isPaused={isPaused}
-                  onTogglePause={() => setIsPaused(!isPaused)}
-                />
-
                 {/* Column headers */}
                 <div className="flex items-center text-xs font-medium text-muted-foreground tracking-wider border-y border-border bg-background relative z-10">
                   {/* Select all checkbox */}
@@ -733,7 +744,7 @@ export function LogViewer() {
                       if (!log) return null;
                       return (
                         <div
-                          key={`${log.id}-${searchQuery}`}
+                          key={log.id}
                           data-index={virtualItem.index}
                           ref={rowVirtualizer.measureElement}
                           style={{
@@ -780,6 +791,12 @@ export function LogViewer() {
                   <>
                     <Loader2 className="w-16 h-16 mb-4 opacity-50 animate-spin" />
                     <p className="text-lg">{tLogs('empty.connecting', { channel: activeChannel.name })}</p>
+                  </>
+                ) : hasActiveFilters ? (
+                  <>
+                    <SearchX className="w-16 h-16 mb-4 opacity-50" />
+                    <p className="text-lg font-medium">{tLogs('empty.noMatches.title')}</p>
+                    <p className="text-sm mt-1">{tLogs('empty.noMatches.description')}</p>
                   </>
                 ) : (
                   <div className="text-center w-[625px] px-6 py-8">

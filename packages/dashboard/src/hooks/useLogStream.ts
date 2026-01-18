@@ -95,10 +95,13 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
   const loadLogs = useCallback(async () => {
     const offset = (currentPage - 1) * pageSize;
 
+    // Convert FilterLevel to FilterLevels (exclude 'all')
+    const levels = levelFilter && levelFilter !== 'all' ? [levelFilter] : undefined;
+
     const options = {
       search: searchQuery || undefined,
-      level: levelFilter,
-      namespace: namespaceFilter || undefined,
+      levels,
+      namespaces: namespaceFilter ? [namespaceFilter] : undefined,
       channel: urlChannel || undefined,
       limit: pageSize,
       offset,
@@ -109,8 +112,8 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
         queryLogs(options),
         getFilteredCount({
           search: searchQuery || undefined,
-          level: levelFilter,
-          namespace: namespaceFilter || undefined,
+          levels,
+          namespaces: namespaceFilter ? [namespaceFilter] : undefined,
           channel: urlChannel || undefined,
         }),
         getDistinctNamespaces(),

@@ -2,7 +2,11 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 
 const DB_PATH = '/abbacchio-logs.sqlite3';
 
-let db: ReturnType<InstanceType<typeof import('@sqlite.org/sqlite-wasm').default>['oo1']['OpfsDb']> | null = null;
+// Type for SQLite row data
+type SQLiteRow = Record<string, unknown>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let db: any = null;
 
 async function initDB() {
   const sqlite3 = await sqlite3InitModule({
@@ -218,7 +222,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           sql,
           bind: params,
           rowMode: 'object',
-          callback: (row) => rows.push(row as Record<string, unknown>),
+          callback: (row: SQLiteRow) => rows.push(row as Record<string, unknown>),
         });
 
         self.postMessage({ id, success: true, result: rows });
@@ -283,7 +287,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           sql: `SELECT COUNT(*) as count FROM logs ${where}`,
           bind: params,
           rowMode: 'object',
-          callback: (row) => { count = (row as { count: number }).count; },
+          callback: (row: SQLiteRow) => { count = (row as { count: number }).count; },
         });
 
         self.postMessage({ id, success: true, result: count });
@@ -295,7 +299,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         db.exec({
           sql: 'SELECT COUNT(*) as count FROM logs',
           rowMode: 'object',
-          callback: (row) => { count = (row as { count: number }).count; },
+          callback: (row: SQLiteRow) => { count = (row as { count: number }).count; },
         });
         self.postMessage({ id, success: true, result: count });
         break;
@@ -309,13 +313,13 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
             sql: `SELECT DISTINCT namespace FROM logs WHERE namespace IS NOT NULL AND channel = ? ORDER BY namespace`,
             bind: [options.channel],
             rowMode: 'object',
-            callback: (row) => namespaces.push((row as { namespace: string }).namespace),
+            callback: (row: SQLiteRow) => namespaces.push((row as { namespace: string }).namespace),
           });
         } else {
           db.exec({
             sql: `SELECT DISTINCT namespace FROM logs WHERE namespace IS NOT NULL ORDER BY namespace`,
             rowMode: 'object',
-            callback: (row) => namespaces.push((row as { namespace: string }).namespace),
+            callback: (row: SQLiteRow) => namespaces.push((row as { namespace: string }).namespace),
           });
         }
         self.postMessage({ id, success: true, result: namespaces });
@@ -348,13 +352,13 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
             sql: 'SELECT COUNT(*) as count FROM logs WHERE (encrypted = 1 OR decryption_failed = 1) AND channel = ?',
             bind: [options.channel],
             rowMode: 'object',
-            callback: (row) => { count = (row as { count: number }).count; },
+            callback: (row: SQLiteRow) => { count = (row as { count: number }).count; },
           });
         } else {
           db.exec({
             sql: 'SELECT COUNT(*) as count FROM logs WHERE encrypted = 1 OR decryption_failed = 1',
             rowMode: 'object',
-            callback: (row) => { count = (row as { count: number }).count; },
+            callback: (row: SQLiteRow) => { count = (row as { count: number }).count; },
           });
         }
         self.postMessage({ id, success: true, result: count > 0 });
@@ -369,13 +373,13 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
             sql: `SELECT * FROM logs WHERE ((encrypted = 1 AND encrypted_data IS NOT NULL) OR (decryption_failed = 1 AND encrypted_data IS NOT NULL)) AND channel = ?`,
             bind: [options.channel],
             rowMode: 'object',
-            callback: (row) => rows.push(row as Record<string, unknown>),
+            callback: (row: SQLiteRow) => rows.push(row as Record<string, unknown>),
           });
         } else {
           db.exec({
             sql: `SELECT * FROM logs WHERE (encrypted = 1 AND encrypted_data IS NOT NULL) OR (decryption_failed = 1 AND encrypted_data IS NOT NULL)`,
             rowMode: 'object',
-            callback: (row) => rows.push(row as Record<string, unknown>),
+            callback: (row: SQLiteRow) => rows.push(row as Record<string, unknown>),
           });
         }
         self.postMessage({ id, success: true, result: rows });
@@ -414,7 +418,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           sql: `SELECT COUNT(*) as count FROM logs ${where}`,
           bind: params,
           rowMode: 'object',
-          callback: (row) => { counts.all = (row as { count: number }).count; },
+          callback: (row: SQLiteRow) => { counts.all = (row as { count: number }).count; },
         });
 
         // Get counts per level
@@ -422,7 +426,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           sql: `SELECT level_label, COUNT(*) as count FROM logs ${where} GROUP BY level_label`,
           bind: params,
           rowMode: 'object',
-          callback: (row) => {
+          callback: (row: SQLiteRow) => {
             const r = row as { level_label: string; count: number };
             if (r.level_label in counts) {
               counts[r.level_label] = r.count;
@@ -458,7 +462,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           sql: `SELECT namespace, COUNT(*) as count FROM logs ${where} GROUP BY namespace ORDER BY namespace`,
           bind: params,
           rowMode: 'object',
-          callback: (row) => {
+          callback: (row: SQLiteRow) => {
             const r = row as { namespace: string; count: number };
             counts[r.namespace] = r.count;
           },
@@ -479,21 +483,21 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         db.exec({
           sql: 'SELECT COUNT(DISTINCT channel) as count FROM logs',
           rowMode: 'object',
-          callback: (row) => { stats.channelCount = (row as { count: number }).count; },
+          callback: (row: SQLiteRow) => { stats.channelCount = (row as { count: number }).count; },
         });
 
         // Get total number of records
         db.exec({
           sql: 'SELECT COUNT(*) as count FROM logs',
           rowMode: 'object',
-          callback: (row) => { stats.totalRecords = (row as { count: number }).count; },
+          callback: (row: SQLiteRow) => { stats.totalRecords = (row as { count: number }).count; },
         });
 
         // Get database size (page_count * page_size)
         db.exec({
           sql: 'SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()',
           rowMode: 'object',
-          callback: (row) => { stats.databaseSize = (row as { size: number }).size; },
+          callback: (row: SQLiteRow) => { stats.databaseSize = (row as { size: number }).size; },
         });
 
         self.postMessage({ id, success: true, result: stats });

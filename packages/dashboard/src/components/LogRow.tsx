@@ -127,6 +127,17 @@ export const LogRow = memo(function LogRow({
   // Cache the JSON stringified data to avoid recalculating on each render
   const dataString = useMemo(() => JSON.stringify(log.data), [log.data]);
 
+  // Memoize highlighting results to avoid regex operations on every render
+  const highlightedMsg = useMemo(
+    () => searchQuery ? highlightText(log.msg, searchQuery, caseSensitive) : log.msg,
+    [log.msg, searchQuery, caseSensitive]
+  );
+
+  const highlightedData = useMemo(
+    () => searchQuery ? highlightData(dataString, searchQuery, caseSensitive) : dataString,
+    [dataString, searchQuery, caseSensitive]
+  );
+
   // Handle clicking on the row content to open drawer
   const handleRowClick = useCallback(() => {
     if (onDataClick) {
@@ -241,7 +252,7 @@ export const LogRow = memo(function LogRow({
             </Tooltip>
           )}
           <span className={`truncate ${decryptionFailed ? 'text-destructive' : isEncrypted ? 'text-yellow-400 italic' : ''}`}>
-            {highlightText(log.msg, searchQuery, caseSensitive)}
+            {highlightedMsg}
           </span>
         </div>
 
@@ -277,7 +288,7 @@ export const LogRow = memo(function LogRow({
                 </TooltipContent>
               </Tooltip>
             ) : showData ? (
-              <span className="truncate block">{highlightData(dataString, searchQuery, caseSensitive)}</span>
+              <span className="truncate block">{highlightedData}</span>
             ) : null}
           </div>
         </div>
