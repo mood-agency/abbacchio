@@ -244,3 +244,17 @@ export async function getSearchMatchCount(options: SearchMatchCountOptions): Pro
   await initDatabase();
   return sendMessage<number>('getSearchMatchCount', options);
 }
+
+export interface PruneOptions {
+  /** Maximum age in milliseconds. Logs older than this will be deleted. Default: 7 days */
+  maxAgeMs?: number;
+}
+
+/**
+ * Delete logs older than the specified max age (TTL cleanup)
+ * This helps prevent unbounded database growth
+ */
+export async function pruneOldLogs(options?: PruneOptions): Promise<void> {
+  await initDatabase();
+  await sendMessage('pruneOldLogs', options);
+}

@@ -9,6 +9,100 @@ type SQLiteRow = Record<string, unknown>;
 let db: any = null;
 
 // ============================================================================
+// Hot Buffer - In-memory ring buffer for recent logs (microsecond access)
+// ============================================================================
+
+interface LogEntry {
+  id: string;
+  level: number;
+  level_label: string;
+  time: number;
+  msg: string;
+  namespace: string | null;
+  channel: string;
+  data: string;
+  encrypted: number;
+  encrypted_data: string | null;
+  decryption_failed: number;
+  was_encrypted: number;
+}
+
+// Ring buffer for recent logs per channel
+const hotBuffers = new Map<string, LogEntry[]>();
+const HOT_BUFFER_MAX_SIZE = 5000; // Keep last 5k logs per channel in memory
+
+function getOrCreateHotBuffer(channel: string): LogEntry[] {
+  let buffer = hotBuffers.get(channel);
+  if (!buffer) {
+    buffer = [];
+    hotBuffers.set(channel, buffer);
+  }
+  return buffer;
+}
+
+function addToHotBuffer(channel: string, log: LogEntry): void {
+  const buffer = getOrCreateHotBuffer(channel);
+  buffer.push(log);
+  // Trim if exceeds max size (FIFO)
+  if (buffer.length > HOT_BUFFER_MAX_SIZE) {
+    buffer.shift();
+  }
+}
+
+function clearHotBuffer(channel: string): void {
+  hotBuffers.delete(channel);
+}
+
+function clearAllHotBuffers(): void {
+  hotBuffers.clear();
+}
+
+// Query hot buffer with filters - returns matching logs in descending time order
+function queryHotBuffer(
+  channel: string,
+  options: {
+    levels?: string[];
+    namespaces?: string[];
+    minTime?: number;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }
+): { logs: LogEntry[]; total: number } {
+  const buffer = hotBuffers.get(channel);
+  if (!buffer || buffer.length === 0) {
+    return { logs: [], total: 0 };
+  }
+
+  // Filter logs
+  let filtered = buffer.filter(log => {
+    if (options.minTime && options.minTime > 0 && log.time < options.minTime) return false;
+    if (options.levels && options.levels.length > 0 && !options.levels.includes(log.level_label)) return false;
+    if (options.namespaces && options.namespaces.length > 0 && (!log.namespace || !options.namespaces.includes(log.namespace))) return false;
+    if (options.search) {
+      const searchLower = options.search.toLowerCase();
+      const msgMatch = log.msg.toLowerCase().includes(searchLower);
+      const dataMatch = log.data.toLowerCase().includes(searchLower);
+      const nsMatch = log.namespace?.toLowerCase().includes(searchLower);
+      if (!msgMatch && !dataMatch && !nsMatch) return false;
+    }
+    return true;
+  });
+
+  const total = filtered.length;
+
+  // Sort by time descending (most recent first)
+  filtered.sort((a, b) => b.time - a.time);
+
+  // Apply pagination
+  const offset = options.offset || 0;
+  const limit = options.limit || 100;
+  const logs = filtered.slice(offset, offset + limit);
+
+  return { logs, total };
+}
+
+// ============================================================================
 // Counter Cache - In-memory counters for O(1) lookups
 // ============================================================================
 
@@ -232,9 +326,12 @@ async function initDB() {
     // Column already exists, ignore error
   }
 
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time)`);
+  // Indexes for common query patterns
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time DESC)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_channel_time ON logs(channel, time DESC)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_channel_level_time ON logs(channel, level_label, time DESC)`);
 
-  // FTS5 for full-text search
+  // FTS5 for full-text search (lazy - created but triggers are conditional)
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS logs_fts USING fts5(
       msg, namespace, channel, data,
@@ -310,6 +407,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         db.exec('BEGIN TRANSACTION');
         try {
           for (const log of logs) {
+            const dataStr = JSON.stringify(log.data);
+
             db.exec({
               sql: `INSERT OR REPLACE INTO logs (id, level, level_label, time, msg, namespace, channel, data, encrypted, encrypted_data, decryption_failed, was_encrypted)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -321,7 +420,7 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
                 log.msg,
                 log.namespace ?? null,
                 log.channel,
-                JSON.stringify(log.data),
+                dataStr,
                 log.encrypted ? 1 : 0,
                 log.encryptedData ?? null,
                 log.decryptionFailed ? 1 : 0,
@@ -331,6 +430,22 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
 
             // Update in-memory counters and time buckets O(1)
             incrementCounters(log.channel, log.levelLabel, log.namespace ?? null, log.time);
+
+            // Add to hot buffer for fast in-memory queries
+            addToHotBuffer(log.channel, {
+              id: log.id,
+              level: log.level,
+              level_label: log.levelLabel,
+              time: log.time,
+              msg: log.msg,
+              namespace: log.namespace ?? null,
+              channel: log.channel,
+              data: dataStr,
+              encrypted: log.encrypted ? 1 : 0,
+              encrypted_data: log.encryptedData ?? null,
+              decryption_failed: log.decryptionFailed ? 1 : 0,
+              was_encrypted: log.wasEncrypted ? 1 : 0,
+            });
           }
           db.exec('COMMIT');
         } catch (err) {
@@ -352,6 +467,28 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           offset?: number;
         };
 
+        const limit = options.limit ?? 100;
+        const offset = options.offset ?? 0;
+
+        // Try hot buffer first for recent logs (page 1 with no complex filters)
+        if (options.channel && offset === 0) {
+          const hotResult = queryHotBuffer(options.channel, {
+            levels: options.levels,
+            namespaces: options.namespaces,
+            minTime: options.minTime,
+            search: options.search?.trim(),
+            limit,
+            offset: 0,
+          });
+
+          // If hot buffer has enough results, return them directly (microseconds)
+          if (hotResult.logs.length >= limit) {
+            self.postMessage({ id, success: true, result: hotResult.logs });
+            break;
+          }
+        }
+
+        // Fall back to SQLite for older logs or complex queries
         const conditions: string[] = [];
         const params: (string | number | null)[] = [];
 
@@ -398,13 +535,11 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         let sql = `SELECT * FROM logs ${where} ORDER BY time DESC`;
 
-        if (options.limit !== undefined) {
-          sql += ` LIMIT ?`;
-          params.push(options.limit);
-          if (options.offset !== undefined) {
-            sql += ` OFFSET ?`;
-            params.push(options.offset);
-          }
+        sql += ` LIMIT ?`;
+        params.push(limit);
+        if (offset > 0) {
+          sql += ` OFFSET ?`;
+          params.push(offset);
         }
 
         const rows: Record<string, unknown>[] = [];
@@ -428,6 +563,50 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           channel?: string;
         };
 
+        // Fast path: no filters except channel and maybe time - use counter cache
+        const hasLevelFilter = options.levels && options.levels.length > 0;
+        const hasNamespaceFilter = options.namespaces && options.namespaces.length > 0;
+        const hasSearchFilter = options.search?.trim();
+        const hasTimeFilter = options.minTime && options.minTime > 0;
+
+        if (options.channel && !hasLevelFilter && !hasNamespaceFilter && !hasSearchFilter && cacheInitialized) {
+          // Use in-memory counters O(1)
+          if (!hasTimeFilter) {
+            const counters = counterCache.get(options.channel);
+            self.postMessage({ id, success: true, result: counters?.total || 0 });
+            break;
+          } else {
+            // Use time bucket aggregation O(buckets)
+            const aggregated = aggregateBucketsFromTime(options.channel, options.minTime!);
+            self.postMessage({ id, success: true, result: aggregated.total });
+            break;
+          }
+        }
+
+        // If filtering by levels only (no search, no namespace), compute from cache
+        if (options.channel && hasLevelFilter && !hasNamespaceFilter && !hasSearchFilter && cacheInitialized) {
+          if (!hasTimeFilter) {
+            const counters = counterCache.get(options.channel);
+            if (counters) {
+              let total = 0;
+              for (const level of options.levels!) {
+                total += counters.levels[level] || 0;
+              }
+              self.postMessage({ id, success: true, result: total });
+              break;
+            }
+          } else {
+            const aggregated = aggregateBucketsFromTime(options.channel, options.minTime!);
+            let total = 0;
+            for (const level of options.levels!) {
+              total += aggregated.levels[level] || 0;
+            }
+            self.postMessage({ id, success: true, result: total });
+            break;
+          }
+        }
+
+        // Fall back to SQLite for complex queries (search, namespace filters)
         const conditions: string[] = [];
         const params: (string | number | null)[] = [];
 
@@ -438,13 +617,13 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         }
 
         // Filter by time range
-        if (options.minTime && options.minTime > 0) {
+        if (hasTimeFilter) {
           conditions.push(`logs.time >= ?`);
-          params.push(options.minTime);
+          params.push(options.minTime!);
         }
 
-        if (options.search?.trim()) {
-          const searchTerm = options.search.trim().replace(/['"]/g, '');
+        if (hasSearchFilter) {
+          const searchTerm = options.search!.trim().replace(/['"]/g, '');
           if (shouldUseLikeSearch(searchTerm)) {
             // Use LIKE for substring matching (short terms or numeric patterns)
             conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ? OR logs.channel LIKE ?)`);
@@ -458,17 +637,17 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         }
 
         // Filter by multiple levels (empty array = all levels)
-        if (options.levels && options.levels.length > 0) {
-          const placeholders = options.levels.map(() => '?').join(', ');
+        if (hasLevelFilter) {
+          const placeholders = options.levels!.map(() => '?').join(', ');
           conditions.push(`logs.level_label IN (${placeholders})`);
-          params.push(...options.levels);
+          params.push(...options.levels!);
         }
 
         // Filter by multiple namespaces (empty array = all namespaces)
-        if (options.namespaces && options.namespaces.length > 0) {
-          const placeholders = options.namespaces.map(() => '?').join(', ');
+        if (hasNamespaceFilter) {
+          const placeholders = options.namespaces!.map(() => '?').join(', ');
           conditions.push(`logs.namespace IN (${placeholders})`);
-          params.push(...options.namespaces);
+          params.push(...options.namespaces!);
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -519,8 +698,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       case 'clearAllLogs': {
         db.exec('DELETE FROM logs');
         db.exec("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
-        // Reset all in-memory counters
+        // Reset all in-memory counters and hot buffers
         resetAllCounters();
+        clearAllHotBuffers();
         self.postMessage({ id, success: true });
         break;
       }
@@ -532,8 +712,30 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           bind: [options.channel],
         });
         db.exec("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
-        // Reset counters for this channel
+        // Reset counters and hot buffer for this channel
         resetChannelCounters(options.channel);
+        clearHotBuffer(options.channel);
+        self.postMessage({ id, success: true });
+        break;
+      }
+
+      case 'pruneOldLogs': {
+        // TTL cleanup: delete logs older than specified max age
+        const options = payload as { maxAgeMs?: number };
+        const maxAgeMs = options?.maxAgeMs ?? 7 * 24 * 60 * 60 * 1000; // Default 7 days
+        const cutoffTime = Date.now() - maxAgeMs;
+
+        db.exec({
+          sql: 'DELETE FROM logs WHERE time < ?',
+          bind: [cutoffTime],
+        });
+        db.exec("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
+
+        // Re-initialize counters from remaining data
+        initializeCacheFromDB();
+        // Clear hot buffers (they only contain recent data anyway)
+        clearAllHotBuffers();
+
         self.postMessage({ id, success: true });
         break;
       }
