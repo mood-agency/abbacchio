@@ -8,6 +8,190 @@ type SQLiteRow = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any = null;
 
+// ============================================================================
+// Counter Cache - In-memory counters for O(1) lookups
+// ============================================================================
+
+interface ChannelCounters {
+  total: number;
+  levels: Record<string, number>;
+  namespaces: Record<string, number>;
+}
+
+// Counters for a single time bucket
+interface BucketCounters {
+  total: number;
+  levels: Record<string, number>;
+  namespaces: Record<string, number>;
+}
+
+// Cache of counters per channel (global totals)
+const counterCache = new Map<string, ChannelCounters>();
+
+// Time-bucketed counters: channel -> (hourTimestamp -> counters)
+// Buckets are 1-hour intervals for efficient time-range queries
+const timeBuckets = new Map<string, Map<number, BucketCounters>>();
+
+// Bucket size: 1 hour in milliseconds
+const BUCKET_SIZE_MS = 60 * 60 * 1000;
+
+// Whether cache has been initialized from SQLite
+let cacheInitialized = false;
+
+// Truncate timestamp to bucket boundary (start of hour)
+function getBucketTimestamp(time: number): number {
+  return Math.floor(time / BUCKET_SIZE_MS) * BUCKET_SIZE_MS;
+}
+
+function getOrCreateChannelCounters(channel: string): ChannelCounters {
+  let counters = counterCache.get(channel);
+  if (!counters) {
+    counters = {
+      total: 0,
+      levels: { trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 },
+      namespaces: {},
+    };
+    counterCache.set(channel, counters);
+  }
+  return counters;
+}
+
+function getOrCreateBucket(channel: string, bucketTime: number): BucketCounters {
+  let channelBuckets = timeBuckets.get(channel);
+  if (!channelBuckets) {
+    channelBuckets = new Map();
+    timeBuckets.set(channel, channelBuckets);
+  }
+
+  let bucket = channelBuckets.get(bucketTime);
+  if (!bucket) {
+    bucket = {
+      total: 0,
+      levels: { trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 },
+      namespaces: {},
+    };
+    channelBuckets.set(bucketTime, bucket);
+  }
+  return bucket;
+}
+
+function incrementCounters(channel: string, levelLabel: string, namespace: string | null, time: number): void {
+  // Update global counters
+  const counters = getOrCreateChannelCounters(channel);
+  counters.total++;
+  counters.levels[levelLabel] = (counters.levels[levelLabel] || 0) + 1;
+  if (namespace) {
+    counters.namespaces[namespace] = (counters.namespaces[namespace] || 0) + 1;
+  }
+
+  // Update time bucket
+  const bucketTime = getBucketTimestamp(time);
+  const bucket = getOrCreateBucket(channel, bucketTime);
+  bucket.total++;
+  bucket.levels[levelLabel] = (bucket.levels[levelLabel] || 0) + 1;
+  if (namespace) {
+    bucket.namespaces[namespace] = (bucket.namespaces[namespace] || 0) + 1;
+  }
+}
+
+// Aggregate counters from buckets within a time range
+function aggregateBucketsFromTime(channel: string, minTime: number): { levels: Record<string, number>; namespaces: Record<string, number>; total: number } {
+  const result = {
+    total: 0,
+    levels: { trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 } as Record<string, number>,
+    namespaces: {} as Record<string, number>,
+  };
+
+  const channelBuckets = timeBuckets.get(channel);
+  if (!channelBuckets) return result;
+
+  // Iterate over buckets that could contain logs >= minTime
+  channelBuckets.forEach((bucket, bucketTime) => {
+    // Include bucket if it could contain logs >= minTime
+    // A bucket starting at bucketTime contains logs from [bucketTime, bucketTime + BUCKET_SIZE_MS)
+    if (bucketTime + BUCKET_SIZE_MS > minTime) {
+      result.total += bucket.total;
+      for (const level of Object.keys(bucket.levels)) {
+        result.levels[level] = (result.levels[level] || 0) + bucket.levels[level];
+      }
+      for (const ns of Object.keys(bucket.namespaces)) {
+        result.namespaces[ns] = (result.namespaces[ns] || 0) + bucket.namespaces[ns];
+      }
+    }
+  });
+
+  return result;
+}
+
+function resetChannelCounters(channel: string): void {
+  counterCache.delete(channel);
+  timeBuckets.delete(channel);
+}
+
+function resetAllCounters(): void {
+  counterCache.clear();
+  timeBuckets.clear();
+  cacheInitialized = false;
+}
+
+// Initialize cache from SQLite (called on init or refresh)
+function initializeCacheFromDB(): void {
+  if (!db) return;
+
+  counterCache.clear();
+  timeBuckets.clear();
+
+  // Get all level counts grouped by channel
+  db.exec({
+    sql: `SELECT channel, level_label, COUNT(*) as count FROM logs GROUP BY channel, level_label`,
+    rowMode: 'object',
+    callback: (row: SQLiteRow) => {
+      const r = row as { channel: string; level_label: string; count: number };
+      const counters = getOrCreateChannelCounters(r.channel);
+      counters.levels[r.level_label] = r.count;
+      counters.total += r.count;
+    },
+  });
+
+  // Get all namespace counts grouped by channel
+  db.exec({
+    sql: `SELECT channel, namespace, COUNT(*) as count FROM logs WHERE namespace IS NOT NULL GROUP BY channel, namespace`,
+    rowMode: 'object',
+    callback: (row: SQLiteRow) => {
+      const r = row as { channel: string; namespace: string; count: number };
+      const counters = getOrCreateChannelCounters(r.channel);
+      counters.namespaces[r.namespace] = r.count;
+    },
+  });
+
+  // Populate time buckets - group by channel, hour bucket, and level
+  db.exec({
+    sql: `SELECT channel, (time / ${BUCKET_SIZE_MS}) * ${BUCKET_SIZE_MS} as bucket_time, level_label, COUNT(*) as count
+          FROM logs GROUP BY channel, bucket_time, level_label`,
+    rowMode: 'object',
+    callback: (row: SQLiteRow) => {
+      const r = row as { channel: string; bucket_time: number; level_label: string; count: number };
+      const bucket = getOrCreateBucket(r.channel, r.bucket_time);
+      bucket.levels[r.level_label] = r.count;
+      bucket.total += r.count;
+    },
+  });
+
+  // Populate time buckets for namespaces
+  db.exec({
+    sql: `SELECT channel, (time / ${BUCKET_SIZE_MS}) * ${BUCKET_SIZE_MS} as bucket_time, namespace, COUNT(*) as count
+          FROM logs WHERE namespace IS NOT NULL GROUP BY channel, bucket_time, namespace`,
+    rowMode: 'object',
+    callback: (row: SQLiteRow) => {
+      const r = row as { channel: string; bucket_time: number; namespace: string; count: number };
+      const bucket = getOrCreateBucket(r.channel, r.bucket_time);
+      bucket.namespaces[r.namespace] = r.count;
+    },
+  });
+
+  cacheInitialized = true;
+}
+
 async function initDB() {
   const sqlite3 = await sqlite3InitModule({
     print: console.log,
@@ -72,6 +256,9 @@ async function initDB() {
       VALUES ('delete', old.rowid, old.msg, old.namespace, old.channel, old.data);
     END
   `);
+
+  // Initialize counter cache from existing data
+  initializeCacheFromDB();
 
   return true;
 }
@@ -141,6 +328,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
                 log.wasEncrypted ? 1 : 0,
               ],
             });
+
+            // Update in-memory counters and time buckets O(1)
+            incrementCounters(log.channel, log.levelLabel, log.namespace ?? null, log.time);
           }
           db.exec('COMMIT');
         } catch (err) {
@@ -329,6 +519,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       case 'clearAllLogs': {
         db.exec('DELETE FROM logs');
         db.exec("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
+        // Reset all in-memory counters
+        resetAllCounters();
         self.postMessage({ id, success: true });
         break;
       }
@@ -340,6 +532,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           bind: [options.channel],
         });
         db.exec("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
+        // Reset counters for this channel
+        resetChannelCounters(options.channel);
         self.postMessage({ id, success: true });
         break;
       }
@@ -388,6 +582,41 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
 
       case 'getLevelCounts': {
         const options = payload as { channel?: string; minTime?: number };
+        const hasTimeFilter = options?.minTime && options.minTime > 0;
+
+        // Use in-memory cache when no time filter (O(1) lookup)
+        if (!hasTimeFilter && options?.channel && cacheInitialized) {
+          const counters = counterCache.get(options.channel);
+          const counts: Record<string, number> = {
+            all: counters?.total || 0,
+            trace: counters?.levels.trace || 0,
+            debug: counters?.levels.debug || 0,
+            info: counters?.levels.info || 0,
+            warn: counters?.levels.warn || 0,
+            error: counters?.levels.error || 0,
+            fatal: counters?.levels.fatal || 0,
+          };
+          self.postMessage({ id, success: true, result: counts });
+          break;
+        }
+
+        // Use time buckets when time filter is active O(buckets)
+        if (hasTimeFilter && options?.channel && cacheInitialized) {
+          const aggregated = aggregateBucketsFromTime(options.channel, options.minTime!);
+          const counts: Record<string, number> = {
+            all: aggregated.total,
+            trace: aggregated.levels.trace || 0,
+            debug: aggregated.levels.debug || 0,
+            info: aggregated.levels.info || 0,
+            warn: aggregated.levels.warn || 0,
+            error: aggregated.levels.error || 0,
+            fatal: aggregated.levels.fatal || 0,
+          };
+          self.postMessage({ id, success: true, result: counts });
+          break;
+        }
+
+        // Fall back to SQLite query when cache not initialized
         const conditions: string[] = [];
         const params: (string | number | null)[] = [];
 
@@ -396,10 +625,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           params.push(options.channel);
         }
 
-        // Apply time range filter so counts reflect the selected time window
-        if (options?.minTime && options.minTime > 0) {
+        if (hasTimeFilter) {
           conditions.push(`time >= ?`);
-          params.push(options.minTime);
+          params.push(options.minTime!);
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -440,6 +668,24 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
 
       case 'getNamespaceCounts': {
         const options = payload as { channel?: string; minTime?: number };
+        const hasTimeFilter = options?.minTime && options.minTime > 0;
+
+        // Use in-memory cache when no time filter (O(1) lookup)
+        if (!hasTimeFilter && options?.channel && cacheInitialized) {
+          const counters = counterCache.get(options.channel);
+          const counts: Record<string, number> = { ...(counters?.namespaces || {}) };
+          self.postMessage({ id, success: true, result: counts });
+          break;
+        }
+
+        // Use time buckets when time filter is active O(buckets)
+        if (hasTimeFilter && options?.channel && cacheInitialized) {
+          const aggregated = aggregateBucketsFromTime(options.channel, options.minTime!);
+          self.postMessage({ id, success: true, result: aggregated.namespaces });
+          break;
+        }
+
+        // Fall back to SQLite query when cache not initialized
         const conditions: string[] = ['namespace IS NOT NULL'];
         const params: (string | number | null)[] = [];
 
@@ -448,10 +694,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           params.push(options.channel);
         }
 
-        // Apply time range filter so counts reflect the selected time window
-        if (options?.minTime && options.minTime > 0) {
+        if (hasTimeFilter) {
           conditions.push(`time >= ?`);
-          params.push(options.minTime);
+          params.push(options.minTime!);
         }
 
         const where = `WHERE ${conditions.join(' AND ')}`;

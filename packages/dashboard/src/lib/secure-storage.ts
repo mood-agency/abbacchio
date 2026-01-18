@@ -73,7 +73,7 @@ async function encryptData(data: string, password: string): Promise<{ encrypted:
   const key = await deriveKey(password, salt);
 
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer },
+    { name: 'AES-GCM', iv },
     key,
     encoder.encode(data)
   );
@@ -96,13 +96,13 @@ async function decryptData(encryptedData: string, password: string, saltBase64: 
   const combined = Uint8Array.from(atob(encryptedData), c => c.charCodeAt(0));
   const salt = Uint8Array.from(atob(saltBase64), c => c.charCodeAt(0));
 
-  const iv = combined.slice(0, IV_LENGTH);
-  const ciphertext = combined.slice(IV_LENGTH);
+  const iv = new Uint8Array(combined.buffer, combined.byteOffset, IV_LENGTH);
+  const ciphertext = new Uint8Array(combined.buffer, combined.byteOffset + IV_LENGTH);
 
   const key = await deriveKey(password, salt);
 
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer },
+    { name: 'AES-GCM', iv },
     key,
     ciphertext
   );
