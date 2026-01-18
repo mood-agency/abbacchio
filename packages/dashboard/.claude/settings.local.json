@@ -26,7 +26,9 @@
       "Bash(git -C \"C:\\\\Users\\\\argen\\\\Documents\\\\GitHub\\\\pino-live\" commit -m \"Add pause button, data drawer, interactive JSON view, and UI refinements\n\n- Add pause/resume button to stop incoming logs while keeping SSE connection open\n- Create interactive JSON view component with expand/collapse and copy functionality\n- Add data drawer \\(Sheet\\) to display log payload in a side panel on click\n- Move persistence, clear, and disconnect buttons to dropdown menu for cleaner UI\n- Simplify key dialog to single input with inline generate button\n- Remove encryption status column from log rows for cleaner display\n- Update translations for new features \\(EN/ES\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")",
       "Bash(git -C \"C:\\\\Users\\\\argen\\\\Documents\\\\GitHub\\\\pino-live\" commit -m \"Reorganize header menus, add settings icon, and UI improvements\n\n- Split header menu: gear icon for settings, three dots for channel options\n- Move pause button to left side of FilterBar with vertical divider\n- Add graceful SSE disconnect endpoint to API for clean channel disconnection\n- Pre-check connection limits before establishing SSE connections\n- Add sidebar title and improve filter section styling\n- Update interactive JSON view with better expand/collapse UX\n- Simplify FilterBar by removing channel actions \\(moved to header\\)\n- Add dotenv dependency for API environment configuration\n- Update translations for new settings and channel options menus \\(EN/ES\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")",
       "Bash(pnpm build:*)",
-      "Bash(pnpm approve-builds:*)"
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm config set:*)",
+      "Bash(pnpm rebuild:*)"
     ]
   }
 }
