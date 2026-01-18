@@ -37,10 +37,10 @@ export function StatusBar({ levelFilter, search }: StatusBarProps): React.ReactE
           <Text bold>/</Text>:search
         </Text>
         <Text dimColor>
-          <Text bold>?</Text>:help
+          <Text bold>C</Text>:channel
         </Text>
         <Text dimColor>
-          <Text bold>c</Text>:clear
+          <Text bold>?</Text>:help
         </Text>
       </Box>
 

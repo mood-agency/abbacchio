@@ -13,6 +13,7 @@ interface KeyBindingsOptions {
   onSearch: () => void;
   onLevelFilter: (level: LogLevelNumber | null) => void;
   onClear: () => void;
+  onChannelSelector: () => void;
   disabled?: boolean;
 }
 
@@ -28,6 +29,7 @@ export function useKeyBindings(options: KeyBindingsOptions): void {
     onSearch,
     onLevelFilter,
     onClear,
+    onChannelSelector,
     disabled = false,
   } = options;
 
@@ -98,9 +100,14 @@ export function useKeyBindings(options: KeyBindingsOptions): void {
           onLevelFilter(60); // fatal
           break;
 
-        // Clear logs
+        // Clear logs (lowercase c)
         case 'c':
           onClear();
+          break;
+
+        // Channel selector (uppercase C)
+        case 'C':
+          onChannelSelector();
           break;
 
         // Escape - could be used for various things
@@ -123,6 +130,7 @@ export function useKeyBindings(options: KeyBindingsOptions): void {
       onSearch,
       onLevelFilter,
       onClear,
+      onChannelSelector,
     ]
   );
 

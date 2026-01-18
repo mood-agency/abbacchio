@@ -1,8 +1,15 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 
 interface HelpOverlayProps {
   onClose: () => void;
+}
+
+// Hook to close on any key press
+function useCloseOnAnyKey(onClose: () => void): void {
+  useInput(() => {
+    onClose();
+  });
 }
 
 const SHORTCUTS = [
@@ -21,12 +28,15 @@ const SHORTCUTS = [
   { category: 'Actions', items: [
     { key: 'p / Space', desc: 'Pause/Resume' },
     { key: 'c', desc: 'Clear logs' },
+    { key: 'C', desc: 'Change channel' },
     { key: '?', desc: 'Toggle this help' },
     { key: 'q', desc: 'Quit' },
   ]},
 ];
 
 export function HelpOverlay({ onClose }: HelpOverlayProps): React.ReactElement {
+  useCloseOnAnyKey(onClose);
+
   return (
     <Box
       flexDirection="column"
