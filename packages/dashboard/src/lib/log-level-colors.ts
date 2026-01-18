@@ -5,14 +5,14 @@ import type { LogLevelLabel, FilterLevel } from '../types';
  * Used across the sidebar filters and table badges for consistency.
  */
 
-// Hex color values for log level chips
+// Hex color values for log level chips (pastel palette)
 export const LOG_LEVEL_HEX: Record<LogLevelLabel, { bg: string; text: string }> = {
-  fatal: { bg: '#8B0000', text: '#FFFFFF' },  // Dark Red - Critical failure
-  error: { bg: '#FF0000', text: '#FFFFFF' },  // Bright Red - Non-fatal error
-  warn:  { bg: '#FFA500', text: '#000000' },  // Orange/Amber - Warning
-  info:  { bg: '#0000FF', text: '#FFFFFF' },  // Blue - Normal operational
-  debug: { bg: '#808080', text: '#FFFFFF' },  // Grey - Diagnostic info
-  trace: { bg: '#D3D3D3', text: '#000000' },  // Light Grey - Step-by-step execution
+  fatal: { bg: '#F8D7DA', text: '#721C24' },  // Soft pink - Critical failure
+  error: { bg: '#FECACA', text: '#991B1B' },  // Light red/coral - Non-fatal error
+  warn:  { bg: '#FEF3C7', text: '#92400E' },  // Soft amber - Warning
+  info:  { bg: '#DBEAFE', text: '#1E40AF' },  // Light blue - Normal operational
+  debug: { bg: '#E5E7EB', text: '#374151' },  // Soft grey - Diagnostic info
+  trace: { bg: '#F3F4F6', text: '#6B7280' },  // Very light grey - Step-by-step execution
 };
 
 // Base color palette for each log level (Tailwind classes for non-badge uses)

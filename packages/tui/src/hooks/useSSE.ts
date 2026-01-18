@@ -4,6 +4,7 @@ import type { LogEntry, ConnectionStatus } from '../types/index.js';
 
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_DELAY = 30000;
+const HEARTBEAT_TIMEOUT = 45000; // Reconnect if no ping received in 45s
 
 interface UseSSEOptions {
   apiUrl: string;
@@ -27,7 +28,19 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectDelayRef = useRef(RECONNECT_DELAY);
+
+  // Reset heartbeat timer - called on any server activity
+  const resetHeartbeat = useCallback((onTimeout: () => void) => {
+    if (heartbeatTimeoutRef.current) {
+      clearTimeout(heartbeatTimeoutRef.current);
+    }
+    heartbeatTimeoutRef.current = setTimeout(() => {
+      // Connection seems stale, trigger reconnect
+      onTimeout();
+    }, HEARTBEAT_TIMEOUT);
+  }, []);
 
   const connect = useCallback(() => {
     // Clean up existing connection
@@ -37,6 +50,9 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
+    if (heartbeatTimeoutRef.current) {
+      clearTimeout(heartbeatTimeoutRef.current);
+    }
 
     setStatus('connecting');
     setError(null);
@@ -45,10 +61,18 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
+    // Heartbeat timeout handler
+    const handleHeartbeatTimeout = () => {
+      setError('Connection stale, reconnecting...');
+      es.close();
+      reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_DELAY);
+    };
+
     es.onopen = () => {
       setStatus('connected');
       setError(null);
       reconnectDelayRef.current = RECONNECT_DELAY;
+      resetHeartbeat(handleHeartbeatTimeout);
     };
 
     es.onerror = (e: Event) => {
@@ -71,6 +95,7 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
     };
 
     es.addEventListener('log', (e: MessageEvent) => {
+      resetHeartbeat(handleHeartbeatTimeout);
       try {
         const log: LogEntry = JSON.parse(e.data);
         onLog?.(log);
@@ -80,6 +105,7 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
     });
 
     es.addEventListener('batch', (e: MessageEvent) => {
+      resetHeartbeat(handleHeartbeatTimeout);
       try {
         const logs: LogEntry[] = JSON.parse(e.data);
         onBatch?.(logs);
@@ -89,6 +115,7 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
     });
 
     es.addEventListener('channels', (e: MessageEvent) => {
+      resetHeartbeat(handleHeartbeatTimeout);
       try {
         const channels: string[] = JSON.parse(e.data);
         onChannels?.(channels);
@@ -98,9 +125,10 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
     });
 
     es.addEventListener('ping', () => {
-      // Keep-alive, no action needed
+      // Keep-alive - reset heartbeat timer
+      resetHeartbeat(handleHeartbeatTimeout);
     });
-  }, [apiUrl, channel, onLog, onBatch, onChannels]);
+  }, [apiUrl, channel, onLog, onBatch, onChannels, resetHeartbeat]);
 
   const reconnect = useCallback(() => {
     reconnectDelayRef.current = RECONNECT_DELAY;
@@ -116,6 +144,9 @@ export function useSSE(options: UseSSEOptions): UseSSEResult {
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (heartbeatTimeoutRef.current) {
+        clearTimeout(heartbeatTimeoutRef.current);
       }
     };
   }, [connect]);

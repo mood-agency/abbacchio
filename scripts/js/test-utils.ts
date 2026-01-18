@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 
 export const API_URL = process.env.API_URL || 'http://localhost:4000/api/logs';
 
-export const defaultChannels = ['API', 'Worker1', 'Worker2','Worker3','Worker4','Worker5'] as const;
+export const defaultChannels = ['API', 'Worker1', 'Worker2','Worker3','Worker4','Worker5','Worker6','Worker7'] as const;
 
 export const namespaces = ['init', 'processing', 'shutdown', 'cache', 'worker', 'scheduler'];
 
