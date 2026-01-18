@@ -47,15 +47,11 @@ function extractDataFields(incoming: IncomingLog): Record<string, unknown> {
 }
 
 /**
- * Event emitter for broadcasting logs via SSE
- * No storage - logs are only streamed in real-time to connected clients
- * Supports multiple channels (apps) with per-channel and global events
+ * Log buffer for managing channels and publishing logs to Centrifugo
+ * No storage - logs are only streamed in real-time via Centrifugo
+ * Supports multiple channels (apps)
  *
  * Events emitted:
- * - 'log': (entry: LogEntry, serialized: string) - single log with pre-serialized JSON
- * - 'log:{channel}': (entry: LogEntry, serialized: string) - channel-specific log
- * - 'batch': (entries: LogEntry[], serialized: string) - batch with pre-serialized JSON
- * - 'batch:{channel}': (entries: LogEntry[], serialized: string) - channel-specific batch
  * - 'channel:added': (channel: string) - new channel registered
  * - 'clear': (channel?: string) - logs cleared
  */
@@ -236,14 +232,6 @@ export class LogBuffer extends EventEmitter {
       console.error('[Centrifugo] Failed to publish log:', err.message);
     });
 
-    // Pre-serialize once for all subscribers (legacy SSE support)
-    const serialized = JSON.stringify(entry);
-
-    // Emit event for SSE subscribers (both channel-specific and global)
-    // Include pre-serialized string as second argument
-    this.emit('log', entry, serialized);
-    this.emit(`log:${channel}`, entry, serialized);
-
     return entry;
   }
 
@@ -266,13 +254,6 @@ export class LogBuffer extends EventEmitter {
     centrifugoPublish(`logs:${channel}`, { type: 'batch', data: entries }).catch((err) => {
       console.error('[Centrifugo] Failed to publish batch:', err.message);
     });
-
-    // Pre-serialize once for all subscribers (legacy SSE support)
-    const serialized = JSON.stringify(entries);
-
-    // Emit batch event (both channel-specific and global)
-    this.emit('batch', entries, serialized);
-    this.emit(`batch:${channel}`, entries, serialized);
 
     return entries;
   }
@@ -345,16 +326,6 @@ export class LogBuffer extends EventEmitter {
    */
   get channelCount(): number {
     return this.channels.size;
-  }
-
-  /**
-   * Subscribe to new logs (all channels or specific channel)
-   * Callback receives (entry, serializedJson)
-   */
-  subscribe(callback: (entry: LogEntry, serialized: string) => void, channel?: string): () => void {
-    const event = channel ? `log:${channel}` : 'log';
-    this.on(event, callback);
-    return () => this.off(event, callback);
   }
 
   /**

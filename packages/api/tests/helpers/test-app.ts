@@ -19,11 +19,6 @@ export function createTestApp(options: CreateTestAppOptions = {}) {
     app.use('/api/*', async (c, next) => {
       const key = c.req.header('X-API-KEY') || c.req.query('apiKey');
 
-      // Allow SSE without auth for convenience
-      if (c.req.path === '/api/logs/stream' && !key) {
-        return next();
-      }
-
       if (key !== apiKey) {
         return c.json({ error: 'Unauthorized' }, 401);
       }

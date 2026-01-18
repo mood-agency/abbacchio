@@ -10,7 +10,6 @@ import { existsSync } from 'fs';
 import routes from './routes/index.js';
 import { createRateLimiterMiddleware, resetRateLimiter } from './middleware/rate-limiter.js';
 import { createValidatorMiddleware } from './middleware/validator.js';
-import { getConnectionManager, resetConnectionManager } from './lib/connection-manager.js';
 import { resetLogBuffer, getLogBuffer } from './lib/log-buffer.js';
 import { resetIdPool } from './lib/id-pool.js';
 
@@ -101,14 +100,11 @@ app.route('/api', routes);
 
 // Health check with detailed status
 app.get('/health', (c) => {
-  const connectionManager = getConnectionManager();
   const buffer = getLogBuffer();
 
   return c.json({
     status: 'ok',
     uptime: process.uptime(),
-    connections: connectionManager.size,
-    maxConnections: connectionManager.maxConnections,
     channels: buffer.channelCount,
   });
 });
@@ -171,10 +167,10 @@ if (shouldServeDashboard) {
           <h2>API Endpoints</h2>
           <ul>
             <li><code>POST /api/logs</code> - Ingest logs</li>
-            <li><code>GET /api/logs/stream</code> - SSE stream</li>
             <li><code>GET /api/logs</code> - Get buffered logs</li>
             <li><code>DELETE /api/logs</code> - Clear logs</li>
             <li><code>GET /api/stats</code> - Server statistics</li>
+            <li><code>GET /api/centrifugo/token</code> - Get Centrifugo connection token</li>
           </ul>
           <h2>Test</h2>
           <pre>curl -X POST http://localhost:${PORT}/api/logs \\
@@ -202,13 +198,6 @@ async function gracefulShutdown(signal: string): Promise<void> {
   isShuttingDown = true;
   console.log(`\n${signal} received. Starting graceful shutdown...`);
 
-  const connectionManager = getConnectionManager();
-  const activeConnections = connectionManager.size;
-
-  if (activeConnections > 0) {
-    console.log(`Closing ${activeConnections} active SSE connections...`);
-  }
-
   // Set a timeout for shutdown
   const shutdownTimer = setTimeout(() => {
     console.error('Shutdown timeout exceeded, forcing exit...');
@@ -228,7 +217,6 @@ async function gracefulShutdown(signal: string): Promise<void> {
     }
 
     // Clean up resources
-    resetConnectionManager();
     resetRateLimiter();
     resetLogBuffer();
     resetIdPool();
@@ -278,5 +266,4 @@ server = serve({
 // Export for programmatic use
 export { app };
 export { getLogBuffer, resetLogBuffer } from './lib/log-buffer.js';
-export { getConnectionManager, resetConnectionManager } from './lib/connection-manager.js';
 export type { LogEntry, IncomingLog, LogLevelLabel } from './types.js';
