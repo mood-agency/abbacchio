@@ -90,5 +90,10 @@
     "dataCopied": "Payload copiado al portapapeles",
     "keyCopied": "Clave copiada al portapapeles",
     "valueCopied": "Valor copiado al portapapeles"
+  },
+  "databaseStats": {
+    "title": "Estadisticas de la Base de Datos",
+    "description": "Canales: {{channels}} | Registros: {{records}} | Tamaño: {{size}}",
+    "error": "Error al obtener estadisticas de la base de datos"
   }
 }

@@ -212,3 +212,35 @@ export async function getLevelCounts(options?: CountFilterOptions | string): Pro
   const payload = typeof options === 'string' ? { channel: options } : options;
   return sendMessage<LevelCounts>('getLevelCounts', payload);
 }
+
+export interface DatabaseStats {
+  channelCount: number;
+  totalRecords: number;
+  databaseSize: number;
+}
+
+/**
+ * Get database statistics: channel count, total records, and database size
+ */
+export async function getDatabaseStats(): Promise<DatabaseStats> {
+  await initDatabase();
+  return sendMessage<DatabaseStats>('getDatabaseStats');
+}
+
+export interface SearchMatchCountOptions {
+  search: string;
+  channel?: string;
+  minTime?: number;
+  levels?: FilterLevels;
+  namespaces?: FilterNamespaces;
+  logIds?: string[];
+}
+
+/**
+ * Count total search matches across msg and data fields
+ * More efficient than doing JSON.stringify in the frontend
+ */
+export async function getSearchMatchCount(options: SearchMatchCountOptions): Promise<number> {
+  await initDatabase();
+  return sendMessage<number>('getSearchMatchCount', options);
+}

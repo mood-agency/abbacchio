@@ -90,5 +90,10 @@
     "dataCopied": "Payload copied to clipboard",
     "keyCopied": "Key copied to clipboard",
     "valueCopied": "Value copied to clipboard"
+  },
+  "databaseStats": {
+    "title": "Database Statistics",
+    "description": "Channels: {{channels}} | Records: {{records}} | Size: {{size}}",
+    "error": "Failed to retrieve database statistics"
   }
 }

@@ -1,6 +1,40 @@
 {
+  "placeholder": "Type a command or search...",
+  "noResults": "No results found.",
   "switchChannel": "Switch channel...",
   "noChannels": "No channels found.",
-  "channels": "Channels",
-  "active": "Active"
+  "active": "Active",
+  "groups": {
+    "channels": "Channels",
+    "actions": "Actions",
+    "filters": "Filters",
+    "settings": "Settings"
+  },
+  "actions": {
+    "pause": "Pause log streaming",
+    "resume": "Resume log streaming",
+    "clearLogs": "Clear all logs",
+    "focusSearch": "Focus search"
+  },
+  "filters": {
+    "clear": "Clear all filters",
+    "trace": "Show trace logs",
+    "debug": "Show debug logs",
+    "info": "Show info logs",
+    "warn": "Show warning logs",
+    "error": "Show error logs",
+    "fatal": "Show fatal logs"
+  },
+  "settings": {
+    "darkMode": "Switch to dark mode",
+    "lightMode": "Switch to light mode",
+    "english": "English",
+    "spanish": "Spanish",
+    "showSidebar": "Show sidebar",
+    "hideSidebar": "Hide sidebar",
+    "databaseStats": "Database statistics"
+  },
+  "channels": {
+    "copyLink": "Copy channel link"
+  }
 }

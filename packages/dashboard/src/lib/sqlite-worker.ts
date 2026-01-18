@@ -468,6 +468,124 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         break;
       }
 
+      case 'getDatabaseStats': {
+        const stats = {
+          channelCount: 0,
+          totalRecords: 0,
+          databaseSize: 0,
+        };
+
+        // Get number of distinct channels
+        db.exec({
+          sql: 'SELECT COUNT(DISTINCT channel) as count FROM logs',
+          rowMode: 'object',
+          callback: (row) => { stats.channelCount = (row as { count: number }).count; },
+        });
+
+        // Get total number of records
+        db.exec({
+          sql: 'SELECT COUNT(*) as count FROM logs',
+          rowMode: 'object',
+          callback: (row) => { stats.totalRecords = (row as { count: number }).count; },
+        });
+
+        // Get database size (page_count * page_size)
+        db.exec({
+          sql: 'SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()',
+          rowMode: 'object',
+          callback: (row) => { stats.databaseSize = (row as { size: number }).size; },
+        });
+
+        self.postMessage({ id, success: true, result: stats });
+        break;
+      }
+
+      case 'getSearchMatchCount': {
+        const options = payload as {
+          search: string;
+          channel?: string;
+          minTime?: number;
+          levels?: string[];
+          namespaces?: string[];
+          logIds?: string[];
+        };
+
+        if (!options.search?.trim()) {
+          self.postMessage({ id, success: true, result: 0 });
+          break;
+        }
+
+        const searchTerm = options.search.trim().replace(/['"]/g, '');
+        const conditions: string[] = [];
+        const params: (string | number)[] = [];
+
+        // Filter by channel
+        if (options.channel) {
+          conditions.push(`channel = ?`);
+          params.push(options.channel);
+        }
+
+        // Filter by time range
+        if (options.minTime && options.minTime > 0) {
+          conditions.push(`time >= ?`);
+          params.push(options.minTime);
+        }
+
+        // Filter by levels
+        if (options.levels && options.levels.length > 0) {
+          const placeholders = options.levels.map(() => '?').join(', ');
+          conditions.push(`level_label IN (${placeholders})`);
+          params.push(...options.levels);
+        }
+
+        // Filter by namespaces
+        if (options.namespaces && options.namespaces.length > 0) {
+          const placeholders = options.namespaces.map(() => '?').join(', ');
+          conditions.push(`namespace IN (${placeholders})`);
+          params.push(...options.namespaces);
+        }
+
+        // Filter by specific log IDs (for current page only)
+        if (options.logIds && options.logIds.length > 0) {
+          const placeholders = options.logIds.map(() => '?').join(', ');
+          conditions.push(`id IN (${placeholders})`);
+          params.push(...options.logIds);
+        }
+
+        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        // Count matches in msg and data fields using SQLite's instr() for case-insensitive counting
+        // We count occurrences by recursively finding matches
+        let totalMatches = 0;
+        const lowerSearch = searchTerm.toLowerCase();
+
+        db.exec({
+          sql: `SELECT msg, data FROM logs ${where}`,
+          bind: params,
+          rowMode: 'object',
+          callback: (row: { msg: string; data: string }) => {
+            const r = row;
+            // Count matches in msg
+            const msgLower = (r.msg || '').toLowerCase();
+            let pos = 0;
+            while ((pos = msgLower.indexOf(lowerSearch, pos)) !== -1) {
+              totalMatches++;
+              pos += lowerSearch.length;
+            }
+            // Count matches in data
+            const dataLower = (r.data || '').toLowerCase();
+            pos = 0;
+            while ((pos = dataLower.indexOf(lowerSearch, pos)) !== -1) {
+              totalMatches++;
+              pos += lowerSearch.length;
+            }
+          },
+        });
+
+        self.postMessage({ id, success: true, result: totalMatches });
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

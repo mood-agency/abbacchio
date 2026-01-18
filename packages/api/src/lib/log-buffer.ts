@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { getIdPool } from './id-pool.js';
 import { LOG_LEVELS, type IncomingLog, type IncomingLogOrEncrypted, type EncryptedLog, type LogEntry, type LogLevelLabel } from '../types.js';
+import { publish as centrifugoPublish } from './centrifugo-client.js';
 
 /** Default channel name when none is specified */
 export const DEFAULT_CHANNEL = 'default';
@@ -217,7 +218,7 @@ export class LogBuffer extends EventEmitter {
 
   /**
    * Add a single log entry (broadcasts only, no storage)
-   * Emits pre-serialized JSON along with the entry for efficiency
+   * Publishes to Centrifugo for real-time distribution
    */
   add(incoming: IncomingLogOrEncrypted, channel: string = DEFAULT_CHANNEL): LogEntry {
     this.registerChannel(channel);
@@ -230,7 +231,12 @@ export class LogBuffer extends EventEmitter {
       channelInfo.lastActivity = Date.now();
     }
 
-    // Pre-serialize once for all subscribers
+    // Publish to Centrifugo (async, non-blocking)
+    centrifugoPublish(`logs:${channel}`, { type: 'log', data: entry }).catch((err) => {
+      console.error('[Centrifugo] Failed to publish log:', err.message);
+    });
+
+    // Pre-serialize once for all subscribers (legacy SSE support)
     const serialized = JSON.stringify(entry);
 
     // Emit event for SSE subscribers (both channel-specific and global)
@@ -243,7 +249,7 @@ export class LogBuffer extends EventEmitter {
 
   /**
    * Add multiple log entries (broadcasts only, no storage)
-   * Emits pre-serialized JSON along with entries for efficiency
+   * Publishes to Centrifugo for real-time distribution
    */
   addBatch(logs: IncomingLogOrEncrypted[], channel: string = DEFAULT_CHANNEL): LogEntry[] {
     this.registerChannel(channel);
@@ -256,7 +262,12 @@ export class LogBuffer extends EventEmitter {
       channelInfo.lastActivity = Date.now();
     }
 
-    // Pre-serialize once for all subscribers
+    // Publish to Centrifugo (async, non-blocking)
+    centrifugoPublish(`logs:${channel}`, { type: 'batch', data: entries }).catch((err) => {
+      console.error('[Centrifugo] Failed to publish batch:', err.message);
+    });
+
+    // Pre-serialize once for all subscribers (legacy SSE support)
     const serialized = JSON.stringify(entries);
 
     // Emit batch event (both channel-specific and global)

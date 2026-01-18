@@ -16,6 +16,7 @@ import { OnboardingWizard } from './OnboardingWizard';
 import { useSecureStorage } from '@/contexts/SecureStorageContext';
 import { saveSecureChannels, type SecureChannelConfig } from '@/lib/secure-storage';
 import { formatLogsForClipboard } from '@/lib/format-logs';
+import { getDatabaseStats } from '@/lib/sqlite-db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -93,7 +94,7 @@ import {
 } from '@/components/ui/breadcrumb';
 
 export function LogViewer() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { t: tLogs } = useTranslation('logs');
   const { t: tDialogs } = useTranslation('dialogs');
   const { t: tFilters } = useTranslation('filters');
@@ -190,6 +191,9 @@ export function LogViewer() {
 
   // Data drawer state
   const [drawerLog, setDrawerLog] = useState<LogEntry | null>(null);
+
+  // Sidebar visibility state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Calculate selected indices
   const selectedIndices = useMemo(() => {
@@ -366,20 +370,31 @@ export function LogViewer() {
     }
   }, [currentPage]);
 
-  // Count total search matches across current page logs
-  const matchCount = useMemo(() => {
-    if (!searchQuery) return 0;
-    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(escaped, caseSensitive ? 'g' : 'gi');
-
-    let count = 0;
-    for (const log of logs) {
-      const msgMatches = log.msg.match(regex);
-      const dataMatches = JSON.stringify(log.data).match(regex);
-      count += (msgMatches?.length || 0) + (dataMatches?.length || 0);
+  // Count total search matches across current page logs (via SQLite)
+  const [matchCount, setMatchCount] = useState(0);
+  useEffect(() => {
+    if (!searchQuery || logs.length === 0) {
+      setMatchCount(0);
+      return;
     }
-    return count;
-  }, [logs, searchQuery, caseSensitive]);
+
+    // Debounce the SQLite query to avoid excessive calls while typing
+    const timeoutId = setTimeout(async () => {
+      try {
+        const { getSearchMatchCount } = await import('@/lib/sqlite-db');
+        const count = await getSearchMatchCount({
+          search: searchQuery,
+          logIds: logs.map((log) => log.id),
+        });
+        setMatchCount(count);
+      } catch (error) {
+        console.error('Failed to get search match count:', error);
+        setMatchCount(0);
+      }
+    }, 150); // 150ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [logs, searchQuery]);
 
   // Virtualization for performance with large log lists
   const rowVirtualizer = useVirtualizer({
@@ -641,8 +656,8 @@ export function LogViewer() {
 
         {/* Main content with sidebar */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar with filters - only shown when connected and has logs */}
-          {activeChannel?.isConnected && logs.length > 0 && (
+          {/* Sidebar with filters - only shown when connected, has logs, and sidebar is open */}
+          {activeChannel?.isConnected && logs.length > 0 && isSidebarOpen && (
             <LogSidebar
               levelFilters={levelFilters}
               toggleLevel={toggleLevel}
@@ -1196,11 +1211,60 @@ logger.info("Hello from structlog!")`}
           </DialogContent>
         </Dialog>
 
-        {/* Command Palette for switching channels */}
+        {/* Command Palette for switching channels and actions */}
         <CommandPalette
           channels={channels}
           activeChannelId={activeChannelId}
           onSelectChannel={setActiveChannelId}
+          actions={{
+            togglePause: () => setIsPaused(!isPaused),
+            isPaused,
+            toggleTheme: () => {
+              document.documentElement.classList.toggle('dark');
+              setIsDark(!isDark);
+            },
+            isDark,
+            switchLanguage: (lang) => i18n.changeLanguage(lang),
+            currentLanguage: i18n.language.split('-')[0],
+            clearFilters,
+            hasActiveFilters: levelFilters.length > 0 || namespaceFilters.length > 0 || searchQuery !== '',
+            filterByLevel: toggleLevel,
+            copyChannelLink: () => {
+              if (!activeChannel) return;
+              const params = new URLSearchParams();
+              params.set('channel', activeChannel.name);
+              if (activeChannel.secretKey) params.set('key', activeChannel.secretKey);
+              const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+              navigator.clipboard.writeText(link);
+              toast.success(tLogs('toast.linkCopied'));
+            },
+            hasActiveChannel: !!activeChannel?.isConnected,
+            focusSearch: () => searchInputRef.current?.focus(),
+            toggleSidebar: () => setIsSidebarOpen(!isSidebarOpen),
+            isSidebarOpen,
+            clearLogs: () => setShowDeleteDialog(true),
+            showDatabaseStats: async () => {
+              try {
+                const stats = await getDatabaseStats();
+                const formatSize = (bytes: number) => {
+                  if (bytes < 1024) return `${bytes} B`;
+                  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+                  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+                };
+                toast(tLogs('databaseStats.title'), {
+                  description: tLogs('databaseStats.description', {
+                    channels: stats.channelCount,
+                    records: stats.totalRecords.toLocaleString(),
+                    size: formatSize(stats.databaseSize),
+                  }),
+                  duration: 8000,
+                });
+              } catch (error) {
+                console.error('Failed to get database stats:', error);
+                toast.error(tLogs('databaseStats.error'));
+              }
+            },
+          }}
         />
 
         {/* Data Drawer */}

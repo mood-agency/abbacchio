@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import type { LogEntry, LogLevelLabel } from '../types';
 import { decryptLog, isCryptoAvailable } from '../lib/crypto';
 import { useSecureStorage } from '../contexts/SecureStorageContext';
+import CentrifugoWorker from '../lib/centrifugo-worker?worker';
+import type { WorkerOutgoingMessage } from '../lib/centrifugo-worker';
 
 // Debug logging - enable in browser console: window.__DEBUG_CHANNEL_MANAGER__ = true
 const debug = (...args: unknown[]) => {
@@ -10,6 +12,36 @@ const debug = (...args: unknown[]) => {
     console.log('[ChannelManager]', ...args);
   }
 };
+
+/**
+ * Get the Centrifugo WebSocket URL based on current location
+ */
+function getCentrifugoUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.hostname;
+  // In development, Centrifugo runs on port 8000
+  // Check if we're in development mode based on hostname or port
+  const isDev = host === 'localhost' || host === '127.0.0.1';
+  const port = isDev ? '8000' : window.location.port;
+  return `${protocol}//${host}:${port}/connection/websocket`;
+}
+
+/**
+ * Fetch a connection token from the API
+ */
+async function fetchCentrifugoToken(): Promise<string> {
+  const response = await fetch('/api/centrifugo/token');
+  if (!response.ok) {
+    throw new Error('Failed to fetch Centrifugo token');
+  }
+  const { token } = await response.json();
+  return token;
+}
+
+interface CentrifugoMessage {
+  type: 'log' | 'batch';
+  data: LogEntry | LogEntry[];
+}
 import {
   initDatabase,
   insertLogs,
@@ -152,19 +184,20 @@ export function useChannelManager(): UseChannelManagerResult {
     }
   }, [activeChannelId, channels]);
 
-  // Refs for managing connections
-  const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
+  // Refs for managing Centrifugo Web Worker connection
+  const workerRef = useRef<Worker | null>(null);
+  const subscribedChannelsRef = useRef<Set<string>>(new Set());
   const reconnectTimeoutsRef = useRef<Map<string, number>>(new Map());
   const reconnectAttemptsRef = useRef<Map<string, number>>(new Map());
   const secretKeysRef = useRef<Map<string, string>>(new Map());
-  const lastPingRef = useRef<Map<string, number>>(new Map());
-  const pingCheckIntervalsRef = useRef<Map<string, number>>(new Map());
-  // If no ping received in this time, consider connection dead (2x server heartbeat interval)
-  const PING_TIMEOUT_MS = 130000; // ~2 minutes (server sends every 60s)
   // Ref to track channels without causing re-renders (fixes closure issues in connectChannel)
   const channelsRef = useRef<ChannelState[]>([]);
   // Prevent double initialization in React StrictMode
   const initializedRef = useRef(false);
+  // Track if Centrifugo is connected (used by setIsCentrifugoConnected, may be exposed later)
+  const [_isCentrifugoConnected, setIsCentrifugoConnected] = useState(false);
+  // Ref for processEntry to be used in worker message handler
+  const processEntryRef = useRef<typeof processEntry | null>(null);
 
   // Callbacks for subscribers
   const newLogsCallbacks = useRef<Set<(logs: LogEntry[], channelId: string) => void>>(new Set());
@@ -445,21 +478,146 @@ export function useChannelManager(): UseChannelManagerResult {
     []
   );
 
-  // Connect to a channel's SSE stream
+  // Keep processEntryRef in sync
+  useEffect(() => {
+    processEntryRef.current = processEntry;
+  }, [processEntry]);
+
+  // Initialize Centrifugo Web Worker connection (once)
+  useEffect(() => {
+    let mounted = true;
+
+    const initWorker = async () => {
+      try {
+        const token = await fetchCentrifugoToken();
+        if (!mounted) return;
+
+        const worker = new CentrifugoWorker();
+        workerRef.current = worker;
+
+        // Handle messages from worker
+        worker.onmessage = async (event: MessageEvent<WorkerOutgoingMessage>) => {
+          const message = event.data;
+
+          switch (message.type) {
+            case 'connected':
+              debug('[Centrifugo Worker] Connected');
+              setIsCentrifugoConnected(true);
+              // Mark all subscribed channels as connected
+              setChannels((prev) =>
+                prev.map((ch) => ({
+                  ...ch,
+                  isConnected: subscribedChannelsRef.current.has(ch.id),
+                  isConnecting: false,
+                  connectionError: null,
+                }))
+              );
+              break;
+
+            case 'disconnected':
+              debug('[Centrifugo Worker] Disconnected:', message.reason);
+              setIsCentrifugoConnected(false);
+              // Mark all channels as disconnected
+              setChannels((prev) =>
+                prev.map((ch) => ({
+                  ...ch,
+                  isConnected: false,
+                  connectionError: message.reason || 'Disconnected',
+                }))
+              );
+              break;
+
+            case 'error':
+              console.error('[Centrifugo Worker] Error:', message.error);
+              toast.error(`Connection error: ${message.error}`);
+              break;
+
+            case 'subscribed':
+              debug('[Centrifugo Worker] Subscribed to channel:', message.channelId);
+              subscribedChannelsRef.current.add(message.channelId);
+              setChannels((prev) =>
+                prev.map((ch) =>
+                  ch.id === message.channelId
+                    ? { ...ch, isConnected: true, isConnecting: false, connectionError: null }
+                    : ch
+                )
+              );
+              reconnectAttemptsRef.current.set(message.channelId, 0);
+              break;
+
+            case 'subscription-error':
+              debug('[Centrifugo Worker] Subscription error:', message.channelId, message.error);
+              setChannels((prev) =>
+                prev.map((ch) =>
+                  ch.id === message.channelId
+                    ? { ...ch, isConnected: false, isConnecting: false, connectionError: message.error }
+                    : ch
+                )
+              );
+              break;
+
+            case 'publication':
+              if (isPausedRef.current) return;
+              try {
+                const data = message.data as CentrifugoMessage;
+                const channelId = message.channelId;
+                if (data.type === 'log') {
+                  const entry = data.data as LogEntry;
+                  const processed = await processEntryRef.current?.(entry, channelId);
+                  if (processed) queueLogs([processed], channelId);
+                } else if (data.type === 'batch') {
+                  const entries = data.data as LogEntry[];
+                  const processed = await Promise.all(
+                    entries.map((entry) => processEntryRef.current?.(entry, channelId))
+                  );
+                  queueLogs(processed.filter((p): p is LogEntry => p !== undefined), channelId);
+                }
+              } catch (e) {
+                console.error('Failed to process Centrifugo message:', e);
+              }
+              break;
+
+            case 'token-needed':
+              // Worker needs a new token
+              fetchCentrifugoToken().then((newToken) => {
+                worker.postMessage({ type: 'refresh-token', token: newToken });
+              });
+              break;
+          }
+        };
+
+        // Connect to Centrifugo via worker
+        worker.postMessage({
+          type: 'connect',
+          url: getCentrifugoUrl(),
+          token,
+        });
+      } catch (error) {
+        if (mounted) {
+          const message = error instanceof Error ? error.message : 'Failed to connect';
+          console.error('[Centrifugo Worker] Connection failed:', message);
+          toast.error(`Failed to connect: ${message}`);
+        }
+      }
+    };
+
+    initWorker();
+
+    return () => {
+      mounted = false;
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: 'disconnect' });
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      subscribedChannelsRef.current.clear();
+    };
+  }, [queueLogs]);
+
+  // Subscribe to a channel via Centrifugo Worker
   const connectChannel = useCallback(
-    async (channelId: string, channelName: string) => {
+    (channelId: string, channelName: string) => {
       debug('connectChannel called', { channelId, channelName });
-      // Close existing connection and cleanup ping interval if any
-      const existingSource = eventSourcesRef.current.get(channelId);
-      if (existingSource) {
-        debug('connectChannel closing existing connection');
-        existingSource.close();
-      }
-      const existingPingInterval = pingCheckIntervalsRef.current.get(channelId);
-      if (existingPingInterval) {
-        clearInterval(existingPingInterval);
-        pingCheckIntervalsRef.current.delete(channelId);
-      }
 
       setChannels((prev) =>
         prev.map((ch) =>
@@ -469,173 +627,33 @@ export function useChannelManager(): UseChannelManagerResult {
         )
       );
 
-      const streamUrl = `/api/logs/stream?channel=${encodeURIComponent(channelName)}`;
-
-      // Pre-check connection availability before establishing SSE
-      try {
-        const checkResponse = await fetch(streamUrl, { method: 'HEAD' });
-        if (checkResponse.status === 503) {
-          // Try to get error details from a GET request
-          const errorResponse = await fetch(streamUrl);
-          const errorData = await errorResponse.json().catch(() => ({}));
-          const errorMessage = errorData.message || 'Connection limit reached';
-
-          console.warn(`[SSE] Connection rejected for channel "${channelName}":`, errorMessage);
-          toast.error(`Channel "${channelName}": ${errorMessage}`);
-
-          setChannels((prev) =>
-            prev.map((ch) =>
-              ch.id === channelId
-                ? { ...ch, isConnecting: false, isConnected: false, connectionError: errorMessage }
-                : ch
-            )
-          );
-          return;
-        }
-      } catch {
-        // HEAD check failed, proceed with SSE anyway (might work)
-        debug('HEAD check failed, proceeding with SSE connection');
-      }
-
-      const eventSource = new EventSource(streamUrl);
-      eventSourcesRef.current.set(channelId, eventSource);
-
-      // Initialize last ping time
-      lastPingRef.current.set(channelId, Date.now());
-
-      eventSource.onopen = () => {
-        debug('SSE onopen', { channelId, channelName });
-        setChannels((prev) =>
-          prev.map((ch) =>
-            ch.id === channelId
-              ? { ...ch, isConnected: true, isConnecting: false, connectionError: null }
-              : ch
-          )
-        );
-        reconnectAttemptsRef.current.set(channelId, 0);
-        lastPingRef.current.set(channelId, Date.now());
-
-        // Start ping check interval
-        const pingCheckInterval = window.setInterval(() => {
-          const lastPing = lastPingRef.current.get(channelId) || 0;
-          const timeSinceLastPing = Date.now() - lastPing;
-          debug('ping check', { channelId, timeSinceLastPing, timeout: PING_TIMEOUT_MS });
-
-          if (timeSinceLastPing > PING_TIMEOUT_MS) {
-            debug('ping timeout - connection dead, forcing reconnect', { channelId });
-            // Connection is dead, force reconnect
-            eventSource.close();
-            eventSourcesRef.current.delete(channelId);
-            clearInterval(pingCheckInterval);
-            pingCheckIntervalsRef.current.delete(channelId);
-
-            setChannels((prev) =>
-              prev.map((ch) =>
-                ch.id === channelId
-                  ? { ...ch, isConnected: false, connectionError: 'Connection lost, reconnecting...' }
-                  : ch
-              )
-            );
-
-            // Reconnect immediately
-            const channel = channelsRef.current.find((ch) => ch.id === channelId);
-            if (channel) {
-              connectChannel(channelId, channelName);
-            }
-          }
-        }, 30000); // Check every 30 seconds
-        pingCheckIntervalsRef.current.set(channelId, pingCheckInterval);
-      };
-
-      // Listen for ping events (server heartbeat)
-      eventSource.addEventListener('ping', () => {
-        debug('SSE ping received', { channelId, channelName });
-        lastPingRef.current.set(channelId, Date.now());
-      });
-
-      eventSource.addEventListener('log', async (event) => {
-        debug('SSE log event received', { channelId, channelName, isPaused: isPausedRef.current });
-        // Any event means connection is alive
-        lastPingRef.current.set(channelId, Date.now());
-        // Skip processing if paused
-        if (isPausedRef.current) return;
-        try {
-          const entry: LogEntry = JSON.parse(event.data);
-          const processed = await processEntry(entry, channelId);
-          queueLogs([processed], channelId);
-        } catch (e) {
-          console.error('Failed to parse log event:', e);
-        }
-      });
-
-      eventSource.addEventListener('batch', async (event) => {
-        debug('SSE batch event received', { channelId, channelName, isPaused: isPausedRef.current });
-        // Any event means connection is alive
-        lastPingRef.current.set(channelId, Date.now());
-        // Skip processing if paused
-        if (isPausedRef.current) return;
-        try {
-          const entries: LogEntry[] = JSON.parse(event.data);
-          const processed = await Promise.all(
-            entries.map((entry) => processEntry(entry, channelId))
-          );
-          queueLogs(processed, channelId);
-        } catch (e) {
-          console.error('Failed to parse batch event:', e);
-        }
-      });
-
-      eventSource.onerror = () => {
-        debug('SSE onerror', { channelId, channelName });
-        // Clear ping check interval
-        const pingInterval = pingCheckIntervalsRef.current.get(channelId);
-        if (pingInterval) {
-          clearInterval(pingInterval);
-          pingCheckIntervalsRef.current.delete(channelId);
-        }
-
-        setChannels((prev) =>
-          prev.map((ch) =>
-            ch.id === channelId
-              ? { ...ch, isConnected: false, isConnecting: false }
-              : ch
-          )
-        );
-        eventSource.close();
-        // Remove from map so connection effect can reconnect if needed
-        eventSourcesRef.current.delete(channelId);
-
-        const attempts = reconnectAttemptsRef.current.get(channelId) || 0;
-        const delay = Math.min(1000 * Math.pow(2, attempts), 30000);
-        reconnectAttemptsRef.current.set(channelId, attempts + 1);
-
-        setChannels((prev) =>
-          prev.map((ch) =>
-            ch.id === channelId
-              ? { ...ch, connectionError: `Reconnecting in ${delay / 1000}s...` }
-              : ch
-          )
-        );
-
+      // Wait for worker to be ready
+      if (!workerRef.current) {
+        debug('connectChannel: Worker not ready, will retry');
         const timeout = window.setTimeout(() => {
-          // Check if channel still exists before reconnecting (use ref to avoid stale closure)
           const channel = channelsRef.current.find((ch) => ch.id === channelId);
           if (channel) {
             connectChannel(channelId, channelName);
           }
-        }, delay);
+        }, 1000);
         reconnectTimeoutsRef.current.set(channelId, timeout);
-      };
+        return;
+      }
+
+      // Send subscribe message to worker
+      workerRef.current.postMessage({
+        type: 'subscribe',
+        channelId,
+        channelName,
+      });
     },
-    [processEntry, queueLogs]
+    []
   );
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      eventSourcesRef.current.forEach((es) => es.close());
       reconnectTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      pingCheckIntervalsRef.current.forEach((interval) => clearInterval(interval));
       if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
     };
   }, []);
@@ -664,25 +682,11 @@ export function useChannelManager(): UseChannelManagerResult {
 
   // Remove a channel
   const removeChannel = useCallback((id: string) => {
-    // Get channel name before removing (for API call)
-    const channel = channelsRef.current.find((ch) => ch.id === id);
-    const channelName = channel?.name;
-
-    // Signal server to close SSE connection (fire and forget)
-    if (channelName) {
-      fetch(`/api/logs/disconnect?channel=${encodeURIComponent(channelName)}`, {
-        method: 'POST',
-      }).catch(() => {
-        // Ignore errors - server will cleanup eventually
-      });
+    // Unsubscribe from Centrifugo channel via worker
+    if (workerRef.current) {
+      workerRef.current.postMessage({ type: 'unsubscribe', channelId: id });
     }
-
-    // Close SSE connection locally
-    const eventSource = eventSourcesRef.current.get(id);
-    if (eventSource) {
-      eventSource.close();
-      eventSourcesRef.current.delete(id);
-    }
+    subscribedChannelsRef.current.delete(id);
 
     // Clear reconnect timeout
     const timeout = reconnectTimeoutsRef.current.get(id);
@@ -691,18 +695,10 @@ export function useChannelManager(): UseChannelManagerResult {
       reconnectTimeoutsRef.current.delete(id);
     }
 
-    // Clear ping check interval
-    const pingInterval = pingCheckIntervalsRef.current.get(id);
-    if (pingInterval) {
-      clearInterval(pingInterval);
-      pingCheckIntervalsRef.current.delete(id);
-    }
-
     // Clean up refs
     secretKeysRef.current.delete(id);
     reconnectAttemptsRef.current.delete(id);
     pendingLogsRef.current.delete(id);
-    lastPingRef.current.delete(id);
 
     setChannels((prev) => {
       const newChannels = prev.filter((ch) => ch.id !== id);

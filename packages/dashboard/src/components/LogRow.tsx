@@ -1,4 +1,4 @@
-import { useCallback, memo } from 'react';
+import { useCallback, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LogEntry } from '../types';
 import { LevelBadge, ChannelBadge } from './ui/CustomBadge';
@@ -84,15 +84,13 @@ function highlightText(text: string, query: string, caseSensitive = false): Reac
 }
 
 /**
- * Highlight search in data
+ * Highlight search in data (receives pre-computed dataString to avoid JSON.stringify on each render)
  */
 function highlightData(
-  data: Record<string, unknown>,
+  dataString: string,
   query: string,
   caseSensitive = false
 ): React.ReactNode {
-  const dataString = JSON.stringify(data);
-
   // Fast path: no query
   if (!query) {
     return dataString;
@@ -125,6 +123,9 @@ export const LogRow = memo(function LogRow({
   const decryptionFailed = log.decryptionFailed;
   // Check if message was originally sent encrypted (persists after decryption)
   const wasSentEncrypted = log.wasEncrypted === true;
+
+  // Cache the JSON stringified data to avoid recalculating on each render
+  const dataString = useMemo(() => JSON.stringify(log.data), [log.data]);
 
   // Handle clicking on the row content to open drawer
   const handleRowClick = useCallback(() => {
@@ -276,7 +277,7 @@ export const LogRow = memo(function LogRow({
                 </TooltipContent>
               </Tooltip>
             ) : showData ? (
-              <span className="truncate block">{highlightData(log.data, searchQuery, caseSensitive)}</span>
+              <span className="truncate block">{highlightData(dataString, searchQuery, caseSensitive)}</span>
             ) : null}
           </div>
         </div>
