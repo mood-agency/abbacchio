@@ -1,0 +1,27 @@
+{
+  "client": {
+    "token": {
+      "hmac_secret_key": "dev-secret-key-change-in-production"
+    },
+    "allowed_origins": [
+      "http://localhost:5173",
+      "http://localhost:4001",
+      "http://localhost:3000"
+    ]
+  },
+  "http_api": {
+    "key": "dev-api-key-change-in-production"
+  },
+  "channel": {
+    "namespaces": [
+      {
+        "name": "logs",
+        "presence": true,
+        "join_leave": false,
+        "history_size": 100,
+        "history_ttl": "5m",
+        "allow_subscribe_for_client": true
+      }
+    ]
+  }
+}

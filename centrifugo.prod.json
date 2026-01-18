@@ -1,0 +1,49 @@
+{
+  "admin": {
+    "enabled": true,
+    "insecure": false
+  },
+  "client": {
+    "token": {
+      "hmac_secret_key": "${CENTRIFUGO_TOKEN_HMAC_SECRET_KEY}"
+    },
+    "allowed_origins": []
+  },
+  "http_api": {
+    "key": "${CENTRIFUGO_API_KEY}"
+  },
+  "broker": "redis",
+  "redis_address": "redis://redis:6379",
+  "presence_manager": "redis",
+  "channel": {
+    "namespaces": [
+      {
+        "name": "logs",
+        "presence": true,
+        "join_leave": false,
+        "history_size": 100,
+        "history_ttl": "5m",
+        "force_recovery": true,
+        "allow_subscribe_for_client": true,
+        "allow_publish_for_client": false,
+        "allow_presence_for_client": true,
+        "allow_history_for_client": true
+      }
+    ]
+  },
+  "log_level": "info",
+  "health": true,
+  "prometheus": true,
+  "websocket": {
+    "compression": true,
+    "compression_min_size": 128
+  },
+  "sse": {
+    "enabled": true
+  },
+  "http_stream": {
+    "enabled": true
+  },
+  "client_channel_limit": 128,
+  "client_queue_max_size": 1048576
+}
