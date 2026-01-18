@@ -1,0 +1,44 @@
+{
+  "name": "@abbacchio/tui",
+  "version": "0.1.0",
+  "description": "Terminal user interface for Abbacchio real-time log viewer",
+  "type": "module",
+  "bin": {
+    "abbacchio": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [
+    "logs",
+    "logging",
+    "terminal",
+    "tui",
+    "cli",
+    "real-time",
+    "sse"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ink": "^5.1.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "meow": "^13.2.0",
+    "eventsource": "^3.0.5",
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/eventsource": "^1.1.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
