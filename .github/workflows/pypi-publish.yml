@@ -38,7 +38,7 @@ jobs:
       - name: Get version info
         id: version
         run: |
-          VERSION=$(grep -Po '(?<=version = ")[^"]*' python/pyproject.toml)
+          VERSION=$(grep -E '^version = "' python/pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if version exists on PyPI
