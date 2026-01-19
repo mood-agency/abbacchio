@@ -19,7 +19,8 @@
     "tui": "pnpm --filter @abbacchio/tui dev --",
     "start": "pnpm --filter @abbacchio/api start",
     "test": "pnpm -r test",
-    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules",
+    "bump": "node scripts/bump-version.js"
   },
   "keywords": [
     "pino",
