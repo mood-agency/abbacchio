@@ -84,6 +84,7 @@ jobs:
             libglib2.0-dev \
             pkg-config \
             patchelf
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
 
       - uses: pnpm/action-setup@v4
         with:
