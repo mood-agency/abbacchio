@@ -1,0 +1,244 @@
+# Abbacchio
+
+> Real-time log viewer dashboard with HTTP ingestion for any logging library
+
+Abbacchio is a zero-persistence, real-time log viewer. Send logs from your application via HTTP and view them in a searchable, filterable dashboard or terminal UI. Works with Pino, Winston, Bunyan, console, or any HTTP client.
+
+## Installation
+
+```bash
+# Run the server
+npx abbacchio
+
+# Or install globally
+npm install -g abbacchio
+```
+
+Dashboard available at http://localhost:4000
+
+## Quick Start
+
+### Pino
+
+```typescript
+import pino from "pino";
+
+const logger = pino({
+  transport: {
+    target: "abbacchio/transports/pino",
+    options: {
+      url: "http://localhost:4000/api/logs",
+      channel: "my-app",
+    },
+  },
+});
+
+logger.info({ user: "john" }, "User logged in");
+```
+
+### Winston
+
+```typescript
+import winston from "winston";
+import { winstonTransport } from "abbacchio/transports/winston";
+
+const logger = winston.createLogger({
+  transports: [
+    winstonTransport({
+      url: "http://localhost:4000/api/logs",
+      channel: "my-app",
+    }),
+  ],
+});
+```
+
+### Bunyan
+
+```typescript
+import bunyan from "bunyan";
+import { bunyanStream } from "abbacchio/transports/bunyan";
+
+const logger = bunyan.createLogger({
+  name: "myapp",
+  streams: [
+    bunyanStream({
+      url: "http://localhost:4000/api/logs",
+      channel: "my-app",
+    }),
+  ],
+});
+```
+
+### Console Interception
+
+```typescript
+import { interceptConsole } from "abbacchio/transports/console";
+
+interceptConsole({
+  url: "http://localhost:4000/api/logs",
+  channel: "my-app",
+  passthrough: true,
+});
+
+console.log("This will be sent to Abbacchio!");
+```
+
+### HTTP / curl
+
+```bash
+curl -X POST http://localhost:4000/api/logs \
+  -H "Content-Type: application/json" \
+  -H "X-Channel: my-app" \
+  -d '{"level":30,"msg":"Hello from curl"}'
+```
+
+### Python
+
+```bash
+pip install abbacchio
+```
+
+```python
+from abbacchio import AbbacchioHandler
+import logging
+
+handler = AbbacchioHandler(
+    url="http://localhost:4000/api/logs",
+    channel="python-app"
+)
+logging.getLogger().addHandler(handler)
+logging.info("Hello from Python!")
+```
+
+## Transport Options
+
+All transports support these options:
+
+| Option      | Type   | Default                          | Description                    |
+|-------------|--------|----------------------------------|--------------------------------|
+| `url`       | string | `http://localhost:4000/api/logs` | Abbacchio server URL           |
+| `channel`   | string | `default`                        | Channel name for filtering     |
+| `secretKey` | string | -                                | Enables end-to-end encryption  |
+| `batchSize` | number | `10`                             | Batch size before sending      |
+| `interval`  | number | `1000`                           | Max ms before sending batch    |
+| `headers`   | object | `{}`                             | Additional HTTP headers        |
+
+## API Reference
+
+### POST /api/logs
+
+Send logs (single or batch).
+
+**Headers:**
+- `Content-Type: application/json` (required)
+- `X-Channel: <name>` (optional)
+
+**Single log:**
+```json
+{
+  "level": 30,
+  "time": 1705420800000,
+  "msg": "Request completed",
+  "namespace": "http",
+  "data": { "method": "GET", "url": "/api/users" }
+}
+```
+
+**Batch:**
+```json
+{
+  "logs": [
+    { "level": 30, "msg": "Log 1" },
+    { "level": 40, "msg": "Log 2" }
+  ]
+}
+```
+
+**Response:** `201 Created`
+```json
+{ "received": 2, "channel": "my-app" }
+```
+
+### GET /api/logs/stream
+
+SSE endpoint for real-time logs.
+
+**Query params:**
+- `channel` - Filter by channel (required)
+
+**Events:**
+- `batch` - Initial buffered logs
+- `log` - New log entry
+- `channels` - Available channels list
+- `ping` - Keep-alive every 15s
+
+### GET /api/logs
+
+Get all buffered logs.
+
+**Query params:**
+- `channel` - Filter by channel (optional)
+
+### DELETE /api/logs
+
+Clear logs from buffer.
+
+**Query params:**
+- `channel` - Clear specific channel (optional)
+
+### GET /api/channels
+
+Get list of available channels.
+
+```json
+{ "channels": ["default", "api-server", "worker"] }
+```
+
+### GET /api/generate-key
+
+Generate encryption key.
+
+**Query params:**
+- `length` - Key length in bytes (default: 32)
+
+## Log Levels
+
+| Level | Number | Description |
+|-------|--------|-------------|
+| trace | 10     | Trace       |
+| debug | 20     | Debug       |
+| info  | 30     | Info        |
+| warn  | 40     | Warning     |
+| error | 50     | Error       |
+| fatal | 60     | Fatal       |
+
+## Encryption
+
+Enable end-to-end encryption by providing a `secretKey`:
+
+```typescript
+const logger = pino({
+  transport: {
+    target: "abbacchio/transports/pino",
+    options: {
+      url: "http://localhost:4000/api/logs",
+      secretKey: process.env.ABBACCHIO_SECRET_KEY,
+    },
+  },
+});
+```
+
+View encrypted logs by adding `?key=YOUR_KEY` to the dashboard URL.
+
+## Terminal UI
+
+View logs in your terminal:
+
+```bash
+npx @abbacchio/tui --url http://localhost:4000 --channel my-app
+```
+
+## Links
+
+- npm: https://www.npmjs.com/package/abbacchio
+- PyPI: https://pypi.org/project/abbacchio/
