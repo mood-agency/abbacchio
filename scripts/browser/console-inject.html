@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Abbacchio Console Inject</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #fff;
+      color: #000;
+    }
+    h1 {
+      color: #000;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #000;
+      font-weight: 500;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #000;
+      border-radius: 4px;
+      background: #fff;
+      color: #000;
+      font-size: 14px;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #000;
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+    }
+    button {
+      padding: 12px 24px;
+      background: #000;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #333;
+    }
+    button:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+    .section {
+      background: #fff;
+      border: 1px solid #000;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #000;
+      font-size: 16px;
+    }
+    .row {
+      display: flex;
+      gap: 15px;
+    }
+    .row .form-group {
+      flex: 1;
+    }
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-family: monospace;
+    }
+    .status.active {
+      background: #f0f0f0;
+      border: 1px solid #000;
+    }
+    .status.inactive {
+      background: #fff;
+      border: 1px dashed #999;
+      color: #666;
+    }
+    pre {
+      background: #f0f0f0;
+      border: 1px solid #000;
+      border-radius: 4px;
+      padding: 15px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    code {
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+    .test-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .test-buttons button {
+      padding: 8px 16px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
+      font-size: 12px;
+    }
+    .test-buttons button:hover {
+      background: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Abbacchio Console Inject</h1>
+  <p>Intercept <code>console.log</code>, <code>console.error</code>, etc. and send them to Abbacchio.</p>
+
+  <div class="section">
+    <h2>Configuration</h2>
+    <div class="row">
+      <div class="form-group">
+        <label for="apiUrl">API URL</label>
+        <input type="text" id="apiUrl" value="http://localhost:4000/api/logs">
+      </div>
+      <div class="form-group">
+        <label for="channel">Channel</label>
+        <input type="text" id="channel" value="browser-console">
+      </div>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label for="appName">App Name (namespace)</label>
+        <input type="text" id="appName" value="my-web-app">
+      </div>
+      <div class="form-group">
+        <label for="secretKey">Secret Key (optional)</label>
+        <input type="text" id="secretKey" placeholder="Leave empty for unencrypted">
+      </div>
+    </div>
+
+    <button onclick="startCapture()">Start Capture</button>
+    <button onclick="stopCapture()">Stop Capture</button>
+
+    <div id="status" class="status inactive">Not capturing</div>
+  </div>
+
+  <div class="section">
+    <h2>Test Console Methods</h2>
+    <p>Click these buttons to trigger console methods (check your Abbacchio dashboard):</p>
+    <div class="test-buttons">
+      <button onclick="testLog()">console.log</button>
+      <button onclick="testInfo()">console.info</button>
+      <button onclick="testWarn()">console.warn</button>
+      <button onclick="testError()">console.error</button>
+      <button onclick="testDebug()">console.debug</button>
+      <button onclick="testWithObject()">Log with Object</button>
+      <button onclick="testWithError()">Log Error Object</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Usage - Copy this snippet</h2>
+    <p>Add this script to your application to automatically capture console output:</p>
+    <pre><code id="snippet">&lt;script src="abbacchio-console.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  AbbacchioConsole.init({
+    url: 'http://localhost:4000/api/logs',
+    channel: 'my-app',
+    appName: 'my-web-app',
+    // secretKey: 'optional-encryption-key',
+  });
+&lt;/script&gt;</code></pre>
+  </div>
+
+  <script>
+    /**
+     * Abbacchio Console Capture
+     * Intercepts console methods and sends logs to Abbacchio server
+     */
+    const AbbacchioConsole = (function() {
+      let config = {
+        url: 'http://localhost:4000/api/logs',
+        channel: 'browser-console',
+        appName: 'web-app',
+        secretKey: null,
+        batchSize: 10,
+        flushInterval: 1000,
+      };
+
+      let isCapturing = false;
+      let buffer = [];
+      let flushTimer = null;
+
+      // Store original console methods
+      const originalConsole = {
+        log: console.log.bind(console),
+        info: console.info.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console),
+        debug: console.debug.bind(console),
+      };
+
+      // Map console methods to log levels
+      const levelMap = {
+        debug: 20,
+        log: 30,
+        info: 30,
+        warn: 40,
+        error: 50,
+      };
+
+      /**
+       * Encryption (same as index.html)
+       */
+      const ALGORITHM = 'AES-GCM';
+      const IV_LENGTH = 16;
+      const SALT_LENGTH = 32;
+      const AUTH_TAG_LENGTH = 16;
+      const PBKDF2_ITERATIONS = 100000;
+
+      async function deriveKey(password, salt) {
+        const encoder = new TextEncoder();
+        const passwordKey = await crypto.subtle.importKey(
+          'raw',
+          encoder.encode(password),
+          'PBKDF2',
+          false,
+          ['deriveKey']
+        );
+
+        return crypto.subtle.deriveKey(
+          {
+            name: 'PBKDF2',
+            salt: salt.buffer,
+            iterations: PBKDF2_ITERATIONS,
+            hash: 'SHA-256'
+          },
+          passwordKey,
+          { name: ALGORITHM, length: 256 },
+          false,
+          ['encrypt']
+        );
+      }
+
+      async function encrypt(data, secretKey) {
+        const encoder = new TextEncoder();
+        const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+        const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+        const key = await deriveKey(secretKey, salt);
+
+        const encrypted = await crypto.subtle.encrypt(
+          { name: ALGORITHM, iv: iv },
+          key,
+          encoder.encode(data)
+        );
+
+        const encryptedArray = new Uint8Array(encrypted);
+        const ciphertext = encryptedArray.slice(0, -AUTH_TAG_LENGTH);
+        const authTag = encryptedArray.slice(-AUTH_TAG_LENGTH);
+
+        const combined = new Uint8Array(SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH + ciphertext.length);
+        combined.set(salt, 0);
+        combined.set(iv, SALT_LENGTH);
+        combined.set(authTag, SALT_LENGTH + IV_LENGTH);
+        combined.set(ciphertext, SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH);
+
+        return btoa(String.fromCharCode(...combined));
+      }
+
+      /**
+       * Format arguments for logging
+       */
+      function formatArgs(args) {
+        return args.map(arg => {
+          if (arg === null) return 'null';
+          if (arg === undefined) return 'undefined';
+          if (typeof arg === 'object') {
+            try {
+              if (arg instanceof Error) {
+                return {
+                  message: arg.message,
+                  name: arg.name,
+                  stack: arg.stack,
+                };
+              }
+              return arg;
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return arg;
+        });
+      }
+
+      /**
+       * Create a log entry
+       */
+      function createLogEntry(level, args) {
+        const formatted = formatArgs(args);
+        const msg = formatted.length === 1 && typeof formatted[0] === 'string'
+          ? formatted[0]
+          : formatted.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+
+        const entry = {
+          level: levelMap[level] || 30,
+          time: Date.now(),
+          name: config.appName,
+          msg: msg,
+          hostname: window.location.hostname,
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+        };
+
+        // If there are objects in the args, add them as data
+        const objects = formatted.filter(a => typeof a === 'object' && a !== null);
+        if (objects.length > 0) {
+          entry.data = objects.length === 1 ? objects[0] : objects;
+        }
+
+        return entry;
+      }
+
+      /**
+       * Add log to buffer
+       */
+      function addToBuffer(entry) {
+        buffer.push(entry);
+
+        if (buffer.length >= config.batchSize) {
+          flush();
+        } else if (!flushTimer) {
+          flushTimer = setTimeout(flush, config.flushInterval);
+        }
+      }
+
+      /**
+       * Flush buffer to server
+       */
+      async function flush() {
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+
+        if (buffer.length === 0) return;
+
+        const toSend = buffer;
+        buffer = [];
+
+        try {
+          let processedLogs = toSend;
+
+          if (config.secretKey) {
+            processedLogs = await Promise.all(
+              toSend.map(async log => ({
+                encrypted: await encrypt(JSON.stringify(log), config.secretKey)
+              }))
+            );
+          }
+
+          await fetch(config.url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Encrypted': config.secretKey ? 'true' : 'false',
+              'X-Channel': config.channel,
+            },
+            body: JSON.stringify({ logs: processedLogs }),
+          });
+        } catch (e) {
+          // Silently fail - don't break the app
+          originalConsole.error('[AbbacchioConsole] Failed to send logs:', e);
+        }
+      }
+
+      /**
+       * Create interceptor for a console method
+       */
+      function createInterceptor(method) {
+        return function(...args) {
+          // Always call original
+          originalConsole[method](...args);
+
+          // If capturing, send to Abbacchio
+          if (isCapturing) {
+            const entry = createLogEntry(method, args);
+            addToBuffer(entry);
+          }
+        };
+      }
+
+      /**
+       * Initialize and start capturing
+       */
+      function init(options = {}) {
+        Object.assign(config, options);
+        start();
+      }
+
+      /**
+       * Start capturing
+       */
+      function start() {
+        if (isCapturing) return;
+
+        isCapturing = true;
+
+        // Replace console methods
+        console.log = createInterceptor('log');
+        console.info = createInterceptor('info');
+        console.warn = createInterceptor('warn');
+        console.error = createInterceptor('error');
+        console.debug = createInterceptor('debug');
+
+        originalConsole.log('[AbbacchioConsole] Started capturing');
+      }
+
+      /**
+       * Stop capturing
+       */
+      function stop() {
+        if (!isCapturing) return;
+
+        isCapturing = false;
+
+        // Restore original console methods
+        console.log = originalConsole.log;
+        console.info = originalConsole.info;
+        console.warn = originalConsole.warn;
+        console.error = originalConsole.error;
+        console.debug = originalConsole.debug;
+
+        // Flush remaining logs
+        flush();
+
+        originalConsole.log('[AbbacchioConsole] Stopped capturing');
+      }
+
+      /**
+       * Update configuration
+       */
+      function configure(options) {
+        Object.assign(config, options);
+      }
+
+      return {
+        init,
+        start,
+        stop,
+        configure,
+        flush,
+      };
+    })();
+
+    // Expose globally
+    window.AbbacchioConsole = AbbacchioConsole;
+
+    // UI Functions
+    function updateStatus(active) {
+      const status = document.getElementById('status');
+      if (active) {
+        status.className = 'status active';
+        status.textContent = 'Capturing console output...';
+      } else {
+        status.className = 'status inactive';
+        status.textContent = 'Not capturing';
+      }
+    }
+
+    function startCapture() {
+      const url = document.getElementById('apiUrl').value;
+      const channel = document.getElementById('channel').value;
+      const appName = document.getElementById('appName').value;
+      const secretKey = document.getElementById('secretKey').value.trim() || null;
+
+      AbbacchioConsole.configure({
+        url,
+        channel,
+        appName,
+        secretKey,
+      });
+
+      AbbacchioConsole.start();
+      updateStatus(true);
+    }
+
+    function stopCapture() {
+      AbbacchioConsole.stop();
+      updateStatus(false);
+    }
+
+    // Test functions
+    function testLog() {
+      console.log('This is a log message');
+    }
+
+    function testInfo() {
+      console.info('This is an info message');
+    }
+
+    function testWarn() {
+      console.warn('This is a warning message');
+    }
+
+    function testError() {
+      console.error('This is an error message');
+    }
+
+    function testDebug() {
+      console.debug('This is a debug message');
+    }
+
+    function testWithObject() {
+      console.log('User action:', {
+        userId: 'user_123',
+        action: 'button_click',
+        timestamp: Date.now(),
+        metadata: {
+          page: '/dashboard',
+          component: 'sidebar',
+        }
+      });
+    }
+
+    function testWithError() {
+      const error = new Error('Something went wrong!');
+      console.error('Caught an error:', error);
+    }
+  </script>
+</body>
+</html>
