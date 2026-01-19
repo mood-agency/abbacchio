@@ -1,7 +1,17 @@
 import build from "pino-abstract-transport";
 import { AbbacchioClient, type AbbacchioClientOptions } from "../client.js";
+import { Transform } from "stream";
 
 export interface PinoTransportOptions extends AbbacchioClientOptions {}
+
+export interface AbbacchioPinoStream extends Transform {
+  /** Change the channel dynamically */
+  setChannel(channel: string | undefined): void;
+  /** Get the current channel */
+  getChannel(): string | undefined;
+  /** Flush pending logs and close the client */
+  close(): Promise<void>;
+}
 
 /**
  * Pino transport for Abbacchio.
@@ -47,3 +57,61 @@ export default async function pinoTransport(opts: PinoTransportOptions = {}) {
  * Named export for programmatic usage
  */
 export { pinoTransport };
+
+/**
+ * Create a Pino destination stream with direct access to the client.
+ * Use this when you need to change the channel dynamically.
+ *
+ * @example
+ * ```typescript
+ * import pino from "pino";
+ * import { createPinoStream } from "@abbacchio/transport/transports/pino";
+ *
+ * const stream = createPinoStream({
+ *   url: "http://localhost:4000/api/logs",
+ *   channel: "initial-channel",
+ * });
+ *
+ * const logger = pino(stream);
+ *
+ * logger.info("Log to initial channel");
+ *
+ * // Change channel dynamically
+ * stream.setChannel("new-channel");
+ *
+ * logger.info("Log to new channel");
+ * ```
+ */
+export function createPinoStream(opts: PinoTransportOptions = {}): AbbacchioPinoStream {
+  const client = new AbbacchioClient(opts);
+
+  const stream = new Transform({
+    objectMode: true,
+    transform(chunk, _encoding, callback) {
+      try {
+        const log = typeof chunk === "string" ? JSON.parse(chunk) : chunk;
+        client.add(log);
+        callback();
+      } catch (err) {
+        callback(err as Error);
+      }
+    },
+    flush(callback) {
+      client.flush().then(() => callback()).catch(callback);
+    },
+  }) as AbbacchioPinoStream;
+
+  stream.setChannel = (channel: string | undefined) => {
+    client.setChannel(channel);
+  };
+
+  stream.getChannel = () => {
+    return client.getChannel();
+  };
+
+  stream.close = async () => {
+    await client.close();
+  };
+
+  return stream;
+}

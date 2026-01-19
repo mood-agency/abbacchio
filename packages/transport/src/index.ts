@@ -15,5 +15,5 @@ export type { WinstonTransportOptions } from "./transports/winston.js";
 export { bunyanStream, AbbacchioBunyanStream } from "./transports/bunyan.js";
 export type { BunyanStreamOptions } from "./transports/bunyan.js";
 
-export { interceptConsole, restoreConsole, getActiveClient } from "./transports/console.js";
-export type { ConsoleInterceptorOptions } from "./transports/console.js";
+export { createPinoStream } from "./transports/pino.js";
+export type { AbbacchioPinoStream } from "./transports/pino.js";

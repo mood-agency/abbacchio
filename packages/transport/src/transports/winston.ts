@@ -83,6 +83,20 @@ export class AbbacchioWinstonTransport extends TransportStream {
   }
 
   /**
+   * Change the channel dynamically
+   */
+  setChannel(channel: string | undefined): void {
+    this.client.setChannel(channel);
+  }
+
+  /**
+   * Get the current channel
+   */
+  getChannel(): string | undefined {
+    return this.client.getChannel();
+  }
+
+  /**
    * Close the transport
    */
   close(): void {

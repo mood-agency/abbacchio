@@ -74,21 +74,6 @@ const logger = bunyan.createLogger({
 logger.info({ user: "john" }, "User logged in");
 ```
 
-### Console
-
-```typescript
-import { interceptConsole, restoreConsole } from "@abbacchio/transport/transports/console";
-
-interceptConsole({
-  url: "http://localhost:4000/api/logs",
-  channel: "my-app",
-  passthrough: true,
-});
-
-console.log("This will be sent to Abbacchio!");
-
-restoreConsole();
-```
 
 ## Options
 

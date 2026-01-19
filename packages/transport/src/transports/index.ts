@@ -10,6 +10,6 @@ export type { WinstonTransportOptions } from "./winston.js";
 export { bunyanStream, AbbacchioBunyanStream } from "./bunyan.js";
 export type { BunyanStreamOptions } from "./bunyan.js";
 
-// Console interceptor
-export { interceptConsole, restoreConsole, getActiveClient } from "./console.js";
-export type { ConsoleInterceptorOptions } from "./console.js";
+// Pino stream with dynamic channel support
+export { createPinoStream } from "./pino.js";
+export type { AbbacchioPinoStream } from "./pino.js";

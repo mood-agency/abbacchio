@@ -40,6 +40,20 @@ export class AbbacchioClient {
   }
 
   /**
+   * Change the channel dynamically after initialization
+   */
+  setChannel(channel: string | undefined): void {
+    this.channel = channel;
+  }
+
+  /**
+   * Get the current channel
+   */
+  getChannel(): string | undefined {
+    return this.channel;
+  }
+
+  /**
    * Process a log entry (encrypt if secretKey is provided)
    */
   private processLog(log: unknown): unknown {
