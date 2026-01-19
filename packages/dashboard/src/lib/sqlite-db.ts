@@ -78,6 +78,10 @@ export async function clearLogsForChannel(channel: string): Promise<void> {
 
 export interface QueryOptions {
   search?: string;
+  /** Whether to use regex for search */
+  useRegex?: boolean;
+  /** Whether search is case sensitive */
+  caseSensitive?: boolean;
   levels?: FilterLevels;
   namespaces?: FilterNamespaces;
   /** Minimum timestamp (ms) for time range filtering */
@@ -257,4 +261,59 @@ export interface PruneOptions {
 export async function pruneOldLogs(options?: PruneOptions): Promise<void> {
   await initDatabase();
   await sendMessage('pruneOldLogs', options);
+}
+
+// ============================================================================
+// Timeline-related queries
+// ============================================================================
+
+export interface HourlyLogCount {
+  /** Unix timestamp (start of hour in milliseconds) */
+  hour: number;
+  /** Number of logs in this hour */
+  count: number;
+}
+
+export interface LogTimeRange {
+  minTime: number | null;
+  maxTime: number | null;
+}
+
+export interface GetHourlyLogCountsOptions {
+  channel: string;
+  minTime?: number;
+}
+
+/**
+ * Get log counts grouped by hour for timeline visualization
+ */
+export async function getHourlyLogCounts(options: GetHourlyLogCountsOptions): Promise<HourlyLogCount[]> {
+  await initDatabase();
+  return sendMessage<HourlyLogCount[]>('getHourlyLogCounts', options);
+}
+
+/**
+ * Get the time range (min and max timestamps) of logs for a channel
+ */
+export async function getLogTimeRange(channel: string): Promise<LogTimeRange> {
+  await initDatabase();
+  return sendMessage<LogTimeRange>('getLogTimeRange', { channel });
+}
+
+export interface GetLogIndexByTimeOptions {
+  channel: string;
+  targetTime: number;
+  levels?: string[];
+  namespaces?: string[];
+  minTime?: number;
+  search?: string;
+}
+
+/**
+ * Get the index (offset) of the first log at or before a given timestamp.
+ * Used for scrolling to a specific time in the virtualized list.
+ */
+export async function getLogIndexByTime(options: GetLogIndexByTimeOptions): Promise<number> {
+  await initDatabase();
+  return sendMessage<number>('getLogIndexByTime', options);
 }

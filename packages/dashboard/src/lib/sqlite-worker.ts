@@ -57,6 +57,16 @@ function clearAllHotBuffers(): void {
   hotBuffers.clear();
 }
 
+/**
+ * Test if a regex matches a string with a non-empty match.
+ * This prevents patterns like "foo|" from matching everything via empty string.
+ */
+function regexMatchesNonEmpty(regex: RegExp, text: string): boolean {
+  regex.lastIndex = 0;
+  const match = regex.exec(text);
+  return match !== null && match[0].length > 0;
+}
+
 // Query hot buffer with filters - returns matching logs in descending time order
 function queryHotBuffer(
   channel: string,
@@ -65,6 +75,8 @@ function queryHotBuffer(
     namespaces?: string[];
     minTime?: number;
     search?: string;
+    useRegex?: boolean;
+    caseSensitive?: boolean;
     limit?: number;
     offset?: number;
   }
@@ -74,17 +86,43 @@ function queryHotBuffer(
     return { logs: [], total: 0 };
   }
 
+  // Build regex if needed
+  let searchRegex: RegExp | null = null;
+  if (options.search && options.useRegex) {
+    try {
+      const flags = options.caseSensitive ? 'g' : 'gi';
+      searchRegex = new RegExp(options.search, flags);
+    } catch {
+      // Invalid regex, fall back to literal search
+      searchRegex = null;
+    }
+  }
+
   // Filter logs
   let filtered = buffer.filter(log => {
     if (options.minTime && options.minTime > 0 && log.time < options.minTime) return false;
     if (options.levels && options.levels.length > 0 && !options.levels.includes(log.level_label)) return false;
     if (options.namespaces && options.namespaces.length > 0 && (!log.namespace || !options.namespaces.includes(log.namespace))) return false;
     if (options.search) {
-      const searchLower = options.search.toLowerCase();
-      const msgMatch = log.msg.toLowerCase().includes(searchLower);
-      const dataMatch = log.data.toLowerCase().includes(searchLower);
-      const nsMatch = log.namespace?.toLowerCase().includes(searchLower);
-      if (!msgMatch && !dataMatch && !nsMatch) return false;
+      if (searchRegex) {
+        // Regex search - also search level_label for patterns like TRACE|DEBUG
+        // Use non-empty match check to prevent patterns like "foo|" from matching everything
+        const msgMatch = regexMatchesNonEmpty(searchRegex, log.msg);
+        const dataMatch = regexMatchesNonEmpty(searchRegex, log.data);
+        const nsMatch = log.namespace ? regexMatchesNonEmpty(searchRegex, log.namespace) : false;
+        const levelMatch = regexMatchesNonEmpty(searchRegex, log.level_label);
+        if (!msgMatch && !dataMatch && !nsMatch && !levelMatch) return false;
+      } else {
+        // Plain text search
+        const searchTerm = options.caseSensitive ? options.search : options.search.toLowerCase();
+        const msgToCheck = options.caseSensitive ? log.msg : log.msg.toLowerCase();
+        const dataToCheck = options.caseSensitive ? log.data : log.data.toLowerCase();
+        const nsToCheck = log.namespace ? (options.caseSensitive ? log.namespace : log.namespace.toLowerCase()) : '';
+        const msgMatch = msgToCheck.includes(searchTerm);
+        const dataMatch = dataToCheck.includes(searchTerm);
+        const nsMatch = nsToCheck.includes(searchTerm);
+        if (!msgMatch && !dataMatch && !nsMatch) return false;
+      }
     }
     return true;
   });
@@ -459,6 +497,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       case 'queryLogs': {
         const options = payload as {
           search?: string;
+          useRegex?: boolean;
+          caseSensitive?: boolean;
           levels?: string[];
           namespaces?: string[];
           minTime?: number;
@@ -477,6 +517,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
             namespaces: options.namespaces,
             minTime: options.minTime,
             search: options.search?.trim(),
+            useRegex: options.useRegex,
+            caseSensitive: options.caseSensitive,
             limit,
             offset: 0,
           });
@@ -506,10 +548,32 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
 
         if (options.search?.trim()) {
           const searchTerm = options.search.trim().replace(/['"]/g, '');
-          if (shouldUseLikeSearch(searchTerm)) {
+          if (options.useRegex) {
+            // Regex search - we need to load all matching rows and filter in JS
+            // SQLite doesn't support regex natively, so we skip LIKE pre-filtering
+            // for complex patterns (containing | for OR, ^ for start, $ for end, etc.)
+            // and just apply regex in post-processing on all results
+            // For simpler patterns, we can still use LIKE to narrow down
+            // Skip LIKE pre-filter for complex regex patterns:
+            // - | for OR, ^ $ for anchors, () for groups, [] for character classes
+            // - \ for escape sequences like \w, \d, \s, etc.
+            const hasComplexRegex = /[|^$()[\]\\]/.test(searchTerm);
+            if (!hasComplexRegex) {
+              // Simple regex - can use LIKE to pre-filter
+              conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ?)`);
+              const likePattern = `%${searchTerm.replace(/[.*+?]/g, '%')}%`;
+              params.push(likePattern, likePattern, likePattern);
+            }
+            // For complex regex (OR patterns, anchors, escape sequences, etc.), skip LIKE pre-filter
+            // The regex will be applied in post-processing
+          } else if (shouldUseLikeSearch(searchTerm)) {
             // Use LIKE for substring matching (short terms or numeric patterns)
-            conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ? OR logs.channel LIKE ?)`);
-            const likePattern = `%${searchTerm}%`;
+            const likePattern = options.caseSensitive ? `%${searchTerm}%` : `%${searchTerm.toLowerCase()}%`;
+            if (options.caseSensitive) {
+              conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ? OR logs.channel LIKE ?)`);
+            } else {
+              conditions.push(`(LOWER(logs.msg) LIKE ? OR LOWER(logs.data) LIKE ? OR LOWER(logs.namespace) LIKE ? OR LOWER(logs.channel) LIKE ?)`);
+            }
             params.push(likePattern, likePattern, likePattern, likePattern);
           } else {
             // Use FTS5 for full-text search (longer text terms)
@@ -535,20 +599,59 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         let sql = `SELECT * FROM logs ${where} ORDER BY time DESC`;
 
+        // Apply pagination
+        // For regex queries without LIKE pre-filter, we need to be careful:
+        // - Can't use SQL OFFSET because we filter in JS after fetching
+        // - Need enough rows to fill the requested limit after filtering
+        const searchTerm = options.search?.trim();
+        const hasComplexRegex = options.useRegex && searchTerm && /[|^$()[\]\\]/.test(searchTerm);
+
         sql += ` LIMIT ?`;
-        params.push(limit);
-        if (offset > 0) {
-          sql += ` OFFSET ?`;
-          params.push(offset);
+        if (hasComplexRegex) {
+          // For complex regex, fetch more rows to ensure we have enough after filtering
+          // But cap at 200k to avoid memory issues on very large datasets
+          params.push(Math.min(limit * 2, 200000));
+        } else {
+          params.push(limit);
+          if (offset > 0) {
+            sql += ` OFFSET ?`;
+            params.push(offset);
+          }
         }
 
-        const rows: Record<string, unknown>[] = [];
+        let rows: Record<string, unknown>[] = [];
         db.exec({
           sql,
           bind: params,
           rowMode: 'object',
           callback: (row: SQLiteRow) => rows.push(row as Record<string, unknown>),
         });
+
+        // Apply regex filter in post-processing if needed
+        if (options.useRegex && options.search?.trim()) {
+          try {
+            const flags = options.caseSensitive ? 'g' : 'gi';
+            const regex = new RegExp(options.search.trim(), flags);
+            rows = rows.filter(row => {
+              // Use non-empty match check to prevent patterns like "foo|" from matching everything
+              const msgMatch = regexMatchesNonEmpty(regex, String(row.msg || ''));
+              const dataMatch = regexMatchesNonEmpty(regex, String(row.data || ''));
+              const nsMatch = row.namespace ? regexMatchesNonEmpty(regex, String(row.namespace)) : false;
+              const levelMatch = regexMatchesNonEmpty(regex, String(row.level_label || ''));
+              return msgMatch || dataMatch || nsMatch || levelMatch;
+            });
+          } catch {
+            // Invalid regex, return empty results
+            rows = [];
+          }
+          // For complex regex patterns, apply offset and limit after filtering
+          // For simple regex patterns (with LIKE pre-filter), SQL already applied pagination
+          const searchTerm = options.search.trim();
+          const hasComplexRegex = /[|^$()[\]\\]/.test(searchTerm);
+          if (hasComplexRegex) {
+            rows = rows.slice(offset, offset + limit);
+          }
+        }
 
         self.postMessage({ id, success: true, result: rows });
         break;
@@ -557,6 +660,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
       case 'getFilteredCount': {
         const options = payload as {
           search?: string;
+          useRegex?: boolean;
+          caseSensitive?: boolean;
           levels?: string[];
           namespaces?: string[];
           minTime?: number;
@@ -622,12 +727,76 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           params.push(options.minTime!);
         }
 
+        // For regex queries, we need to count in JS
+        if (options.useRegex && hasSearchFilter) {
+          const searchTerm = options.search!.trim();
+          // Skip LIKE pre-filter for complex regex patterns:
+          // - | for OR, ^ $ for anchors, () for groups, [] for character classes
+          // - \ for escape sequences like \w, \d, \s, etc.
+          const hasComplexRegex = /[|^$()[\]\\]/.test(searchTerm);
+          if (!hasComplexRegex) {
+            // Simple regex - can use LIKE to pre-filter
+            conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ?)`);
+            const likePattern = `%${searchTerm.replace(/[.*+?]/g, '%')}%`;
+            params.push(likePattern, likePattern, likePattern);
+          }
+          // For complex regex (OR patterns, anchors, escape sequences, etc.), skip LIKE pre-filter
+
+          // Filter by levels
+          if (hasLevelFilter) {
+            const placeholders = options.levels!.map(() => '?').join(', ');
+            conditions.push(`logs.level_label IN (${placeholders})`);
+            params.push(...options.levels!);
+          }
+
+          // Filter by namespaces
+          if (hasNamespaceFilter) {
+            const placeholders = options.namespaces!.map(() => '?').join(', ');
+            conditions.push(`logs.namespace IN (${placeholders})`);
+            params.push(...options.namespaces!);
+          }
+
+          const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+          const rows: Record<string, unknown>[] = [];
+          db.exec({
+            sql: `SELECT msg, data, namespace, level_label FROM logs ${where}`,
+            bind: params,
+            rowMode: 'object',
+            callback: (row: SQLiteRow) => rows.push(row as Record<string, unknown>),
+          });
+
+          // Apply regex filter
+          let count = 0;
+          try {
+            const flags = options.caseSensitive ? 'g' : 'gi';
+            const regex = new RegExp(searchTerm, flags);
+            count = rows.filter(row => {
+              // Use non-empty match check to prevent patterns like "foo|" from matching everything
+              const msgMatch = regexMatchesNonEmpty(regex, String(row.msg || ''));
+              const dataMatch = regexMatchesNonEmpty(regex, String(row.data || ''));
+              const nsMatch = row.namespace ? regexMatchesNonEmpty(regex, String(row.namespace)) : false;
+              const levelMatch = regexMatchesNonEmpty(regex, String(row.level_label || ''));
+              return msgMatch || dataMatch || nsMatch || levelMatch;
+            }).length;
+          } catch {
+            // Invalid regex
+            count = 0;
+          }
+
+          self.postMessage({ id, success: true, result: count });
+          break;
+        }
+
         if (hasSearchFilter) {
           const searchTerm = options.search!.trim().replace(/['"]/g, '');
           if (shouldUseLikeSearch(searchTerm)) {
             // Use LIKE for substring matching (short terms or numeric patterns)
-            conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ? OR logs.channel LIKE ?)`);
-            const likePattern = `%${searchTerm}%`;
+            const likePattern = options.caseSensitive ? `%${searchTerm}%` : `%${searchTerm.toLowerCase()}%`;
+            if (options.caseSensitive) {
+              conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ? OR logs.channel LIKE ?)`);
+            } else {
+              conditions.push(`(LOWER(logs.msg) LIKE ? OR LOWER(logs.data) LIKE ? OR LOWER(logs.namespace) LIKE ? OR LOWER(logs.channel) LIKE ?)`);
+            }
             params.push(likePattern, likePattern, likePattern, likePattern);
           } else {
             // Use FTS5 for full-text search (longer text terms)
@@ -948,6 +1117,104 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         });
 
         self.postMessage({ id, success: true, result: stats });
+        break;
+      }
+
+      case 'getHourlyLogCounts': {
+        const options = payload as { channel: string; minTime?: number };
+        const channelBuckets = timeBuckets.get(options.channel);
+        const result: Array<{ hour: number; count: number }> = [];
+
+        if (channelBuckets) {
+          channelBuckets.forEach((bucket, bucketTime) => {
+            if (!options.minTime || bucketTime + BUCKET_SIZE_MS > options.minTime) {
+              result.push({ hour: bucketTime, count: bucket.total });
+            }
+          });
+          result.sort((a, b) => a.hour - b.hour);
+        }
+
+        self.postMessage({ id, success: true, result });
+        break;
+      }
+
+      case 'getLogTimeRange': {
+        const options = payload as { channel: string };
+        let minTime: number | null = null;
+        let maxTime: number | null = null;
+
+        db.exec({
+          sql: `SELECT MIN(time) as min_time, MAX(time) as max_time FROM logs WHERE channel = ?`,
+          bind: [options.channel],
+          rowMode: 'object',
+          callback: (row: SQLiteRow) => {
+            const r = row as { min_time: number | null; max_time: number | null };
+            minTime = r.min_time;
+            maxTime = r.max_time;
+          },
+        });
+
+        self.postMessage({ id, success: true, result: { minTime, maxTime } });
+        break;
+      }
+
+      case 'getLogIndexByTime': {
+        const options = payload as {
+          channel: string;
+          targetTime: number;
+          levels?: string[];
+          namespaces?: string[];
+          minTime?: number;
+          search?: string;
+        };
+
+        // Count logs with time >= targetTime
+        // Since logs are sorted DESC (newest first), this gives the index/offset
+        // for the first log that is older than targetTime
+        const conditions: string[] = ['channel = ?', 'time >= ?'];
+        const params: (string | number)[] = [options.channel, options.targetTime];
+
+        // Apply same filters as queryLogs
+        if (options.minTime && options.minTime > 0) {
+          conditions.push('time >= ?');
+          params.push(options.minTime);
+        }
+
+        if (options.levels && options.levels.length > 0) {
+          const placeholders = options.levels.map(() => '?').join(', ');
+          conditions.push(`level_label IN (${placeholders})`);
+          params.push(...options.levels);
+        }
+
+        if (options.namespaces && options.namespaces.length > 0) {
+          const placeholders = options.namespaces.map(() => '?').join(', ');
+          conditions.push(`namespace IN (${placeholders})`);
+          params.push(...options.namespaces);
+        }
+
+        if (options.search?.trim()) {
+          const searchTerm = options.search.trim().replace(/['"]/g, '');
+          if (shouldUseLikeSearch(searchTerm)) {
+            conditions.push(`(msg LIKE ? OR data LIKE ? OR namespace LIKE ?)`);
+            const likePattern = `%${searchTerm}%`;
+            params.push(likePattern, likePattern, likePattern);
+          } else {
+            conditions.push(`rowid IN (SELECT rowid FROM logs_fts WHERE logs_fts MATCH ?)`);
+            params.push(`"${searchTerm}"*`);
+          }
+        }
+
+        let count = 0;
+        db.exec({
+          sql: `SELECT COUNT(*) as count FROM logs WHERE ${conditions.join(' AND ')}`,
+          bind: params,
+          rowMode: 'object',
+          callback: (row: SQLiteRow) => {
+            count = (row as { count: number }).count;
+          },
+        });
+
+        self.postMessage({ id, success: true, result: count });
         break;
       }
 
