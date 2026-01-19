@@ -49,10 +49,12 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     ['deriveKey']
   );
 
+  // Create a copy to ensure we have a proper ArrayBuffer (not SharedArrayBuffer)
+  const saltBuffer = salt.slice().buffer;
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt.buffer as ArrayBuffer,
+      salt: saltBuffer,
       iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },
@@ -73,7 +75,7 @@ async function encryptData(data: string, password: string): Promise<{ encrypted:
   const key = await deriveKey(password, salt);
 
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: new Uint8Array(iv) },
     key,
     encoder.encode(data)
   );

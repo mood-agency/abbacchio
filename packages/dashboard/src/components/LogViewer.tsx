@@ -71,7 +71,6 @@ import {
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
-  Plug,
   Radio,
   LockOpen,
   Check,
