@@ -67,7 +67,7 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
       <div className="h-6 w-px bg-border" />
 
       {/* Search */}
-      <div className="relative flex-1 max-w-md flex items-center gap-1">
+      <div className="relative max-w-md flex items-center gap-1">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -116,10 +116,11 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
         )}
       </div>
 
-      {/* Selection indicator - right side */}
+      {/* Selection indicator - next to search */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-1 ml-auto">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <div className="h-6 w-px bg-border" />
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
             {t('selection.count', { count: selectedCount })}
           </span>
           <Tooltip>

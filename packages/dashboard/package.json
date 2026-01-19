@@ -1,7 +1,7 @@
 {
   "name": "@abbacchio/dashboard",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Abbacchio dashboard - Real-time log viewer React frontend",
   "type": "module",
   "scripts": {

@@ -240,13 +240,12 @@ export function LogViewer() {
   const handleSelectAll = useCallback(() => {
     if (logs.length === 0) return;
 
-    const allSelected = selectedIds.size === logs.length;
-    if (allSelected) {
-      // Deselect all
+    if (selectedIds.size > 0) {
+      // Deselect all if any are selected
       setSelectedIds(new Set());
       setLastSelectedId(null);
     } else {
-      // Select all
+      // Select all if none are selected
       const allIds = new Set<string>(logs.map(log => log.id));
       setSelectedIds(allIds);
       setLastSelectedId(logs[logs.length - 1]?.id ?? null);
@@ -270,9 +269,6 @@ export function LogViewer() {
     try {
       await navigator.clipboard.writeText(formatted);
       toast.success(tLogs('toast.logsCopied', { count: selectedLogs.length }));
-      // Clear selection after copy
-      setSelectedIds(new Set());
-      setLastSelectedId(null);
     } catch (err) {
       console.error('Failed to copy logs:', err);
       toast.error(tLogs('toast.copyFailed'));
@@ -499,10 +495,7 @@ export function LogViewer() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <div className="flex items-center gap-2">
-                  <img src="/favicon.svg" alt="" className="w-5 h-5" />
-                  <span className="font-semibold text-foreground">{t('appName')}</span>
-                </div>
+                <span className="font-semibold text-foreground">{t('appName')}</span>
               </BreadcrumbItem>
               {channels.length > 0 && (
                 <>

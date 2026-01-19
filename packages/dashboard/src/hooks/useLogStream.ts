@@ -11,7 +11,7 @@ import {
 } from '../lib/sqlite-db';
 
 // Default page size options
-export const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
+export const PAGE_SIZE_OPTIONS = [1000, 2500, 5000, 10000] as const;
 export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 interface UseLogStreamOptions {
@@ -78,7 +78,7 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(100);
+  const [pageSize, setPageSize] = useState<PageSize>(1000);
 
   // Results from SQL queries
   const [logs, setLogs] = useState<LogEntry[]>([]);
