@@ -93,7 +93,7 @@ export function useLogStore(): UseLogStoreResult {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   // Secret key is kept in memory only - never persisted for security
   const [secretKey, setSecretKey] = useState(initialUrlParams.key);
-  const [channels, setChannels] = useState<string[]>(['default']);
+  const [channels] = useState<string[]>(['default']);
   const [urlChannel] = useState(initialUrlParams.channel);
   const [hasEncryptedLogs, setHasEncryptedLogs] = useState(false);
   const [persistLogs, setPersistLogs] = useState(true);
