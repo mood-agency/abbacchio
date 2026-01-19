@@ -14,6 +14,7 @@ on:
           - all
           - transport
           - browser-transport
+          - tui
         default: all
       dry_run:
         description: 'Dry run (no publish)'
@@ -35,6 +36,8 @@ jobs:
             filter: '@abbacchio/transport'
           - name: browser-transport
             filter: '@abbacchio/browser-transport'
+          - name: tui
+            filter: '@abbacchio/tui'
 
     name: Publish ${{ matrix.package.name }}
 
