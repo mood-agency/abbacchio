@@ -3,7 +3,7 @@ Loguru sink for Abbacchio.
 
 Usage:
     from loguru import logger
-    from abbacchio.loguru import abbacchio_sink, AbbacchioSink
+    from abbacchio_transport.loguru import abbacchio_sink, AbbacchioSink
 
     # Option 1: Use the sink factory (recommended)
     logger.add(
@@ -30,7 +30,7 @@ from __future__ import annotations
 import atexit
 from typing import TYPE_CHECKING, Any, Callable
 
-from abbacchio.transport import AbbacchioTransport, create_log_entry
+from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 
 if TYPE_CHECKING:
     from loguru import Record

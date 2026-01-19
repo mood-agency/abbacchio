@@ -3,7 +3,7 @@ Python stdlib logging handler for Abbacchio.
 
 Usage:
     import logging
-    from abbacchio.logging import AbbacchioHandler
+    from abbacchio_transport.logging import AbbacchioHandler
 
     handler = AbbacchioHandler(
         url="http://localhost:4000/api/logs",
@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from abbacchio.transport import AbbacchioTransport, create_log_entry
+from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 
 # Map Python logging levels to Abbacchio levels
 LEVEL_MAP = {

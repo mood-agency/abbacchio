@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "abbacchio"
+name = "abbacchio-transport"
 version = "0.1.0"
 description = "Python logging transports for Abbacchio log viewer"
 readme = "README.md"
@@ -47,7 +47,7 @@ Repository = "https://github.com/yourusername/abbacchio"
 Documentation = "https://github.com/yourusername/abbacchio#readme"
 
 [tool.hatch.build.targets.wheel]
-packages = ["abbacchio"]
+packages = ["abbacchio_transport"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

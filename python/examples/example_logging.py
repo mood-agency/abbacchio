@@ -3,7 +3,7 @@
 import logging
 import time
 
-from abbacchio.logging import AbbacchioHandler
+from abbacchio_transport.logging import AbbacchioHandler
 
 
 def main():

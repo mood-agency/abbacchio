@@ -27,7 +27,7 @@ from test_utils import (
     random_element,
 )
 
-from abbacchio.structlog import AbbacchioProcessor
+from abbacchio_transport.structlog import AbbacchioProcessor
 
 
 def create_processors(channels: list[str]) -> dict[str, AbbacchioProcessor]:

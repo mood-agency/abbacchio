@@ -3,7 +3,7 @@ Structlog processor for Abbacchio.
 
 Usage:
     import structlog
-    from abbacchio.structlog import AbbacchioProcessor, abbacchio_processor
+    from abbacchio_transport.structlog import AbbacchioProcessor, abbacchio_processor
 
     # Option 1: Use the processor factory
     processor = abbacchio_processor(
@@ -35,7 +35,7 @@ from __future__ import annotations
 import atexit
 from typing import Any, Callable
 
-from abbacchio.transport import AbbacchioTransport, create_log_entry
+from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 
 # Map structlog level names to numeric levels
 LEVEL_MAP = {

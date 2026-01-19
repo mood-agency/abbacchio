@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from abbacchio.transport import AbbacchioTransport, create_log_entry
+from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 
 
 class TestCreateLogEntry:

@@ -1,4 +1,4 @@
-# Abbacchio Python
+# Abbacchio Transport (Python)
 
 Python logging transports for [Abbacchio](https://github.com/yourusername/abbacchio) log viewer.
 
@@ -11,16 +11,16 @@ Supports:
 
 ```bash
 # Base package (stdlib logging only)
-pip install abbacchio
+pip install abbacchio-transport
 
 # With structlog support
-pip install abbacchio[structlog]
+pip install abbacchio-transport[structlog]
 
 # With loguru support
-pip install abbacchio[loguru]
+pip install abbacchio-transport[loguru]
 
 # All optional dependencies
-pip install abbacchio[all]
+pip install abbacchio-transport[all]
 ```
 
 ## Usage
@@ -29,7 +29,7 @@ pip install abbacchio[all]
 
 ```python
 import logging
-from abbacchio.logging import AbbacchioHandler
+from abbacchio_transport.logging import AbbacchioHandler
 
 # Create handler
 handler = AbbacchioHandler(
@@ -51,7 +51,7 @@ logger.error("Database connection failed", exc_info=True)
 
 ```python
 import structlog
-from abbacchio.structlog import abbacchio_processor
+from abbacchio_transport.structlog import abbacchio_processor
 
 # Configure structlog with Abbacchio processor
 structlog.configure(
@@ -77,7 +77,7 @@ log.error("db.connection_failed", error="timeout", retry_count=3)
 
 ```python
 from loguru import logger
-from abbacchio.loguru import abbacchio_sink
+from abbacchio_transport.loguru import abbacchio_sink
 
 # Add Abbacchio sink
 logger.add(
@@ -132,7 +132,7 @@ pip install -e ".[dev]"
 pytest
 
 # Type check
-mypy abbacchio
+mypy abbacchio_transport
 ```
 
 ## License

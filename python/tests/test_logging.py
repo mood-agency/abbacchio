@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from abbacchio.logging import AbbacchioHandler
+from abbacchio_transport.logging import AbbacchioHandler
 
 
 class TestAbbacchioHandler:

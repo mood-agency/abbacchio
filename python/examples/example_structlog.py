@@ -4,7 +4,7 @@ import time
 
 import structlog
 
-from abbacchio.structlog import abbacchio_processor
+from abbacchio_transport.structlog import abbacchio_processor
 
 
 def main():

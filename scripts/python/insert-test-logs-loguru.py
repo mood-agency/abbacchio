@@ -27,7 +27,7 @@ from test_utils import (
     random_element,
 )
 
-from abbacchio.loguru import AbbacchioSink
+from abbacchio_transport.loguru import AbbacchioSink
 
 
 def create_logger(channel: str) -> tuple[logger.__class__, AbbacchioSink, int]:

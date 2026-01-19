@@ -24,7 +24,7 @@ from test_utils import (
     random_element,
 )
 
-from abbacchio.logging import AbbacchioHandler
+from abbacchio_transport.logging import AbbacchioHandler
 
 
 def create_logger(channel: str) -> logging.Logger:
