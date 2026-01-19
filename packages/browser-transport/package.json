@@ -1,6 +1,6 @@
 {
   "name": "@abbacchio/browser-transport",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Browser and React logging client for Abbacchio - intercept console.log and send to your log viewer",
   "type": "module",
   "main": "./dist/index.js",

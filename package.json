@@ -1,6 +1,6 @@
 {
   "name": "abbacchio",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Real-time log viewer dashboard with HTTP ingestion for Pino, Winston, Bunyan, and other loggers",
   "type": "module",
