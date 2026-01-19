@@ -81,6 +81,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
+            libglib2.0-dev \
             patchelf
 
       - uses: pnpm/action-setup@v4
