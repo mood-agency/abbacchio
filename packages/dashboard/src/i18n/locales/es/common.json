@@ -9,7 +9,8 @@
     "apply": "Aplicar",
     "clear": "Limpiar",
     "back": "Atrás",
-    "continue": "Continuar"
+    "continue": "Continuar",
+    "save": "Guardar"
   },
   "theme": {
     "toggleDarkMode": "Cambiar modo oscuro"

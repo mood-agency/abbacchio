@@ -35,6 +35,8 @@
   },
   "tooltips": {
     "matchCase": "Match case",
+    "useRegex": "Use regular expression",
+    "regexError": "Invalid regex: {{error}}",
     "clearFilters": "Clear filters",
     "manageKey": "Manage encryption key",
     "copyLink": "Copy link",
@@ -47,5 +49,60 @@
     "resume": "Resume incoming logs",
     "moreOptions": "More options",
     "channelOptions": "Channel options"
+  },
+  "savedFilters": {
+    "label": "Saved Filters",
+    "tooltip": "Load a saved filter",
+    "save": "Save current filter",
+    "searchPlaceholder": "Search filters...",
+    "noResults": "No filters found.",
+    "dialog": {
+      "title": "Save Filter",
+      "description": "Give your filter a name to easily find it later.",
+      "nameLabel": "Filter name",
+      "namePlaceholder": "e.g., Error logs, Production errors...",
+      "includedFilters": "Included filters:"
+    },
+    "summary": {
+      "levels": "{{count}} level",
+      "levels_other": "{{count}} levels",
+      "namespaces": "{{count}} namespace",
+      "namespaces_other": "{{count}} namespaces",
+      "search": "Search: \"{{query}}\"",
+      "caseSensitive": "Case sensitive",
+      "useRegex": "Regex"
+    },
+    "deleteConfirm": {
+      "title": "Delete filter?",
+      "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone."
+    },
+    "toast": {
+      "saved": "Filter saved",
+      "deleted": "Filter deleted"
+    }
+  },
+  "export": {
+    "title": "Export Logs",
+    "description": "Export {{count}} logs from channel \"{{channel}}\" to a file.",
+    "button": "Export",
+    "tooltip": "Export logs",
+    "formats": {
+      "json": {
+        "label": "JSON",
+        "description": "Structured format, ideal for programmatic processing"
+      },
+      "csv": {
+        "label": "CSV",
+        "description": "Spreadsheet format, compatible with Excel and Google Sheets"
+      },
+      "sql": {
+        "label": "SQL",
+        "description": "INSERT statements for importing into a database"
+      }
+    },
+    "toast": {
+      "success": "Logs exported successfully",
+      "noLogs": "No logs to export"
+    }
   }
 }

@@ -20,6 +20,7 @@ export interface FilterParams {
   timeRange: TimeRange;
   search: string;
   caseSensitive: boolean;
+  useRegex: boolean;
 }
 
 export interface UseFilterParamsResult extends FilterParams {
@@ -30,6 +31,8 @@ export interface UseFilterParamsResult extends FilterParams {
   setTimeRange: (range: TimeRange) => void;
   setSearch: (search: string) => void;
   setCaseSensitive: (caseSensitive: boolean) => void;
+  setUseRegex: (useRegex: boolean) => void;
+  setAllFilters: (filters: FilterParams) => void;
   clearFilters: () => void;
   hasFilters: boolean;
 }
@@ -64,8 +67,9 @@ export function useFilterParams(): UseFilterParamsResult {
 
     const search = searchParams.get('q') || '';
     const caseSensitive = searchParams.get('case') === '1';
+    const useRegex = searchParams.get('regex') === '1';
 
-    return { levels, namespaces, timeRange, search, caseSensitive };
+    return { levels, namespaces, timeRange, search, caseSensitive, useRegex };
   }, [searchParams]);
 
   // Update a single param while preserving others (including channel/key)
@@ -140,6 +144,60 @@ export function useFilterParams(): UseFilterParamsResult {
     [updateParam]
   );
 
+  const setUseRegex = useCallback(
+    (useRegex: boolean) => updateParam('regex', useRegex ? '1' : null),
+    [updateParam]
+  );
+
+  const setAllFilters = useCallback(
+    (filters: FilterParams) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          // Set levels
+          if (filters.levels.length > 0) {
+            next.set('levels', filters.levels.join(','));
+          } else {
+            next.delete('levels');
+          }
+          // Set namespaces
+          if (filters.namespaces.length > 0) {
+            next.set('namespaces', filters.namespaces.join(','));
+          } else {
+            next.delete('namespaces');
+          }
+          // Set time range
+          if (filters.timeRange !== 'all') {
+            next.set('time', filters.timeRange);
+          } else {
+            next.delete('time');
+          }
+          // Set search
+          if (filters.search) {
+            next.set('q', filters.search);
+          } else {
+            next.delete('q');
+          }
+          // Set case sensitive
+          if (filters.caseSensitive) {
+            next.set('case', '1');
+          } else {
+            next.delete('case');
+          }
+          // Set useRegex
+          if (filters.useRegex) {
+            next.set('regex', '1');
+          } else {
+            next.delete('regex');
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
   const clearFilters = useCallback(() => {
     setSearchParams(
       (prev) => {
@@ -149,6 +207,7 @@ export function useFilterParams(): UseFilterParamsResult {
         next.delete('time');
         next.delete('q');
         next.delete('case');
+        next.delete('regex');
         return next;
       },
       { replace: true }
@@ -160,7 +219,8 @@ export function useFilterParams(): UseFilterParamsResult {
     params.namespaces.length > 0 ||
     params.timeRange !== 'all' ||
     params.search !== '' ||
-    params.caseSensitive;
+    params.caseSensitive ||
+    params.useRegex;
 
   return {
     ...params,
@@ -171,6 +231,8 @@ export function useFilterParams(): UseFilterParamsResult {
     setTimeRange,
     setSearch,
     setCaseSensitive,
+    setUseRegex,
+    setAllFilters,
     clearFilters,
     hasFilters,
   };

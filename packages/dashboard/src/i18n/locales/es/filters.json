@@ -35,6 +35,8 @@
   },
   "tooltips": {
     "matchCase": "Coincidir mayúsculas",
+    "useRegex": "Usar expresión regular",
+    "regexError": "Regex inválida: {{error}}",
     "clearFilters": "Limpiar filtros",
     "manageKey": "Gestionar clave de cifrado",
     "copyLink": "Copiar enlace",
@@ -47,5 +49,60 @@
     "resume": "Reanudar logs entrantes",
     "moreOptions": "Más opciones",
     "channelOptions": "Opciones del canal"
+  },
+  "savedFilters": {
+    "label": "Filtros guardados",
+    "tooltip": "Cargar un filtro guardado",
+    "save": "Guardar filtro actual",
+    "searchPlaceholder": "Buscar filtros...",
+    "noResults": "No se encontraron filtros.",
+    "dialog": {
+      "title": "Guardar filtro",
+      "description": "Dale un nombre a tu filtro para encontrarlo fácilmente después.",
+      "nameLabel": "Nombre del filtro",
+      "namePlaceholder": "ej., Logs de error, Errores de producción...",
+      "includedFilters": "Filtros incluidos:"
+    },
+    "summary": {
+      "levels": "{{count}} nivel",
+      "levels_other": "{{count}} niveles",
+      "namespaces": "{{count}} namespace",
+      "namespaces_other": "{{count}} namespaces",
+      "search": "Búsqueda: \"{{query}}\"",
+      "caseSensitive": "Sensible a mayúsculas",
+      "useRegex": "Regex"
+    },
+    "deleteConfirm": {
+      "title": "¿Eliminar filtro?",
+      "description": "¿Estás seguro de que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer."
+    },
+    "toast": {
+      "saved": "Filtro guardado",
+      "deleted": "Filtro eliminado"
+    }
+  },
+  "export": {
+    "title": "Exportar Logs",
+    "description": "Exportar {{count}} logs del canal \"{{channel}}\" a un archivo.",
+    "button": "Exportar",
+    "tooltip": "Exportar logs",
+    "formats": {
+      "json": {
+        "label": "JSON",
+        "description": "Formato estructurado, ideal para procesamiento programático"
+      },
+      "csv": {
+        "label": "CSV",
+        "description": "Formato de hoja de cálculo, compatible con Excel y Google Sheets"
+      },
+      "sql": {
+        "label": "SQL",
+        "description": "Sentencias INSERT para importar a una base de datos"
+      }
+    },
+    "toast": {
+      "success": "Logs exportados exitosamente",
+      "noLogs": "No hay logs para exportar"
+    }
   }
 }
