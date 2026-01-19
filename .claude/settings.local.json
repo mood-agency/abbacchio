@@ -24,7 +24,8 @@
       "Bash(pnpm remove:*)",
       "Bash(npm run typecheck:*)",
       "Bash(git add:*)",
-      "Bash(pnpm exec tsc:*)"
+      "Bash(pnpm exec tsc:*)",
+      "Bash(npm whoami:*)"
     ]
   }
 }
