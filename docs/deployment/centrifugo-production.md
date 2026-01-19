@@ -69,7 +69,7 @@ This guide covers deploying Centrifugo with Redis backend, Nginx reverse proxy, 
 ### 1. Clone and Navigate
 
 ```bash
-cd pino-live
+cd abbacchio
 ```
 
 ### 2. Create Environment File
@@ -179,7 +179,7 @@ Key settings in `centrifugo.prod.json`:
 
 ### Basic Configuration
 
-Create `/etc/nginx/sites-available/pino-live`:
+Create `/etc/nginx/sites-available/abbacchio`:
 
 ```nginx
 # Upstream definitions
@@ -298,7 +298,7 @@ server {
 
     # Dashboard static files (if serving from same domain)
     location / {
-        root /var/www/pino-live/dashboard;
+        root /var/www/abbacchio/dashboard;
         try_files $uri $uri/ /index.html;
 
         # Cache static assets
@@ -313,7 +313,7 @@ server {
 ### Enable Configuration
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/pino-live /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/abbacchio /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -360,7 +360,7 @@ services:
     depends_on:
       - centrifugo
     networks:
-      - pino-live-network
+      - abbacchio-network
     restart: unless-stopped
 
   certbot:
@@ -370,7 +370,7 @@ services:
       - ./certbot/conf:/etc/letsencrypt
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     networks:
-      - pino-live-network
+      - abbacchio-network
 ```
 
 Initial certificate setup:
@@ -506,11 +506,11 @@ Import the official Centrifugo Grafana dashboard:
 curl http://localhost:8000/health
 
 # Redis health
-docker exec pino-live-redis redis-cli ping
+docker exec abbacchio-redis redis-cli ping
 
 # Full stack check
 curl -f http://localhost:8000/health && \
-docker exec pino-live-redis redis-cli ping && \
+docker exec abbacchio-redis redis-cli ping && \
 echo "All systems operational"
 ```
 
@@ -549,7 +549,7 @@ groups:
 **Check:**
 ```bash
 # Verify Centrifugo is running
-docker logs pino-live-centrifugo
+docker logs abbacchio-centrifugo
 
 # Test WebSocket endpoint
 wscat -c ws://localhost:8000/connection/websocket
@@ -582,10 +582,10 @@ echo $CENTRIFUGO_TOKEN_SECRET
 **Check:**
 ```bash
 # Test Redis connection
-docker exec pino-live-redis redis-cli ping
+docker exec abbacchio-redis redis-cli ping
 
 # Check Centrifugo logs
-docker logs pino-live-centrifugo | grep -i redis
+docker logs abbacchio-centrifugo | grep -i redis
 ```
 
 **Solutions:**
@@ -600,7 +600,7 @@ docker logs pino-live-centrifugo | grep -i redis
 **Check:**
 ```bash
 # Check container memory
-docker stats pino-live-centrifugo pino-live-redis
+docker stats abbacchio-centrifugo abbacchio-redis
 ```
 
 **Solutions:**
@@ -620,7 +620,7 @@ Enable debug logging temporarily:
 
 ```bash
 docker-compose -f docker-compose.prod.yml restart centrifugo
-docker logs -f pino-live-centrifugo
+docker logs -f abbacchio-centrifugo
 ```
 
 ### Useful Commands
@@ -633,7 +633,7 @@ docker-compose -f docker-compose.prod.yml logs -f
 docker-compose -f docker-compose.prod.yml restart
 
 # Check Redis memory usage
-docker exec pino-live-redis redis-cli INFO memory
+docker exec abbacchio-redis redis-cli INFO memory
 
 # List connected clients (requires admin)
 curl -X POST http://localhost:8000/api/info \
