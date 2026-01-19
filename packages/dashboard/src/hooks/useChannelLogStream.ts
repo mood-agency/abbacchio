@@ -7,13 +7,16 @@ import {
   getDistinctNamespaces,
   getLevelCounts,
   getNamespaceCounts,
+  getHourlyLogCounts,
+  getLogTimeRange,
   type LevelCounts,
   type NamespaceCounts,
+  type HourlyLogCount,
+  type LogTimeRange,
 } from '../lib/sqlite-db';
 
-// Default page size options
-export const PAGE_SIZE_OPTIONS = [1000, 2500, 5000, 10000] as const;
-export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+// Maximum logs to load (virtualizer handles rendering efficiently)
+const MAX_LOGS_LIMIT = 100000;
 
 interface UseChannelLogStreamOptions {
   /** Channel name to filter logs */
@@ -23,6 +26,10 @@ interface UseChannelLogStreamOptions {
   namespaceFilters: FilterNamespaces;
   timeRange: TimeRange;
   searchQuery: string;
+  /** Whether to use regex for search */
+  useRegex: boolean;
+  /** Whether search is case sensitive */
+  caseSensitive: boolean;
   /** Subscribe to new logs for this channel */
   onNewLogs: (callback: (logs: LogEntry[], channelId: string) => void) => () => void;
   /** Subscribe to clear events for this channel */
@@ -32,16 +39,10 @@ interface UseChannelLogStreamOptions {
 }
 
 interface UseChannelLogStreamResult {
-  /** Paginated logs for the current page (filtered) */
+  /** All filtered logs (virtualized rendering) */
   logs: LogEntry[];
   /** Total count of filtered logs */
   filteredCount: number;
-  /** Pagination */
-  currentPage: number;
-  setCurrentPage: (page: number) => void;
-  pageSize: PageSize;
-  setPageSize: (size: PageSize) => void;
-  totalPages: number;
   /** Available namespaces for filter dropdown */
   availableNamespaces: string[];
   /** Level counts for sidebar */
@@ -52,6 +53,10 @@ interface UseChannelLogStreamResult {
   newLogIds: Set<string>;
   /** Whether logs are being loaded from database */
   isLoading: boolean;
+  /** Hourly log counts for timeline visualization */
+  hourlyData: HourlyLogCount[];
+  /** Time range of available logs */
+  logTimeRange: LogTimeRange;
 }
 
 export function useChannelLogStream(options: UseChannelLogStreamOptions): UseChannelLogStreamResult {
@@ -61,14 +66,12 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
     namespaceFilters,
     timeRange,
     searchQuery,
+    useRegex,
+    caseSensitive,
     onNewLogs,
     onClear,
     channelId,
   } = options;
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(1000);
 
   // Results from SQL queries
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -79,16 +82,16 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
   });
   const [namespaceCounts, setNamespaceCounts] = useState<NamespaceCounts>({});
 
+  // Timeline data
+  const [hourlyData, setHourlyData] = useState<HourlyLogCount[]>([]);
+  const [logTimeRange, setLogTimeRange] = useState<LogTimeRange>({ minTime: null, maxTime: null });
+
   // Track new log IDs for highlight animation
   const [newLogIds, setNewLogIds] = useState<Set<string>>(new Set());
   const newLogTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Track loading state for initial load
   const [isLoading, setIsLoading] = useState(true);
-
-  // Track previous filter values for page reset
-  const prevFiltersRef = useRef({ levelFilters, namespaceFilters, timeRange, searchQuery, channelName });
-
 
   // Ref for debounced metadata loading
   const metadataTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,7 +134,7 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
     }
   }, [loadMetadata]);
 
-  // Load logs from SQLite with current filters
+  // Load logs from SQLite with current filters (no pagination - virtualizer handles rendering)
   const loadLogs = useCallback(async (isInitialLoad = false) => {
     if (!channelName) {
       setLogs([]);
@@ -139,6 +142,8 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
       setAvailableNamespaces([]);
       setLevelCounts({ all: 0, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 });
       setNamespaceCounts({});
+      setHourlyData([]);
+      setLogTimeRange({ minTime: null, maxTime: null });
       // Keep isLoading true when no channel - we're waiting for channel selection
       return;
     }
@@ -147,8 +152,6 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
       setIsLoading(true);
     }
 
-    const offset = (currentPage - 1) * pageSize;
-
     // Recalculate minTime at query time for accuracy
     const currentMinTime = TIME_RANGE_OPTIONS[timeRange] === 0
       ? undefined
@@ -156,29 +159,36 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
 
     const queryOptions = {
       search: searchQuery || undefined,
+      useRegex,
+      caseSensitive,
       levels: levelFilters.length > 0 ? levelFilters : undefined,
       namespaces: namespaceFilters.length > 0 ? namespaceFilters : undefined,
       minTime: currentMinTime,
       channel: channelName,
-      limit: pageSize,
-      offset,
+      limit: MAX_LOGS_LIMIT,
     };
 
     try {
-      // Load logs and filtered count immediately (needed for pagination)
-      const [fetchedLogs, count] = await Promise.all([
+      // Load logs, count, and timeline data
+      const [fetchedLogs, count, hourlyLogCounts, timeRangeData] = await Promise.all([
         queryLogs(queryOptions),
         getFilteredCount({
           search: searchQuery || undefined,
+          useRegex,
+          caseSensitive,
           levels: levelFilters.length > 0 ? levelFilters : undefined,
           namespaces: namespaceFilters.length > 0 ? namespaceFilters : undefined,
           minTime: currentMinTime,
           channel: channelName,
         }),
+        getHourlyLogCounts({ channel: channelName, minTime: currentMinTime }),
+        getLogTimeRange(channelName),
       ]);
 
       setLogs(fetchedLogs);
       setFilteredCount(count);
+      setHourlyData(hourlyLogCounts);
+      setLogTimeRange(timeRangeData);
 
       // Load metadata with debounce (or immediately on initial load)
       scheduleMetadataLoad(channelName, currentMinTime, isInitialLoad);
@@ -187,7 +197,7 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, levelFilters, namespaceFilters, timeRange, channelName, scheduleMetadataLoad]);
+  }, [searchQuery, useRegex, caseSensitive, levelFilters, namespaceFilters, timeRange, channelName, scheduleMetadataLoad]);
 
   // Cleanup metadata timeout on unmount
   useEffect(() => {
@@ -229,8 +239,8 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
   useEffect(() => {
     const unsubscribe = onNewLogs((incomingLogs, incomingChannelId) => {
       if (incomingChannelId === channelId || !incomingChannelId) {
-        // Mark incoming logs as new for highlight animation (only on page 1)
-        if (currentPage === 1 && incomingLogs.length > 0) {
+        // Mark incoming logs as new for highlight animation
+        if (incomingLogs.length > 0) {
           const incomingIds = incomingLogs.map((log) => log.id);
           setNewLogIds((prev) => {
             const next = new Set(prev);
@@ -261,7 +271,7 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
       }
     });
     return unsubscribe;
-  }, [onNewLogs, channelId, channelName, currentPage]);
+  }, [onNewLogs, channelId, channelName]);
 
   // Subscribe to clear
   useEffect(() => {
@@ -272,7 +282,8 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
         setAvailableNamespaces([]);
         setLevelCounts({ all: 0, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 });
         setNamespaceCounts({});
-        setCurrentPage(1);
+        setHourlyData([]);
+        setLogTimeRange({ minTime: null, maxTime: null });
         // Clear new log IDs and their timeouts
         setNewLogIds(new Set());
         newLogTimeoutRef.current.forEach((timeout) => clearTimeout(timeout));
@@ -290,55 +301,15 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
     };
   }, []);
 
-  // Calculate total pages
-  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
-
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    const prev = prevFiltersRef.current;
-    const levelsChanged = JSON.stringify(prev.levelFilters) !== JSON.stringify(levelFilters);
-    const namespacesChanged = JSON.stringify(prev.namespaceFilters) !== JSON.stringify(namespaceFilters);
-    if (
-      levelsChanged ||
-      namespacesChanged ||
-      prev.timeRange !== timeRange ||
-      prev.searchQuery !== searchQuery ||
-      prev.channelName !== channelName
-    ) {
-      setCurrentPage(1);
-      prevFiltersRef.current = { levelFilters, namespaceFilters, timeRange, searchQuery, channelName };
-    }
-  }, [levelFilters, namespaceFilters, timeRange, searchQuery, channelName]);
-
-  // Also reset page when pageSize changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [pageSize]);
-
-  // Ensure current page is valid
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
-
-  // Page change handler
-  const handleSetCurrentPage = useCallback((page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  }, [totalPages]);
-
   return {
     logs,
     filteredCount,
-    currentPage,
-    setCurrentPage: handleSetCurrentPage,
-    pageSize,
-    setPageSize,
-    totalPages,
     availableNamespaces,
     levelCounts,
     namespaceCounts,
     newLogIds,
     isLoading,
+    hourlyData,
+    logTimeRange,
   };
 }

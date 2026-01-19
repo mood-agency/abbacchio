@@ -4,14 +4,16 @@ import { LOG_LEVEL_HEX } from '@/lib/log-level-colors';
 
 interface LevelBadgeProps {
   level: LogLevelLabel;
+  /** Whether to highlight the badge (e.g., when regex search matches) */
+  highlight?: boolean;
 }
 
-export function LevelBadge({ level }: LevelBadgeProps) {
+export function LevelBadge({ level, highlight = false }: LevelBadgeProps) {
   const colors = LOG_LEVEL_HEX[level];
   return (
     <Badge
       variant="secondary"
-      className="uppercase border-0"
+      className={`uppercase border-0 ${highlight ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
       style={{ backgroundColor: colors.bg, color: colors.text }}
     >
       {level}

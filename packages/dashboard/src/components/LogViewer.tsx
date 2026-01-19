@@ -3,11 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { useChannelManager } from '../hooks/useChannelManager';
-import { useChannelLogStream, PAGE_SIZE_OPTIONS } from '../hooks/useChannelLogStream';
+import { useChannelLogStream } from '../hooks/useChannelLogStream';
+import { useTimelineNavigation } from '../hooks/useTimelineNavigation';
+import { useSavedFilters } from '../hooks/useSavedFilters';
 import type { LogEntry } from '../types';
+import { TIME_RANGE_OPTIONS } from '../types';
 import { useFilterParams } from '../hooks/useFilterParams';
+import { TimelineScrollbar } from './TimelineScrollbar';
 import { FilterBar } from './FilterBar';
 import { LogSidebar } from './LogSidebar';
+import { SaveFilterDialog } from './SaveFilterDialog';
+import { ExportDialog } from './ExportDialog';
 import { LogRow } from './LogRow';
 import { LevelBadge } from './ui/CustomBadge';
 import { CommandPalette } from './CommandPalette';
@@ -15,18 +21,11 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 import { OnboardingWizard } from './OnboardingWizard';
 import { useSecureStorage } from '@/contexts/SecureStorageContext';
 import { saveSecureChannels, type SecureChannelConfig } from '@/lib/secure-storage';
-import { formatLogsForClipboard } from '@/lib/format-logs';
+import { formatLogsForClipboard, downloadLogs, type ExportFormat } from '@/lib/format-logs';
 import { getDatabaseStats } from '@/lib/sqlite-db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -66,11 +65,7 @@ import {
   AlertTriangle,
   FileText,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
-  ChevronsLeft,
-  ChevronsRight,
   Radio,
   LockOpen,
   Check,
@@ -87,6 +82,7 @@ import {
   ShieldCheck,
   ShieldOff,
   ShieldAlert,
+  Download,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -111,6 +107,7 @@ export function LogViewer() {
     timeRange,
     search: searchQuery,
     caseSensitive,
+    useRegex,
     setLevels,
     toggleLevel,
     setNamespaces,
@@ -118,6 +115,8 @@ export function LogViewer() {
     setTimeRange,
     setSearch: setSearchQuery,
     setCaseSensitive,
+    setUseRegex,
+    setAllFilters,
     clearFilters,
   } = useFilterParams();
 
@@ -145,22 +144,21 @@ export function LogViewer() {
   const {
     logs,
     filteredCount,
-    currentPage,
-    setCurrentPage,
-    pageSize,
-    setPageSize,
-    totalPages,
     availableNamespaces,
     levelCounts,
     namespaceCounts,
     newLogIds,
     isLoading,
+    hourlyData,
+    logTimeRange,
   } = useChannelLogStream({
     channelName: activeChannel?.name || null,
     levelFilters,
     namespaceFilters,
     timeRange,
     searchQuery,
+    useRegex,
+    caseSensitive,
     onNewLogs,
     onClear,
     channelId: activeChannelId,
@@ -174,9 +172,6 @@ export function LogViewer() {
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [keyInput, setKeyInput] = useState('');
 
-  // Page jump input
-  const [pageInput, setPageInput] = useState('');
-
   // Delete confirmation dialog
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -185,6 +180,15 @@ export function LogViewer() {
   const [showAddChannelDialog, setShowAddChannelDialog] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelKey, setNewChannelKey] = useState('');
+
+  // Save filter dialog
+  const [showSaveFilterDialog, setShowSaveFilterDialog] = useState(false);
+
+  // Export dialog state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
+  // Saved filters hook
+  const { savedFilters, saveFilter, deleteFilter } = useSavedFilters(activeChannelId);
 
   // Row selection state for copy - using Set of log IDs for stable selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -206,6 +210,17 @@ export function LogViewer() {
       timeRange !== 'all'
     );
   }, [searchQuery, levelFilters, namespaceFilters, timeRange]);
+
+  // Validate regex and get error message if invalid
+  const regexError = useMemo(() => {
+    if (!useRegex || !searchQuery) return null;
+    try {
+      new RegExp(searchQuery);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Invalid regex';
+    }
+  }, [useRegex, searchQuery]);
 
   // Handle row selection (click to toggle, shift+click for range)
   const handleRowSelect = useCallback((logId: string, shiftKey: boolean) => {
@@ -292,11 +307,11 @@ export function LogViewer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedIds, copySelectedLogs]);
 
-  // Clear selection when page or filters change
+  // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
     setLastSelectedId(null);
-  }, [currentPage, levelFilters, namespaceFilters, searchQuery, timeRange]);
+  }, [levelFilters, namespaceFilters, searchQuery, timeRange]);
 
   // Open key dialog
   const openKeyDialog = () => {
@@ -374,14 +389,6 @@ export function LogViewer() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Scroll to top when page changes
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-      isAtTopRef.current = true;
-    }
-  }, [currentPage]);
-
   // Count total search matches across current page logs (via SQLite)
   const [matchCount, setMatchCount] = useState(0);
   useEffect(() => {
@@ -417,14 +424,33 @@ export function LogViewer() {
     measureElement: (element) => element.getBoundingClientRect().height,
   });
 
-  // Handle page jump
-  const handlePageJump = useCallback(() => {
-    const page = parseInt(pageInput, 10);
-    if (!isNaN(page) && page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-      setPageInput('');
-    }
-  }, [pageInput, totalPages, setCurrentPage]);
+  // Timeline navigation
+  const currentMinTime = TIME_RANGE_OPTIONS[timeRange] === 0
+    ? undefined
+    : Date.now() - TIME_RANGE_OPTIONS[timeRange];
+
+  const {
+    thumbPosition,
+    currentHour,
+    scrollToHour,
+    handleThumbDrag,
+    isDragging,
+    setIsDragging,
+    setHourPositions,
+  } = useTimelineNavigation({
+    logs,
+    hourlyData,
+    logTimeRange,
+    virtualizer: rowVirtualizer,
+    scrollContainerRef,
+    channelName: activeChannel?.name || null,
+    filters: {
+      levels: levelFilters,
+      namespaces: namespaceFilters,
+      minTime: currentMinTime,
+      search: searchQuery,
+    },
+  });
 
   // Handle delete confirmation
   const handleConfirmDelete = useCallback(async () => {
@@ -443,9 +469,46 @@ export function LogViewer() {
     }
   }, [activeChannelId, clearChannelLogs]);
 
-  // Calculate showing range
-  const showingStart = filteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
-  const showingEnd = Math.min(currentPage * pageSize, filteredCount);
+  // Handle saving a filter
+  const handleSaveFilter = useCallback((name: string) => {
+    saveFilter(name, {
+      levels: levelFilters,
+      namespaces: namespaceFilters,
+      timeRange,
+      search: searchQuery,
+      caseSensitive,
+      useRegex,
+    });
+    toast.success(tFilters('savedFilters.toast.saved'));
+  }, [saveFilter, levelFilters, namespaceFilters, timeRange, searchQuery, caseSensitive, useRegex, tFilters]);
+
+  // Handle loading a saved filter
+  const handleLoadFilter = useCallback((filter: typeof savedFilters[0]) => {
+    setAllFilters({
+      levels: filter.levels,
+      namespaces: filter.namespaces,
+      timeRange: filter.timeRange,
+      search: filter.search,
+      caseSensitive: filter.caseSensitive,
+      useRegex: filter.useRegex,
+    });
+  }, [setAllFilters]);
+
+  // Handle deleting a saved filter
+  const handleDeleteFilter = useCallback((filterId: string) => {
+    deleteFilter(filterId);
+    toast.success(tFilters('savedFilters.toast.deleted'));
+  }, [deleteFilter, tFilters]);
+
+  // Handle exporting logs
+  const handleExport = useCallback((format: ExportFormat) => {
+    if (logs.length === 0 || !activeChannel) {
+      toast.error(tFilters('export.toast.noLogs'));
+      return;
+    }
+    downloadLogs(logs, format, activeChannel.name);
+    toast.success(tFilters('export.toast.success'));
+  }, [logs, activeChannel, tFilters]);
 
   // If encrypted storage exists but not yet unlocked, show nothing
   // (the MasterPasswordDialog will be shown by App.tsx)
@@ -625,6 +688,20 @@ export function LogViewer() {
                     }`} />
                     {tFilters('tooltips.manageKey')}
                   </DropdownMenuItem>
+                  {/* Export logs */}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (filteredCount === 0) {
+                        toast.error(tFilters('export.toast.noLogs'));
+                        return;
+                      }
+                      setShowExportDialog(true);
+                    }}
+                    disabled={filteredCount === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    {tFilters('export.tooltip')}
+                  </DropdownMenuItem>
                   {/* Copy link */}
                   <DropdownMenuItem
                     onClick={() => {
@@ -691,9 +768,13 @@ export function LogViewer() {
                 matchCount={matchCount}
                 caseSensitive={caseSensitive}
                 setCaseSensitive={setCaseSensitive}
+                useRegex={useRegex}
+                setUseRegex={setUseRegex}
+                regexError={regexError}
                 onClearFilters={clearFilters}
                 levelFilters={levelFilters}
                 namespaceFilters={namespaceFilters}
+                timeRange={timeRange}
                 isPaused={isPaused}
                 onTogglePause={() => setIsPaused(!isPaused)}
                 selectedCount={selectedIds.size}
@@ -702,6 +783,10 @@ export function LogViewer() {
                   setSelectedIds(new Set());
                   setLastSelectedId(null);
                 }}
+                savedFilters={savedFilters}
+                onSaveFilter={() => setShowSaveFilterDialog(true)}
+                onLoadFilter={handleLoadFilter}
+                onDeleteFilter={handleDeleteFilter}
               />
             )}
 
@@ -731,49 +816,68 @@ export function LogViewer() {
                   </div>
                 </div>
 
-                {/* Log list */}
-                <ScrollArea
-                  className="flex-1"
-                  viewPortRef={scrollContainerRef}
-                >
-                  <div
-                    style={{
-                      height: `${rowVirtualizer.getTotalSize()}px`,
-                      width: '100%',
-                      position: 'relative',
-                    }}
+                {/* Log list with timeline */}
+                <div className="flex flex-1 overflow-hidden">
+                  <ScrollArea
+                    className="flex-1"
+                    viewPortRef={scrollContainerRef}
                   >
-                    {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-                      const log = logs[virtualItem.index];
-                      if (!log) return null;
-                      return (
-                        <div
-                          key={log.id}
-                          data-index={virtualItem.index}
-                          ref={rowVirtualizer.measureElement}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            transform: `translateY(${virtualItem.start}px)`,
-                          }}
-                        >
-                          <LogRow
-                            log={log}
-                            showChannel={false}
-                            searchQuery={searchQuery}
-                            caseSensitive={caseSensitive}
-                            isNew={newLogIds.has(log.id)}
-                            isSelected={selectedIds.has(log.id)}
-                            onSelect={handleRowSelect}
-                            onDataClick={setDrawerLog}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
+                    <div
+                      style={{
+                        height: `${rowVirtualizer.getTotalSize()}px`,
+                        width: '100%',
+                        position: 'relative',
+                      }}
+                    >
+                      {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+                        const log = logs[virtualItem.index];
+                        if (!log) return null;
+                        return (
+                          <div
+                            key={log.id}
+                            data-index={virtualItem.index}
+                            ref={rowVirtualizer.measureElement}
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              transform: `translateY(${virtualItem.start}px)`,
+                            }}
+                          >
+                            <LogRow
+                              log={log}
+                              showChannel={false}
+                              searchQuery={searchQuery}
+                              caseSensitive={caseSensitive}
+                              useRegex={useRegex}
+                              isNew={newLogIds.has(log.id)}
+                              isSelected={selectedIds.has(log.id)}
+                              onSelect={handleRowSelect}
+                              onDataClick={setDrawerLog}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+
+                  {/* Timeline scrollbar */}
+                  {hourlyData.length > 0 && (
+                    <TimelineScrollbar
+                      hourlyData={hourlyData}
+                      logTimeRange={logTimeRange}
+                      thumbPosition={thumbPosition}
+                      currentHour={currentHour}
+                      onHourClick={scrollToHour}
+                      onThumbDrag={handleThumbDrag}
+                      isDragging={isDragging}
+                      onDragStart={() => setIsDragging(true)}
+                      onDragEnd={() => setIsDragging(false)}
+                      onHourPositionsChange={setHourPositions}
+                    />
+                  )}
+                </div>
               </>
             ) : (
               /* Empty state - no logs */
@@ -956,121 +1060,6 @@ logger.info("Hello from structlog!")`}
           </div>
         </div>
 
-        {/* Pagination controls */}
-        {filteredCount > 0 && (
-          <div className="flex items-center justify-center px-4 py-2 border-t border-border bg-muted/50">
-            <div className="flex items-center gap-4">
-              {/* Showing info */}
-              <span className="text-sm text-muted-foreground">
-                {tLogs('pagination.showing', { start: showingStart, end: showingEnd, total: filteredCount })}
-              </span>
-
-              {/* First page */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronsLeft className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{tLogs('pagination.firstPage')}</TooltipContent>
-              </Tooltip>
-
-              {/* Previous page */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{tLogs('pagination.previousPage')}</TooltipContent>
-              </Tooltip>
-
-              {/* Page info */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{tLogs('pagination.page')}</span>
-                <Input
-                  type="text"
-                  value={pageInput}
-                  onChange={(e) => setPageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handlePageJump();
-                    }
-                  }}
-                  onBlur={handlePageJump}
-                  placeholder={currentPage.toString()}
-                  className="w-12 h-8 text-center px-1"
-                />
-                <span className="text-sm text-muted-foreground">{tLogs('pagination.of')} {totalPages}</span>
-              </div>
-
-              {/* Next page */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{tLogs('pagination.nextPage')}</TooltipContent>
-              </Tooltip>
-
-              {/* Last page */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{tLogs('pagination.lastPage')}</TooltipContent>
-              </Tooltip>
-
-              {/* Page size selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{tLogs('pagination.perPage')}</span>
-                <Select
-                  value={pageSize.toString()}
-                  onValueChange={(value) => setPageSize(parseInt(value, 10) as typeof pageSize)}
-                >
-                  <SelectTrigger className="w-20 h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <SelectItem key={size} value={size.toString()}>
-                        {size}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Key Dialog */}
         <Dialog open={showKeyDialog} onOpenChange={setShowKeyDialog}>
           <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -1230,6 +1219,30 @@ logger.info("Hello from structlog!")`}
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Save Filter Dialog */}
+        <SaveFilterDialog
+          open={showSaveFilterDialog}
+          onOpenChange={setShowSaveFilterDialog}
+          onSave={handleSaveFilter}
+          currentFilters={{
+            levels: levelFilters,
+            namespaces: namespaceFilters,
+            timeRange,
+            search: searchQuery,
+            caseSensitive,
+            useRegex,
+          }}
+        />
+
+        {/* Export Dialog */}
+        <ExportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          onExport={handleExport}
+          logCount={filteredCount}
+          channelName={activeChannel?.name || ''}
+        />
 
         {/* Command Palette for switching channels and actions */}
         <CommandPalette

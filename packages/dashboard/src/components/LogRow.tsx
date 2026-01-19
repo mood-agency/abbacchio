@@ -7,13 +7,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lock, AlertTriangle, Check, ShieldCheck, ShieldOff, ShieldAlert } from 'lucide-react';
+import { Lock, AlertTriangle, Check, ShieldCheck, ShieldOff, ShieldAlert, Copy } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface LogRowProps {
   log: LogEntry;
   showChannel?: boolean;
   searchQuery?: string;
   caseSensitive?: boolean;
+  useRegex?: boolean;
   isNew?: boolean;
   /** Whether this row is selected for copy */
   isSelected?: boolean;
@@ -50,35 +52,112 @@ function hasData(data: Record<string, unknown>): boolean {
   return Object.keys(data).length > 0;
 }
 
+interface CopyableCellProps {
+  children: React.ReactNode;
+  value: string;
+  className?: string;
+}
+
+function CopyableCell({ children, value, className = '' }: CopyableCellProps) {
+  const { t } = useTranslation(['logs', 'common']);
+
+  const handleCopy = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(value).then(() => {
+      toast.success(t('logs:toast.valueCopied'));
+    }).catch(() => {
+      toast.error(t('logs:toast.copyFailed'));
+    });
+  }, [value, t]);
+
+  return (
+    <div className={`group/cell relative flex items-center ${className}`}>
+      {children}
+      {value && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleCopy}
+              className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/cell:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
+            >
+              <Copy className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{t('common:actions.copy')}</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 /**
  * Highlight search matches in text - optimized with fast-path checks
+ * Supports both plain text and regex search
  */
-function highlightText(text: string, query: string, caseSensitive = false): React.ReactNode {
+function highlightText(text: string, query: string, caseSensitive = false, useRegex = false): React.ReactNode {
   // Fast path: no highlighting needed
   if (!query || !text) return text;
 
-  // Quick check if query exists in text
-  const textToCheck = caseSensitive ? text : text.toLowerCase();
-  const queryToCheck = caseSensitive ? query : query.toLowerCase();
-  if (!textToCheck.includes(queryToCheck)) return text;
+  let regex: RegExp;
 
-  // Split by pattern using native regex
-  const escaped = escapeRegex(query);
-  const regex = new RegExp(`(${escaped})`, caseSensitive ? 'g' : 'gi');
-  const parts = text.split(regex);
+  if (useRegex) {
+    // Try to create regex from query
+    try {
+      regex = new RegExp(query, caseSensitive ? 'g' : 'gi');
+    } catch {
+      // Invalid regex, return text as-is
+      return text;
+    }
+  } else {
+    // Quick check if query exists in text (plain text search)
+    const textToCheck = caseSensitive ? text : text.toLowerCase();
+    const queryToCheck = caseSensitive ? query : query.toLowerCase();
+    if (!textToCheck.includes(queryToCheck)) return text;
 
-  if (parts.length === 1) return text;
+    // Create regex with escaped query
+    const escaped = escapeRegex(query);
+    regex = new RegExp(escaped, caseSensitive ? 'g' : 'gi');
+  }
 
-  return parts.map((part, i) => {
-    const matches = caseSensitive ? part === query : part.toLowerCase() === query.toLowerCase();
-    return matches ? (
+  // Find all matches and their positions
+  const matches: Array<{ start: number; end: number }> = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Skip zero-length matches (e.g., from patterns like "foo|" which match empty string)
+    if (match[0].length === 0) {
+      regex.lastIndex++;
+      continue;
+    }
+    matches.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  if (matches.length === 0) return text;
+
+  // Build result with highlighted matches
+  const result: React.ReactNode[] = [];
+  let lastEnd = 0;
+
+  matches.forEach((m, i) => {
+    // Add text before this match
+    if (m.start > lastEnd) {
+      result.push(text.slice(lastEnd, m.start));
+    }
+    // Add highlighted match
+    result.push(
       <mark key={i} className="search-highlight">
-        {part}
+        {text.slice(m.start, m.end)}
       </mark>
-    ) : (
-      part
     );
+    lastEnd = m.end;
   });
+
+  // Add remaining text after last match
+  if (lastEnd < text.length) {
+    result.push(text.slice(lastEnd));
+  }
+
+  return result;
 }
 
 /**
@@ -87,21 +166,24 @@ function highlightText(text: string, query: string, caseSensitive = false): Reac
 function highlightData(
   dataString: string,
   query: string,
-  caseSensitive = false
+  caseSensitive = false,
+  useRegex = false
 ): React.ReactNode {
   // Fast path: no query
   if (!query) {
     return dataString;
   }
 
-  // Check if there's a match
-  const dataToCheck = caseSensitive ? dataString : dataString.toLowerCase();
-  const queryToCheck = caseSensitive ? query : query.toLowerCase();
-  if (!dataToCheck.includes(queryToCheck)) {
-    return dataString;
+  if (!useRegex) {
+    // Check if there's a match (plain text search)
+    const dataToCheck = caseSensitive ? dataString : dataString.toLowerCase();
+    const queryToCheck = caseSensitive ? query : query.toLowerCase();
+    if (!dataToCheck.includes(queryToCheck)) {
+      return dataString;
+    }
   }
 
-  return highlightText(dataString, query, caseSensitive);
+  return highlightText(dataString, query, caseSensitive, useRegex);
 }
 
 export const LogRow = memo(function LogRow({
@@ -109,6 +191,7 @@ export const LogRow = memo(function LogRow({
   showChannel = false,
   searchQuery = '',
   caseSensitive = false,
+  useRegex = false,
   isNew = false,
   isSelected = false,
   onSelect,
@@ -126,14 +209,34 @@ export const LogRow = memo(function LogRow({
 
   // Memoize highlighting results to avoid regex operations on every render
   const highlightedMsg = useMemo(
-    () => searchQuery ? highlightText(log.msg, searchQuery, caseSensitive) : log.msg,
-    [log.msg, searchQuery, caseSensitive]
+    () => searchQuery ? highlightText(log.msg, searchQuery, caseSensitive, useRegex) : log.msg,
+    [log.msg, searchQuery, caseSensitive, useRegex]
   );
 
   const highlightedData = useMemo(
-    () => searchQuery ? highlightData(dataString, searchQuery, caseSensitive) : dataString,
-    [dataString, searchQuery, caseSensitive]
+    () => searchQuery ? highlightData(dataString, searchQuery, caseSensitive, useRegex) : dataString,
+    [dataString, searchQuery, caseSensitive, useRegex]
   );
+
+  // Highlight namespace when regex matches
+  const highlightedNamespace = useMemo(
+    () => log.namespace && searchQuery ? highlightText(log.namespace, searchQuery, caseSensitive, useRegex) : log.namespace,
+    [log.namespace, searchQuery, caseSensitive, useRegex]
+  );
+
+  // Check if level label matches the search (for highlighting the badge)
+  const levelMatchesSearch = useMemo(() => {
+    if (!searchQuery || !useRegex) return false;
+    try {
+      // Don't use 'g' flag for test() to avoid lastIndex issues
+      const regex = new RegExp(searchQuery, caseSensitive ? '' : 'i');
+      const match = regex.exec(log.levelLabel);
+      // Only highlight if there's a non-empty match
+      return match !== null && match[0].length > 0;
+    } catch {
+      return false;
+    }
+  }, [searchQuery, useRegex, caseSensitive, log.levelLabel]);
 
   // Handle clicking on the row content to open drawer
   const handleRowClick = useCallback(() => {
@@ -179,9 +282,11 @@ export const LogRow = memo(function LogRow({
           onClick={handleRowClick}
         >
           {/* Date/Time */}
-          <span className="text-muted-foreground font-mono text-xs w-36 flex-shrink-0 tabular-nums">
-            {formatDateTime(log.time)}
-          </span>
+          <CopyableCell value={formatDateTime(log.time)} className="w-40 flex-shrink-0">
+            <span className="text-muted-foreground font-mono text-xs tabular-nums">
+              {formatDateTime(log.time)}
+            </span>
+          </CopyableCell>
 
           {/* Encryption status icon */}
           <div className="w-5 flex-shrink-0 flex items-center justify-center">
@@ -202,74 +307,85 @@ export const LogRow = memo(function LogRow({
           </div>
 
           {/* Level - show lock icon for encrypted logs since actual level is unknown */}
-        <div className="w-16 flex-shrink-0">
-          {isEncrypted || decryptionFailed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className={`inline-flex items-center ${decryptionFailed ? 'text-destructive' : 'text-yellow-500'}`}>
-                  <Lock className="w-4 h-4" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <LevelBadge level={log.levelLabel} />
-          )}
-        </div>
-
-        {/* Channel (only shown when multiple channels exist) */}
-        {showChannel && (
-          <div className="w-24 flex-shrink-0">
-            <ChannelBadge channel={log.channel} />
+          <div className="w-16 flex-shrink-0">
+            {isEncrypted || decryptionFailed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={`inline-flex items-center ${decryptionFailed ? 'text-destructive' : 'text-yellow-500'}`}>
+                    <Lock className="w-4 h-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <LevelBadge level={log.levelLabel} highlight={levelMatchesSearch} />
+            )}
           </div>
-        )}
 
-        {/* Namespace - show lock icon for encrypted logs */}
-        <div className="w-28 flex-shrink-0 font-mono text-xs">
-          {isEncrypted || decryptionFailed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className={`inline-flex items-center ${decryptionFailed ? 'text-destructive' : 'text-yellow-500'}`}>
-                  <Lock className="w-4 h-4" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            log.namespace && <span className="text-muted-foreground truncate block">{log.namespace}</span>
+          {/* Channel (only shown when multiple channels exist) */}
+          {showChannel && (
+            <CopyableCell value={log.channel} className="w-24 flex-shrink-0">
+              <ChannelBadge channel={log.channel} />
+            </CopyableCell>
           )}
-        </div>
 
-        {/* Message */}
-        <div className="w-48 flex-shrink-0 text-foreground flex items-center gap-2 font-mono text-xs min-w-0">
-          {isEncrypted && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-1 text-yellow-500 flex-shrink-0">
-                  <Lock className="w-4 h-4" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{t('encryption.enterKeyToDecrypt')}</TooltipContent>
-            </Tooltip>
-          )}
-          {decryptionFailed && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-1 text-destructive flex-shrink-0">
-                  <AlertTriangle className="w-4 h-4" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{t('encryption.checkYourKey')}</TooltipContent>
-            </Tooltip>
-          )}
-          <span className={`truncate ${decryptionFailed ? 'text-destructive' : isEncrypted ? 'text-yellow-400 italic' : ''}`}>
-            {highlightedMsg}
-          </span>
-        </div>
+          {/* Namespace - show lock icon for encrypted logs */}
+          <div className="w-28 flex-shrink-0 font-mono text-xs">
+            {isEncrypted || decryptionFailed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={`inline-flex items-center ${decryptionFailed ? 'text-destructive' : 'text-yellow-500'}`}>
+                    <Lock className="w-4 h-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {decryptionFailed ? t('encryption.decryptionFailed') : t('encryption.encrypted')}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              log.namespace && (
+                <CopyableCell value={log.namespace} className="w-full">
+                  <span className="text-muted-foreground truncate block">{highlightedNamespace}</span>
+                </CopyableCell>
+              )
+            )}
+          </div>
+
+          {/* Message */}
+          <div className="w-48 flex-shrink-0 text-foreground font-mono text-xs min-w-0">
+            {isEncrypted && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 text-yellow-500 flex-shrink-0">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{t('encryption.enterKeyToDecrypt')}</TooltipContent>
+              </Tooltip>
+            )}
+            {decryptionFailed && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 text-destructive flex-shrink-0">
+                    <AlertTriangle className="w-4 h-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{t('encryption.checkYourKey')}</TooltipContent>
+              </Tooltip>
+            )}
+            {!isEncrypted && !decryptionFailed && (
+              <CopyableCell value={log.msg} className="w-full">
+                <span className="truncate">{highlightedMsg}</span>
+              </CopyableCell>
+            )}
+            {(isEncrypted || decryptionFailed) && (
+              <span className={`truncate ${decryptionFailed ? 'text-destructive' : 'text-yellow-400 italic'}`}>
+                {highlightedMsg}
+              </span>
+            )}
+          </div>
 
           {/* Data column */}
           <div className="flex-1 font-mono text-xs text-muted-foreground min-w-0">
@@ -285,7 +401,9 @@ export const LogRow = memo(function LogRow({
                 </TooltipContent>
               </Tooltip>
             ) : showData ? (
-              <span className="truncate block">{highlightedData}</span>
+              <CopyableCell value={dataString} className="w-full">
+                <span className="truncate block">{highlightedData}</span>
+              </CopyableCell>
             ) : null}
           </div>
         </div>
