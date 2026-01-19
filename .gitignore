@@ -25,3 +25,17 @@ nul
 # Rust/Tauri build
 **/target/
 Cargo.lock
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.eggs/
+.eggs/
+dist/
+build/
+*.whl
+.venv/
+venv/
