@@ -10,8 +10,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./transports/pino": {
+    "./pino": {
       "types": "./dist/transports/pino.d.ts",
+      "require": "./pino-transport.cjs",
       "default": "./dist/transports/pino.js"
     },
     "./transports/winston": {
@@ -46,8 +47,17 @@
     "pino-abstract-transport": "^3.0.0",
     "winston-transport": "^4.9.0"
   },
+  "peerDependencies": {
+    "pino": "^8.0.0 || ^9.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pino": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "pino": "^9.0.0",
     "typescript": "^5.7.2"
   },
   "engines": {
