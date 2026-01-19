@@ -23,6 +23,7 @@ export interface IncomingLog {
   message?: string; // Alternative to msg (Winston style)
   namespace?: string;
   name?: string; // Alternative to namespace (child logger)
+  channel?: string; // Optional per-log channel override
   [key: string]: unknown;
 }
 

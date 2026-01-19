@@ -7,7 +7,7 @@ import { publish as centrifugoPublish } from './centrifugo-client.js';
 export const DEFAULT_CHANNEL = 'default';
 
 /** Known fields to extract from incoming logs (avoid object spread overhead) */
-const KNOWN_FIELDS = new Set(['level', 'time', 'msg', 'message', 'namespace', 'name']);
+const KNOWN_FIELDS = new Set(['level', 'time', 'msg', 'message', 'namespace', 'name', 'channel']);
 
 export interface ChannelInfo {
   name: string;
@@ -118,10 +118,12 @@ export class LogBuffer extends EventEmitter {
   /**
    * Normalize an incoming log to a standard format
    * Optimized to avoid object spread and minimize allocations
+   * If the log contains a 'channel' property, it overrides the default channel
    */
-  private normalizeLog(incoming: IncomingLog, channel: string): LogEntry {
+  private normalizeLog(incoming: IncomingLog, defaultChannel: string): LogEntry {
     const level = typeof incoming.level === 'number' ? incoming.level : 30;
     const levelLabel = (LOG_LEVELS[level as keyof typeof LOG_LEVELS] || 'info') as LogLevelLabel;
+    const channel = incoming.channel || defaultChannel;
 
     return {
       id: getIdPool().getId(),
@@ -215,10 +217,13 @@ export class LogBuffer extends EventEmitter {
   /**
    * Add a single log entry (broadcasts only, no storage)
    * Publishes to Centrifugo for real-time distribution
+   * If the log contains a 'channel' property, it overrides the default channel
    */
-  add(incoming: IncomingLogOrEncrypted, channel: string = DEFAULT_CHANNEL): LogEntry {
+  add(incoming: IncomingLogOrEncrypted, defaultChannel: string = DEFAULT_CHANNEL): LogEntry {
+    const entry = this.processLog(incoming, defaultChannel);
+    const channel = entry.channel;
+
     this.registerChannel(channel);
-    const entry = this.processLog(incoming, channel);
 
     // Update channel stats
     const channelInfo = this.channels.get(channel);
@@ -238,24 +243,44 @@ export class LogBuffer extends EventEmitter {
   /**
    * Add multiple log entries (broadcasts only, no storage)
    * Publishes to Centrifugo for real-time distribution
+   * Logs are grouped by channel - each log can specify its own channel
    */
-  addBatch(logs: IncomingLogOrEncrypted[], channel: string = DEFAULT_CHANNEL): LogEntry[] {
-    this.registerChannel(channel);
-    const entries = logs.map(log => this.processLog(log, channel));
+  addBatch(logs: IncomingLogOrEncrypted[], defaultChannel: string = DEFAULT_CHANNEL): LogEntry[] {
+    // Group logs by channel for correct publishing
+    const logsByChannel = new Map<string, LogEntry[]>();
 
-    // Update channel stats
-    const channelInfo = this.channels.get(channel);
-    if (channelInfo) {
-      channelInfo.logCount += entries.length;
-      channelInfo.lastActivity = Date.now();
+    for (const log of logs) {
+      const entry = this.processLog(log, defaultChannel);
+      const channel = entry.channel;
+
+      this.registerChannel(channel);
+
+      if (!logsByChannel.has(channel)) {
+        logsByChannel.set(channel, []);
+      }
+      logsByChannel.get(channel)!.push(entry);
     }
 
-    // Publish to Centrifugo (async, non-blocking)
-    centrifugoPublish(`logs:${channel}`, { type: 'batch', data: entries }).catch((err) => {
-      console.error('[Centrifugo] Failed to publish batch:', err.message);
-    });
+    const allEntries: LogEntry[] = [];
 
-    return entries;
+    // Publish each group to its corresponding channel
+    for (const [channel, entries] of logsByChannel) {
+      allEntries.push(...entries);
+
+      // Update channel stats
+      const channelInfo = this.channels.get(channel);
+      if (channelInfo) {
+        channelInfo.logCount += entries.length;
+        channelInfo.lastActivity = Date.now();
+      }
+
+      // Publish to Centrifugo (async, non-blocking)
+      centrifugoPublish(`logs:${channel}`, { type: 'batch', data: entries }).catch((err) => {
+        console.error('[Centrifugo] Failed to publish batch:', err.message);
+      });
+    }
+
+    return allEntries;
   }
 
   /**
