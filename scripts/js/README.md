@@ -27,6 +27,42 @@ npx tsx scripts/js/insert-test-logs-winston.ts [options]
 npx tsx scripts/js/insert-test-logs-bunyan.ts [options]
 ```
 
+## Testing npm Package
+
+To test the `@abbacchio/transport` package directly from npm (without using the local build):
+
+```bash
+npx tsx scripts/js/test-npm-package.ts [options]
+```
+
+This script creates a temporary directory, installs the package from npm, and runs a test.
+
+### npm Package Test Options
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--version` | `-v` | latest | Package version to install |
+| `--count` | `-c` | 5 | Number of logs to send |
+| `--delay` | `-d` | 100 | Delay between logs in ms |
+| `--channel` | `-C` | npm-test | Channel name |
+| `--keep` | `-k` | false | Keep temp directory after test |
+
+### npm Package Test Examples
+
+```bash
+# Test latest version
+npx tsx scripts/js/test-npm-package.ts
+
+# Test specific version
+npx tsx scripts/js/test-npm-package.ts --version 0.1.2
+
+# Send more logs and keep temp dir for inspection
+npx tsx scripts/js/test-npm-package.ts --count 20 --keep
+
+# Test with custom channel
+npx tsx scripts/js/test-npm-package.ts --channel my-test-channel
+```
+
 ## Options
 
 | Option | Short | Default | Description |
