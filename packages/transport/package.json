@@ -1,7 +1,7 @@
 {
   "name": "@abbacchio/transport",
-  "version": "0.1.0",
-  "description": "Abbacchio transport - Log transports for Pino, Winston, Bunyan, and console",
+  "version": "0.1.1",
+  "description": "Node.js log transports for Pino, Winston, and Bunyan - send logs to Abbacchio",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
