@@ -82,6 +82,7 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             libglib2.0-dev \
+            pkg-config \
             patchelf
 
       - uses: pnpm/action-setup@v4
@@ -98,6 +99,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/desktop/src-tauri -> target
+          shared-key: tauri-linux-v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
