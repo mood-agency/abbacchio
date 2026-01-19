@@ -1,0 +1,190 @@
+name: Publish npm Packages
+
+on:
+  # Publicar cuando hay push a master con cambios en packages publicables
+  push:
+    branches: [master]
+    paths:
+      - 'packages/transport/**'
+      - 'packages/browser-transport/**'
+
+  # Publicación manual
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish'
+        required: true
+        type: choice
+        options:
+          - transport
+          - browser-transport
+          - all
+      dry_run:
+        description: 'Dry run (no publish)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false  # No cancelar publicaciones en progreso
+
+jobs:
+  # ============================================
+  # Detectar qué paquetes necesitan publicarse
+  # ============================================
+  check-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      transport: ${{ steps.check.outputs.transport }}
+      browser_transport: ${{ steps.check.outputs.browser_transport }}
+      transport_version: ${{ steps.check.outputs.transport_version }}
+      browser_version: ${{ steps.check.outputs.browser_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check versions
+        id: check
+        run: |
+          # Obtener versiones actuales
+          TRANSPORT_VERSION=$(node -p "require('./packages/transport/package.json').version")
+          BROWSER_VERSION=$(node -p "require('./packages/browser-transport/package.json').version")
+
+          echo "transport_version=$TRANSPORT_VERSION" >> $GITHUB_OUTPUT
+          echo "browser_version=$BROWSER_VERSION" >> $GITHUB_OUTPUT
+
+          # Workflow manual
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            case "${{ github.event.inputs.package }}" in
+              transport) echo "transport=true" >> $GITHUB_OUTPUT ;;
+              browser-transport) echo "browser_transport=true" >> $GITHUB_OUTPUT ;;
+              all)
+                echo "transport=true" >> $GITHUB_OUTPUT
+                echo "browser_transport=true" >> $GITHUB_OUTPUT
+                ;;
+            esac
+            exit 0
+          fi
+
+          # Push automático - verificar si versión ya existe en npm
+          if ! npm view @abbacchio/transport@$TRANSPORT_VERSION version 2>/dev/null; then
+            echo "transport=true" >> $GITHUB_OUTPUT
+            echo "::notice::📦 @abbacchio/transport@$TRANSPORT_VERSION will be published"
+          fi
+
+          if ! npm view @abbacchio/browser-transport@$BROWSER_VERSION version 2>/dev/null; then
+            echo "browser_transport=true" >> $GITHUB_OUTPUT
+            echo "::notice::📦 @abbacchio/browser-transport@$BROWSER_VERSION will be published"
+          fi
+
+  # ============================================
+  # Publicar @abbacchio/transport
+  # ============================================
+  publish-transport:
+    needs: check-versions
+    if: needs.check-versions.outputs.transport == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install & Build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @abbacchio/transport build
+
+      - name: Publish
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          cd packages/transport
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          cd packages/transport
+          npm publish --access public --dry-run
+
+  # ============================================
+  # Publicar @abbacchio/browser-transport
+  # ============================================
+  publish-browser-transport:
+    needs: check-versions
+    if: needs.check-versions.outputs.browser_transport == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install & Build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @abbacchio/browser-transport build
+
+      - name: Publish
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          cd packages/browser-transport
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          cd packages/browser-transport
+          npm publish --access public --dry-run
+
+  # ============================================
+  # Notificar resultado
+  # ============================================
+  notify:
+    needs: [check-versions, publish-transport, publish-browser-transport]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## 📦 Publish Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.publish-transport.result }}" == "success" ]; then
+            echo "✅ @abbacchio/transport@${{ needs.check-versions.outputs.transport_version }} published" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.check-versions.outputs.transport }}" == "true" ]; then
+            echo "❌ @abbacchio/transport failed to publish" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏭️ @abbacchio/transport skipped (no version change)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.publish-browser-transport.result }}" == "success" ]; then
+            echo "✅ @abbacchio/browser-transport@${{ needs.check-versions.outputs.browser_version }} published" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.check-versions.outputs.browser_transport }}" == "true" ]; then
+            echo "❌ @abbacchio/browser-transport failed to publish" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏭️ @abbacchio/browser-transport skipped (no version change)" >> $GITHUB_STEP_SUMMARY
+          fi

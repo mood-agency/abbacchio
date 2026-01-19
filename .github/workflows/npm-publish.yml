@@ -1,0 +1,93 @@
+name: Publish npm Packages
+
+on:
+  push:
+    tags:
+      - 'v*'  # Se dispara con el mismo tag que desktop
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish'
+        required: true
+        type: choice
+        options:
+          - all
+          - transport
+          - browser-transport
+        default: all
+      dry_run:
+        description: 'Dry run (no publish)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - name: transport
+            filter: '@abbacchio/transport'
+          - name: browser-transport
+            filter: '@abbacchio/browser-transport'
+
+    name: Publish ${{ matrix.package.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: pnpm --filter ${{ matrix.package.filter }} build
+
+      - name: Check if version exists on npm
+        id: check
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./packages/${{ matrix.package.name }}/package.json').version")
+          echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          if npm view ${{ matrix.package.filter }}@$PACKAGE_VERSION version 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version $PACKAGE_VERSION already exists on npm, skipping..."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version $PACKAGE_VERSION does not exist, will publish..."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        if: steps.check.outputs.exists == 'false' && github.event.inputs.dry_run != 'true'
+        run: pnpm --filter ${{ matrix.package.filter }} publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run
+        if: github.event.inputs.dry_run == 'true'
+        run: pnpm --filter ${{ matrix.package.filter }} publish --access public --no-git-checks --dry-run
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
+            echo "### ${{ matrix.package.filter }} - Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "Version ${{ steps.check.outputs.version }} already exists on npm" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ${{ matrix.package.filter }} - Published" >> $GITHUB_STEP_SUMMARY
+            echo "Version ${{ steps.check.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          fi
