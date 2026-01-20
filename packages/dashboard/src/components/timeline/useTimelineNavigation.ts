@@ -41,13 +41,22 @@ import type { BucketPositionMap } from './TimelineScrollbar';
 const DEFAULT_BUCKET_SIZE_MS = 60 * 60 * 1000;
 
 // Debounce delay for scroll -> timeline sync
-const SCROLL_DEBOUNCE_MS = 100;
+const SCROLL_DEBOUNCE_MS = 50;
 
 // Debounce delay for drag scroll updates (~60fps)
 const DRAG_SCROLL_DEBOUNCE_MS = 16;
 
 // Time window to ignore timeline updates after programmatic scroll
-const PROGRAMMATIC_SCROLL_WINDOW_MS = 2000;
+const PROGRAMMATIC_SCROLL_WINDOW_MS = 500;
+
+// Number of adjacent buckets to pre-cache (before and after current)
+const PREFETCH_ADJACENT_BUCKETS = 2;
+
+// Cache entry with timestamp for invalidation
+interface CacheEntry {
+  index: number;
+  itemsLength: number; // To invalidate when items change significantly
+}
 
 // Get the start of the bucket for a timestamp
 function getBucketTimestamp(time: number, bucketSizeMs: number): number {
@@ -95,6 +104,8 @@ export interface UseTimelineNavigationResult {
   setIsDragging: (dragging: boolean) => void;
   /** Callback to update bucket positions from TimelineScrollbar - pass to onBucketPositionsChange prop */
   setBucketPositions: (positions: BucketPositionMap) => void;
+  /** Whether currently navigating to a new time bucket */
+  isNavigating: boolean;
 }
 
 export function useTimelineNavigation<T extends TimelineItem>(
@@ -114,6 +125,7 @@ export function useTimelineNavigation<T extends TimelineItem>(
   const [thumbPosition, setThumbPosition] = useState(0);
   const [currentBucket, setCurrentBucket] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Track previous dragging state for snap-on-release
   const prevIsDraggingRef = useRef(false);
@@ -152,6 +164,68 @@ export function useTimelineNavigation<T extends TimelineItem>(
   // Debounce ref for drag scroll updates
   const dragScrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Track last bucket click to prevent duplicate navigations
+  const lastBucketClickRef = useRef<{ timestamp: number; time: number } | null>(null);
+
+  // Track current drag bucket to navigate on drag end
+  const currentDragBucketRef = useRef<number | null>(null);
+
+  // Cache for bucket index lookups (bucket timestamp -> index)
+  const indexCacheRef = useRef<Map<number, CacheEntry>>(new Map());
+
+  // Get cached index or fetch it
+  const getCachedIndex = useCallback(async (bucketTimestamp: number): Promise<{ index: number; fromCache: boolean }> => {
+    const cache = indexCacheRef.current;
+    const cached = cache.get(bucketTimestamp);
+
+    // Check if cache entry is valid (items length hasn't changed significantly)
+    if (cached && Math.abs(cached.itemsLength - items.length) < 100) {
+      return { index: cached.index, fromCache: true };
+    }
+
+    // Fetch the index
+    const targetTime = bucketTimestamp + bucketSizeMs;
+    const index = await getIndexByTime(targetTime);
+
+    // Store in cache
+    cache.set(bucketTimestamp, { index, itemsLength: items.length });
+
+    return { index, fromCache: false };
+  }, [items.length, bucketSizeMs, getIndexByTime]);
+
+  // Pre-fetch adjacent buckets in the background
+  const prefetchAdjacentBuckets = useCallback((currentBucketTimestamp: number) => {
+    const sortedBuckets = [...buckets].sort((a, b) => b.timestamp - a.timestamp);
+    const currentIndex = sortedBuckets.findIndex(b => b.timestamp === currentBucketTimestamp);
+
+    if (currentIndex === -1) return;
+
+    // Get adjacent bucket timestamps
+    const adjacentTimestamps: number[] = [];
+    for (let i = 1; i <= PREFETCH_ADJACENT_BUCKETS; i++) {
+      if (currentIndex - i >= 0) {
+        adjacentTimestamps.push(sortedBuckets[currentIndex - i].timestamp);
+      }
+      if (currentIndex + i < sortedBuckets.length) {
+        adjacentTimestamps.push(sortedBuckets[currentIndex + i].timestamp);
+      }
+    }
+
+    // Pre-fetch in background (fire and forget)
+    adjacentTimestamps.forEach(timestamp => {
+      const cached = indexCacheRef.current.get(timestamp);
+      if (!cached || Math.abs(cached.itemsLength - items.length) >= 100) {
+        // Not cached or stale, fetch it
+        const targetTime = timestamp + bucketSizeMs;
+        getIndexByTime(targetTime).then(index => {
+          indexCacheRef.current.set(timestamp, { index, itemsLength: items.length });
+        }).catch(() => {
+          // Silently ignore prefetch errors
+        });
+      }
+    });
+  }, [buckets, items.length, bucketSizeMs, getIndexByTime]);
+
   // Update timeline position based on scroll position
   const updateTimelineFromScroll = useCallback(() => {
     // Don't update if we're in the middle of a programmatic scroll
@@ -165,13 +239,14 @@ export function useTimelineNavigation<T extends TimelineItem>(
       return;
     }
 
-    if (!virtualizer || !items.length || !timeRange.minTime || !timeRange.maxTime || isDragging) {
+    const container = scrollContainerRef.current;
+    if (!virtualizer || !items.length || !timeRange.minTime || !timeRange.maxTime || isDragging || !container) {
       return;
     }
 
-    // Get the scroll offset and calculate which item is in the center of viewport
-    const scrollOffset = virtualizer.scrollOffset ?? 0;
-    const viewportHeight = scrollContainerRef.current?.clientHeight ?? 0;
+    // Get the scroll offset directly from container for accuracy
+    const scrollOffset = container.scrollTop;
+    const viewportHeight = container.clientHeight;
     const centerOffset = scrollOffset + viewportHeight / 2;
 
     // Estimate which row is at center
@@ -183,7 +258,13 @@ export function useTimelineNavigation<T extends TimelineItem>(
 
     // Update current bucket
     const bucket = getBucketTimestamp(centerItem.time, bucketSizeMs);
+    const bucketChanged = bucket !== currentBucket;
     setCurrentBucket(bucket);
+
+    // Pre-fetch adjacent buckets when bucket changes (during user scroll)
+    if (bucketChanged) {
+      prefetchAdjacentBuckets(bucket);
+    }
 
     // Calculate thumb position based on bucket's position in the timeline
     // Use real bucket positions if available, otherwise fallback to index-based calculation
@@ -199,7 +280,7 @@ export function useTimelineNavigation<T extends TimelineItem>(
         }
       }
     }
-  }, [virtualizer, items, timeRange, scrollContainerRef, isDragging, buckets, bucketSizeMs, estimatedRowHeight]);
+  }, [virtualizer, items, timeRange, scrollContainerRef, isDragging, buckets, bucketSizeMs, estimatedRowHeight, currentBucket, prefetchAdjacentBuckets]);
 
   // Listen to scroll events with debounce
   useEffect(() => {
@@ -233,10 +314,16 @@ export function useTimelineNavigation<T extends TimelineItem>(
     };
   }, [scrollContainerRef, updateTimelineFromScroll]);
 
-  // Snap thumb to current bucket when drag ends
+  // Snap thumb to current bucket when drag ends and navigate immediately
   useEffect(() => {
     // Detect drag end: was dragging, now not dragging
     if (prevIsDraggingRef.current && !isDragging && currentBucket !== null) {
+      // Cancel any pending debounced scroll
+      if (dragScrollDebounceRef.current) {
+        clearTimeout(dragScrollDebounceRef.current);
+        dragScrollDebounceRef.current = null;
+      }
+
       // Use real bucket position from TimelineScrollbar if available
       const realPosition = bucketPositionsRef.current.get(currentBucket);
       if (realPosition !== undefined) {
@@ -249,9 +336,47 @@ export function useTimelineNavigation<T extends TimelineItem>(
           setThumbPosition(Math.max(0, Math.min(1, snappedPosition)));
         }
       }
+
+      // Navigate immediately to the final drag position
+      const targetBucket = currentDragBucketRef.current;
+      if (targetBucket !== null && virtualizer) {
+        // Use cache if available
+        getCachedIndex(targetBucket)
+          .then(({ index, fromCache }) => {
+            // Only show loading if not from cache
+            if (!fromCache) {
+              setIsNavigating(true);
+            }
+
+            const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+            virtualizer.scrollToIndex(clampedIndex, {
+              align: 'start',
+              behavior: 'auto',
+            });
+
+            // Pre-fetch adjacent buckets
+            prefetchAdjacentBuckets(targetBucket);
+
+            return fromCache;
+          })
+          .then((fromCache) => {
+            // Reset programmatic scroll flag and navigation state after navigation
+            setTimeout(() => {
+              isProgrammaticScrollRef.current = false;
+              setIsNavigating(false);
+            }, fromCache ? 50 : 100);
+          })
+          .catch((error) => {
+            console.error('Failed to scroll on drag end:', error);
+            setIsNavigating(false);
+          });
+      }
+
+      // Clear the drag bucket ref
+      currentDragBucketRef.current = null;
     }
     prevIsDraggingRef.current = isDragging;
-  }, [isDragging, currentBucket, buckets]);
+  }, [isDragging, currentBucket, buckets, virtualizer, items.length, getCachedIndex, prefetchAdjacentBuckets]);
 
   // Track previous items length to detect when data is reloaded
   const prevItemsLengthRef = useRef(0);
@@ -282,11 +407,15 @@ export function useTimelineNavigation<T extends TimelineItem>(
   // Handle data changes - re-navigate if needed
   useEffect(() => {
     const isFirstLoad = prevItemsLengthRef.current === 0 && items.length > 0;
-    const wasReload = prevItemsLengthRef.current > 0 && items.length > 0;
+    // Only consider it a reload if the length changed significantly (not just new logs arriving)
+    const prevLength = prevItemsLengthRef.current;
+    const lengthDiff = Math.abs(items.length - prevLength);
+    const wasSignificantReload = prevLength > 0 && items.length > 0 && lengthDiff > 100;
     prevItemsLengthRef.current = items.length;
 
     // If we're in a programmatic scroll and have a target bucket, re-navigate to it
-    if (isProgrammaticScrollRef.current && targetBucketRef.current !== null && wasReload) {
+    // but only on significant data reloads (not small incremental updates)
+    if (isProgrammaticScrollRef.current && targetBucketRef.current !== null && wasSignificantReload) {
       const targetTime = targetBucketRef.current + bucketSizeMs;
 
       getIndexByTime(targetTime)
@@ -299,11 +428,11 @@ export function useTimelineNavigation<T extends TimelineItem>(
       return;
     }
 
-    // Only update timeline position on first load
-    if (isFirstLoad && !isDragging && !isProgrammaticScrollRef.current) {
+    // Update timeline position on first load or when bucket data arrives
+    if ((isFirstLoad || (buckets.length > 0 && currentBucket === null)) && !isDragging && !isProgrammaticScrollRef.current) {
       updateTimelineFromScroll();
     }
-  }, [items.length, updateTimelineFromScroll, isDragging, scrollToIndex, getIndexByTime, bucketSizeMs]);
+  }, [items.length, buckets.length, currentBucket, updateTimelineFromScroll, isDragging, scrollToIndex, getIndexByTime, bucketSizeMs]);
 
   // Scroll to a specific bucket
   const scrollToBucket = useCallback(async (timestamp: number) => {
@@ -311,10 +440,24 @@ export function useTimelineNavigation<T extends TimelineItem>(
       return;
     }
 
+    // Prevent duplicate navigations to the same bucket within 500ms
+    const now = Date.now();
+    if (lastBucketClickRef.current &&
+        lastBucketClickRef.current.timestamp === timestamp &&
+        now - lastBucketClickRef.current.time < 500) {
+      return;
+    }
+    lastBucketClickRef.current = { timestamp, time: now };
+
     try {
-      const targetTime = timestamp + bucketSizeMs;
-      const index = await getIndexByTime(targetTime);
+      // Try to get from cache first
+      const { index, fromCache } = await getCachedIndex(timestamp);
       const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+
+      // Only show loading if not from cache
+      if (!fromCache) {
+        setIsNavigating(true);
+      }
 
       // Mark as programmatic scroll
       isProgrammaticScrollRef.current = true;
@@ -337,32 +480,27 @@ export function useTimelineNavigation<T extends TimelineItem>(
       const targetScrollTop = clampedIndex * estimatedRowHeight;
       targetScrollTopRef.current = targetScrollTop;
 
-      // Scroll to index
+      // Scroll to index (single call, no backup needed)
       virtualizer.scrollToIndex(clampedIndex, {
         align: 'start',
         behavior: 'auto',
       });
 
-      // Also set scroll position directly as backup
-      const scrollContainer = scrollContainerRef.current;
-      if (scrollContainer) {
-        requestAnimationFrame(() => {
-          if (scrollContainer && targetScrollTopRef.current !== null) {
-            scrollContainer.scrollTop = targetScrollTopRef.current;
-          }
-        });
-      }
+      // Pre-fetch adjacent buckets in background
+      prefetchAdjacentBuckets(timestamp);
 
-      // Reset programmatic scroll flag after delay
+      // Reset programmatic scroll flag and navigation state after delay
       setTimeout(() => {
         isProgrammaticScrollRef.current = false;
         targetScrollTopRef.current = null;
         targetBucketRef.current = null;
-      }, PROGRAMMATIC_SCROLL_WINDOW_MS);
+        setIsNavigating(false);
+      }, fromCache ? 100 : PROGRAMMATIC_SCROLL_WINDOW_MS); // Shorter delay if from cache
     } catch (error) {
       console.error('Failed to scroll to bucket:', error);
+      setIsNavigating(false);
     }
-  }, [virtualizer, items.length, getIndexByTime, buckets, bucketSizeMs, estimatedRowHeight, scrollContainerRef]);
+  }, [virtualizer, items.length, buckets, bucketSizeMs, estimatedRowHeight, getCachedIndex, prefetchAdjacentBuckets]);
 
   // Handle thumb drag
   const handleThumbDrag = useCallback((position: number) => {
@@ -409,6 +547,9 @@ export function useTimelineNavigation<T extends TimelineItem>(
     // IMMEDIATE: Update current bucket highlight
     setCurrentBucket(timestamp);
 
+    // Store for drag end navigation
+    currentDragBucketRef.current = timestamp;
+
     // Mark as programmatic scroll
     isProgrammaticScrollRef.current = true;
 
@@ -448,6 +589,7 @@ export function useTimelineNavigation<T extends TimelineItem>(
     isDragging,
     setIsDragging,
     setBucketPositions,
+    isNavigating,
   };
 }
 

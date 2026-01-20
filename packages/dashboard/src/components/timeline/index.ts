@@ -58,7 +58,15 @@ export type {
 } from './types';
 
 // Components
-export { TimelineScrollbar, type TimelineScrollbarProps, type BucketPositionMap } from './TimelineScrollbar';
+export {
+  TimelineScrollbar,
+  type TimelineScrollbarProps,
+  type BucketPositionMap,
+  type TimelineSizeConfig,
+  type TimeDisplayFormat,
+  type TimeDisplayMinutes,
+  type TickInterval,
+} from './TimelineScrollbar';
 
 // Hooks
 export {

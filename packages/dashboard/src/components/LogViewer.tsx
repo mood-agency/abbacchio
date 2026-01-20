@@ -437,6 +437,7 @@ export function LogViewer() {
     isDragging,
     setIsDragging,
     setHourPositions,
+    isNavigating,
   } = useTimelineNavigation({
     logs,
     hourlyData,
@@ -818,49 +819,58 @@ export function LogViewer() {
 
                 {/* Log list with timeline */}
                 <div className="flex flex-1 overflow-hidden">
-                  <ScrollArea
-                    className="flex-1"
-                    viewPortRef={scrollContainerRef}
-                  >
-                    <div
-                      style={{
-                        height: `${rowVirtualizer.getTotalSize()}px`,
-                        width: '100%',
-                        position: 'relative',
-                      }}
+                  <div className="flex-1 relative">
+                    <ScrollArea
+                      className="h-full"
+                      viewPortRef={scrollContainerRef}
                     >
-                      {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-                        const log = logs[virtualItem.index];
-                        if (!log) return null;
-                        return (
-                          <div
-                            key={log.id}
-                            data-index={virtualItem.index}
-                            ref={rowVirtualizer.measureElement}
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              width: '100%',
-                              transform: `translateY(${virtualItem.start}px)`,
-                            }}
-                          >
-                            <LogRow
-                              log={log}
-                              showChannel={false}
-                              searchQuery={searchQuery}
-                              caseSensitive={caseSensitive}
-                              useRegex={useRegex}
-                              isNew={newLogIds.has(log.id)}
-                              isSelected={selectedIds.has(log.id)}
-                              onSelect={handleRowSelect}
-                              onDataClick={setDrawerLog}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
+                      <div
+                        style={{
+                          height: `${rowVirtualizer.getTotalSize()}px`,
+                          width: '100%',
+                          position: 'relative',
+                        }}
+                      >
+                        {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+                          const log = logs[virtualItem.index];
+                          if (!log) return null;
+                          return (
+                            <div
+                              key={log.id}
+                              data-index={virtualItem.index}
+                              ref={rowVirtualizer.measureElement}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                transform: `translateY(${virtualItem.start}px)`,
+                              }}
+                            >
+                              <LogRow
+                                log={log}
+                                showChannel={false}
+                                searchQuery={searchQuery}
+                                caseSensitive={caseSensitive}
+                                useRegex={useRegex}
+                                isNew={newLogIds.has(log.id)}
+                                isSelected={selectedIds.has(log.id)}
+                                onSelect={handleRowSelect}
+                                onDataClick={setDrawerLog}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+
+                    {/* Navigation loading overlay */}
+                    {isNavigating && (
+                      <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10 pointer-events-none">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                      </div>
+                    )}
+                  </div>
 
                   {/* Timeline scrollbar */}
                   {hourlyData.length > 0 && (

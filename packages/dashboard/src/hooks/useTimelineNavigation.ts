@@ -50,6 +50,8 @@ export interface UseTimelineNavigationResult {
   setIsDragging: (dragging: boolean) => void;
   /** Callback to update bucket positions - pass to TimelineScrollbar's onBucketPositionsChange */
   setHourPositions: (positions: BucketPositionMap) => void;
+  /** Whether currently navigating to a new hour */
+  isNavigating: boolean;
 }
 
 // Convert HourlyLogCount to TimeBucketData
@@ -114,5 +116,6 @@ export function useTimelineNavigation(options: UseTimelineNavigationOptions): Us
     isDragging: result.isDragging,
     setIsDragging: result.setIsDragging,
     setHourPositions: result.setBucketPositions,
+    isNavigating: result.isNavigating,
   };
 }

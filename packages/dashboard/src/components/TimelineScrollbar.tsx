@@ -12,6 +12,10 @@ import {
   type TimeBucketData,
   type TimeRange,
   type BucketPositionMap,
+  type TimelineSizeConfig,
+  type TimeDisplayFormat,
+  type TimeDisplayMinutes,
+  type TickInterval,
 } from './timeline';
 
 export interface TimelineScrollbarProps {
@@ -25,6 +29,16 @@ export interface TimelineScrollbarProps {
   onDragStart: () => void;
   onDragEnd: () => void;
   onHourPositionsChange?: (positions: BucketPositionMap) => void;
+  /** Optional: Size configuration for timeline elements */
+  sizes?: TimelineSizeConfig;
+  /** Optional: Whether to show the time label (default: true) */
+  showTime?: boolean;
+  /** Optional: Time display format - 24h or 12h (default: '24h') */
+  timeFormat?: TimeDisplayFormat;
+  /** Optional: Whether to show minutes in time display (default: 'show') */
+  showMinutes?: TimeDisplayMinutes;
+  /** Optional: Tick interval - how often to show time markers (default: 'hour') */
+  tickInterval?: TickInterval;
 }
 
 // Convert HourlyLogCount to TimeBucketData
@@ -54,6 +68,11 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
   onDragStart,
   onDragEnd,
   onHourPositionsChange,
+  sizes,
+  showTime = true,
+  timeFormat = '24h',
+  showMinutes = 'hide',
+  tickInterval = 'hour',
 }: TimelineScrollbarProps) {
   return (
     <GenericTimelineScrollbar
@@ -68,6 +87,11 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
       onDragEnd={onDragEnd}
       width={80}
       onBucketPositionsChange={onHourPositionsChange}
+      sizes={sizes}
+      showTime={showTime}
+      timeFormat={timeFormat}
+      showMinutes={showMinutes}
+      tickInterval={tickInterval}
     />
   );
 });
