@@ -264,6 +264,55 @@ export async function pruneOldLogs(options?: PruneOptions): Promise<void> {
 }
 
 // ============================================================================
+// Time Window queries
+// ============================================================================
+
+export interface TimeWindowQueryOptions {
+  /** Channel to query */
+  channel: string;
+  /** Center timestamp of the window (milliseconds) */
+  centerTime: number;
+  /** Half of the window size (milliseconds). Window spans [centerTime - halfSize, centerTime + halfSize] */
+  windowHalfSize: number;
+  /** Search term */
+  search?: string;
+  /** Whether to use regex for search */
+  useRegex?: boolean;
+  /** Whether search is case sensitive */
+  caseSensitive?: boolean;
+  /** Filter by log levels */
+  levels?: FilterLevels;
+  /** Filter by namespaces */
+  namespaces?: FilterNamespaces;
+  /** Maximum logs to return (safety limit) */
+  limit?: number;
+}
+
+export interface TimeWindowResult {
+  /** Logs within the time window */
+  logs: LogEntry[];
+  /** Start of the loaded window (milliseconds) */
+  windowStart: number;
+  /** End of the loaded window (milliseconds) */
+  windowEnd: number;
+}
+
+/**
+ * Query logs within a specific time window.
+ * Used for time-based pagination instead of loading all logs at once.
+ */
+export async function queryLogsInTimeWindow(options: TimeWindowQueryOptions): Promise<TimeWindowResult> {
+  await initDatabase();
+  const rows = await sendMessage<SQLiteRow[]>('queryLogsInTimeWindow', options);
+  const logs = rows.map(rowToLogEntry);
+  return {
+    logs,
+    windowStart: options.centerTime - options.windowHalfSize,
+    windowEnd: options.centerTime + options.windowHalfSize,
+  };
+}
+
+// ============================================================================
 // Timeline-related queries
 // ============================================================================
 

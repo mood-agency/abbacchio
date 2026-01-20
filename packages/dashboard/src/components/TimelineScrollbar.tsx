@@ -7,6 +7,7 @@
 
 import { memo } from 'react';
 import type { HourlyLogCount, LogTimeRange } from '../lib/sqlite-db';
+import type { LoadedTimeRange } from '../hooks/useChannelLogStream';
 import {
   TimelineScrollbar as GenericTimelineScrollbar,
   type TimeBucketData,
@@ -39,6 +40,8 @@ export interface TimelineScrollbarProps {
   showMinutes?: TimeDisplayMinutes;
   /** Optional: Tick interval - how often to show time markers (default: 'hour') */
   tickInterval?: TickInterval;
+  /** Optional: Currently loaded time window for visual feedback */
+  loadedTimeRange?: LoadedTimeRange | null;
 }
 
 // Convert HourlyLogCount to TimeBucketData
@@ -57,6 +60,11 @@ function toTimeRange(logTimeRange: LogTimeRange): TimeRange {
   };
 }
 
+// Convert LoadedTimeRange to generic format
+function toLoadedRange(range: LoadedTimeRange | null | undefined): { start: number; end: number } | undefined {
+  return range ? { start: range.start, end: range.end } : undefined;
+}
+
 export const TimelineScrollbar = memo(function TimelineScrollbar({
   hourlyData,
   logTimeRange,
@@ -73,6 +81,7 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
   timeFormat = '24h',
   showMinutes = 'hide',
   tickInterval = 'hour',
+  loadedTimeRange,
 }: TimelineScrollbarProps) {
   return (
     <GenericTimelineScrollbar
@@ -92,6 +101,7 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
       timeFormat={timeFormat}
       showMinutes={showMinutes}
       tickInterval={tickInterval}
+      loadedRange={toLoadedRange(loadedTimeRange)}
     />
   );
 });

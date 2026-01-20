@@ -3,13 +3,16 @@
  *
  * This is a thin wrapper around the generic useTimelineNavigation hook
  * that adapts it to the project's types and integrates with the SQLite database.
+ *
+ * It now supports time-window pagination by using navigateToTime when
+ * the target time is outside the currently loaded window.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
 import type { LogEntry } from '../types';
 import type { HourlyLogCount, LogTimeRange } from '../lib/sqlite-db';
-import { getLogIndexByTime } from '../lib/sqlite-db';
+import type { LoadedTimeRange } from './useChannelLogStream';
 import {
   useTimelineNavigation as useGenericTimelineNavigation,
   type TimeBucketData,
@@ -33,6 +36,10 @@ export interface UseTimelineNavigationOptions {
     minTime?: number;
     search: string;
   };
+  /** Currently loaded time window (for time-window pagination) */
+  loadedTimeRange?: LoadedTimeRange | null;
+  /** Function to navigate to a time, loading new window if needed */
+  navigateToTime?: (targetTime: number) => Promise<number>;
 }
 
 export interface UseTimelineNavigationResult {
@@ -78,22 +85,42 @@ export function useTimelineNavigation(options: UseTimelineNavigationOptions): Us
     virtualizer,
     scrollContainerRef,
     channelName,
-    filters,
+    // filters - no longer used, we find index directly in loaded logs
+    loadedTimeRange,
+    navigateToTime,
   } = options;
 
-  // Create the getIndexByTime function that uses SQLite
+  // Track if we're currently loading to prevent duplicate loads
+  const isLoadingRef = useRef(false);
+
+  // getIndexByTime - find index in logs, load new window if needed
   const getIndexByTime = useCallback(async (targetTime: number): Promise<number> => {
     if (!channelName) return 0;
 
-    return getLogIndexByTime({
-      channel: channelName,
-      targetTime,
-      levels: filters.levels.length > 0 ? filters.levels : undefined,
-      namespaces: filters.namespaces.length > 0 ? filters.namespaces : undefined,
-      minTime: filters.minTime,
-      search: filters.search || undefined,
-    });
-  }, [channelName, filters]);
+    // Check if target is outside loaded range and we can load new data
+    if (loadedTimeRange && navigateToTime) {
+      const isOutsideWindow = targetTime < loadedTimeRange.start || targetTime > loadedTimeRange.end;
+
+      if (isOutsideWindow && !isLoadingRef.current) {
+        // Load new window - mark as loading to prevent duplicate loads
+        isLoadingRef.current = true;
+        try {
+          const index = await navigateToTime(targetTime);
+          return index;
+        } finally {
+          // Reset after a delay to allow the new data to settle
+          setTimeout(() => {
+            isLoadingRef.current = false;
+          }, 1000);
+        }
+      }
+    }
+
+    // Find index directly in loaded logs (logs are sorted DESC by time)
+    if (logs.length === 0) return 0;
+    const index = logs.findIndex(log => log.time <= targetTime);
+    return index >= 0 ? index : 0;
+  }, [channelName, logs, loadedTimeRange, navigateToTime]);
 
   // Use the generic hook
   const result = useGenericTimelineNavigation({

@@ -657,6 +657,100 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         break;
       }
 
+      case 'queryLogsInTimeWindow': {
+        const options = payload as {
+          channel: string;
+          centerTime: number;
+          windowHalfSize: number;
+          search?: string;
+          useRegex?: boolean;
+          caseSensitive?: boolean;
+          levels?: string[];
+          namespaces?: string[];
+          limit?: number;
+        };
+
+        const windowStart = options.centerTime - options.windowHalfSize;
+        const windowEnd = options.centerTime + options.windowHalfSize;
+        const limit = options.limit ?? 50000;
+
+        const conditions: string[] = ['logs.channel = ?', 'logs.time >= ?', 'logs.time <= ?'];
+        const params: (string | number | null)[] = [options.channel, windowStart, windowEnd];
+
+        if (options.search?.trim()) {
+          const searchTerm = options.search.trim().replace(/['"]/g, '');
+          if (options.useRegex) {
+            const hasComplexRegex = /[|^$()[\]\\]/.test(searchTerm);
+            if (!hasComplexRegex) {
+              conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ?)`);
+              const likePattern = `%${searchTerm.replace(/[.*+?]/g, '%')}%`;
+              params.push(likePattern, likePattern, likePattern);
+            }
+          } else if (shouldUseLikeSearch(searchTerm)) {
+            const likePattern = options.caseSensitive ? `%${searchTerm}%` : `%${searchTerm.toLowerCase()}%`;
+            if (options.caseSensitive) {
+              conditions.push(`(logs.msg LIKE ? OR logs.data LIKE ? OR logs.namespace LIKE ? OR logs.channel LIKE ?)`);
+            } else {
+              conditions.push(`(LOWER(logs.msg) LIKE ? OR LOWER(logs.data) LIKE ? OR LOWER(logs.namespace) LIKE ? OR LOWER(logs.channel) LIKE ?)`);
+            }
+            params.push(likePattern, likePattern, likePattern, likePattern);
+          } else {
+            conditions.push(`logs.rowid IN (SELECT rowid FROM logs_fts WHERE logs_fts MATCH ?)`);
+            params.push(`"${searchTerm}"*`);
+          }
+        }
+
+        if (options.levels && options.levels.length > 0) {
+          const placeholders = options.levels.map(() => '?').join(', ');
+          conditions.push(`logs.level_label IN (${placeholders})`);
+          params.push(...options.levels);
+        }
+
+        if (options.namespaces && options.namespaces.length > 0) {
+          const placeholders = options.namespaces.map(() => '?').join(', ');
+          conditions.push(`logs.namespace IN (${placeholders})`);
+          params.push(...options.namespaces);
+        }
+
+        const where = `WHERE ${conditions.join(' AND ')}`;
+        const searchTerm = options.search?.trim();
+        const hasComplexRegex = options.useRegex && searchTerm && /[|^$()[\]\\]/.test(searchTerm);
+
+        let sql = `SELECT * FROM logs ${where} ORDER BY time DESC LIMIT ?`;
+        params.push(hasComplexRegex ? Math.min(limit * 2, 200000) : limit);
+
+        let rows: Record<string, unknown>[] = [];
+        db.exec({
+          sql,
+          bind: params,
+          rowMode: 'object',
+          callback: (row: SQLiteRow) => rows.push(row as Record<string, unknown>),
+        });
+
+        // Apply regex filter in post-processing if needed
+        if (options.useRegex && searchTerm) {
+          try {
+            const flags = options.caseSensitive ? 'g' : 'gi';
+            const regex = new RegExp(searchTerm, flags);
+            rows = rows.filter(row => {
+              const msgMatch = regexMatchesNonEmpty(regex, String(row.msg || ''));
+              const dataMatch = regexMatchesNonEmpty(regex, String(row.data || ''));
+              const nsMatch = row.namespace ? regexMatchesNonEmpty(regex, String(row.namespace)) : false;
+              const levelMatch = regexMatchesNonEmpty(regex, String(row.level_label || ''));
+              return msgMatch || dataMatch || nsMatch || levelMatch;
+            });
+          } catch {
+            rows = [];
+          }
+          if (hasComplexRegex) {
+            rows = rows.slice(0, limit);
+          }
+        }
+
+        self.postMessage({ id, success: true, result: rows });
+        break;
+      }
+
       case 'getFilteredCount': {
         const options = payload as {
           search?: string;

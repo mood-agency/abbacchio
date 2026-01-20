@@ -83,6 +83,7 @@ import {
   ShieldOff,
   ShieldAlert,
   Download,
+  Clock,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -151,6 +152,9 @@ export function LogViewer() {
     isLoading,
     hourlyData,
     logTimeRange,
+    loadedTimeRange,
+    isLoadingWindow,
+    navigateToTime,
   } = useChannelLogStream({
     channelName: activeChannel?.name || null,
     levelFilters,
@@ -451,6 +455,8 @@ export function LogViewer() {
       minTime: currentMinTime,
       search: searchQuery,
     },
+    loadedTimeRange,
+    navigateToTime,
   });
 
   // Handle delete confirmation
@@ -551,7 +557,7 @@ export function LogViewer() {
   }
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <div className="flex flex-col h-screen">
         {/* Header */}
         <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-background relative z-20">
@@ -808,7 +814,7 @@ export function LogViewer() {
                   </div>
                   {/* Header labels */}
                   <div className="flex-1 flex items-center gap-3 px-4 py-2">
-                    <span className="w-36 flex-shrink-0">{tLogs('drawer.timestamp')}</span>
+                    <span className="w-40 flex-shrink-0">{tLogs('drawer.timestamp')}</span>
                     <span className="w-5 flex-shrink-0"></span>
                     <span className="w-16 flex-shrink-0">Level</span>
                     <span className="w-28 flex-shrink-0">Namespace</span>
@@ -864,8 +870,8 @@ export function LogViewer() {
                       </div>
                     </ScrollArea>
 
-                    {/* Navigation loading overlay */}
-                    {isNavigating && (
+                    {/* Navigation/Window loading overlay */}
+                    {(isNavigating || isLoadingWindow) && (
                       <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10 pointer-events-none">
                         <Loader2 className="w-8 h-8 animate-spin text-primary" />
                       </div>
@@ -885,6 +891,7 @@ export function LogViewer() {
                       onDragStart={() => setIsDragging(true)}
                       onDragEnd={() => setIsDragging(false)}
                       onHourPositionsChange={setHourPositions}
+                      loadedTimeRange={loadedTimeRange}
                     />
                   )}
                 </div>

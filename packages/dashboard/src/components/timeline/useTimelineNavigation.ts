@@ -1,15 +1,13 @@
 /**
  * useTimelineNavigation Hook
  *
- * Provides bidirectional synchronization between a virtualized list and a timeline scrollbar.
- * Works with any data source by accepting a function to get the index of an item at a specific time.
+ * Provides one-way synchronization: timeline controls the table scroll position.
+ * Table scroll does NOT update the timeline position.
  *
  * Features:
- * - Syncs scroll position to timeline thumb position
- * - Syncs timeline navigation to scroll position
- * - Debounced updates to prevent feedback loops
- * - Handles programmatic scrolls separately from user scrolls
- * - Immediate visual feedback during drag with debounced navigation
+ * - Timeline click navigates to specific bucket
+ * - Thumb drag navigates table with debounced scroll
+ * - Immediate visual feedback during drag
  *
  * @example
  * ```tsx
@@ -40,14 +38,17 @@ import type { BucketPositionMap } from './TimelineScrollbar';
 // Default bucket size: 1 hour in milliseconds
 const DEFAULT_BUCKET_SIZE_MS = 60 * 60 * 1000;
 
-// Debounce delay for scroll -> timeline sync
-const SCROLL_DEBOUNCE_MS = 50;
-
 // Debounce delay for drag scroll updates (~60fps)
 const DRAG_SCROLL_DEBOUNCE_MS = 16;
 
-// Time window to ignore timeline updates after programmatic scroll
-const PROGRAMMATIC_SCROLL_WINDOW_MS = 500;
+// Time window to ignore updates after programmatic scroll
+const PROGRAMMATIC_SCROLL_WINDOW_MS = 300;
+
+// Debug logging - set to true to enable
+const DEBUG = true;
+const log = (...args: unknown[]) => {
+  if (DEBUG) console.log('[Timeline]', ...args);
+};
 
 // Number of adjacent buckets to pre-cache (before and after current)
 const PREFETCH_ADJACENT_BUCKETS = 2;
@@ -55,12 +56,8 @@ const PREFETCH_ADJACENT_BUCKETS = 2;
 // Cache entry with timestamp for invalidation
 interface CacheEntry {
   index: number;
-  itemsLength: number; // To invalidate when items change significantly
-}
-
-// Get the start of the bucket for a timestamp
-function getBucketTimestamp(time: number, bucketSizeMs: number): number {
-  return Math.floor(time / bucketSizeMs) * bucketSizeMs;
+  itemsLength: number; // To invalidate when items change
+  loadedAt: number; // Timestamp when cached, for TTL
 }
 
 // Helper to find the index of a bucket in the sorted buckets array (descending order)
@@ -92,7 +89,7 @@ export interface UseTimelineNavigationOptions<T extends TimelineItem> {
 export interface UseTimelineNavigationResult {
   /** Current position of the thumb (0-1, where 0 = newest, 1 = oldest) */
   thumbPosition: number;
-  /** Timestamp of the bucket currently visible in viewport center */
+  /** Timestamp of the bucket currently selected */
   currentBucket: number | null;
   /** Navigate to a specific bucket timestamp */
   scrollToBucket: (timestamp: number) => void;
@@ -114,9 +111,7 @@ export function useTimelineNavigation<T extends TimelineItem>(
   const {
     items,
     buckets,
-    timeRange,
     virtualizer,
-    scrollContainerRef,
     getIndexByTime,
     bucketSizeMs = DEFAULT_BUCKET_SIZE_MS,
     estimatedRowHeight = 36,
@@ -124,8 +119,15 @@ export function useTimelineNavigation<T extends TimelineItem>(
 
   const [thumbPosition, setThumbPosition] = useState(0);
   const [currentBucket, setCurrentBucket] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingInternal, setIsDraggingInternal] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+
+  // Wrapper to log dragging state changes
+  const setIsDragging = useCallback((value: boolean) => {
+    log('setIsDragging:', value);
+    setIsDraggingInternal(value);
+  }, []);
+  const isDragging = isDraggingInternal;
 
   // Track previous dragging state for snap-on-release
   const prevIsDraggingRef = useRef(false);
@@ -133,33 +135,13 @@ export function useTimelineNavigation<T extends TimelineItem>(
   // Store bucket positions from TimelineScrollbar for accurate snap positioning
   const bucketPositionsRef = useRef<BucketPositionMap>(new Map());
 
-  // Callback to update bucket positions and snap thumb if needed
+  // Callback to update bucket positions (just store them, no auto-sync)
   const setBucketPositions = useCallback((positions: BucketPositionMap) => {
     bucketPositionsRef.current = positions;
+  }, []);
 
-    // Whenever positions are updated and we have a current bucket, snap to it
-    if (positions.size > 0 && currentBucket !== null && !isDragging) {
-      const realPosition = positions.get(currentBucket);
-      if (realPosition !== undefined) {
-        setThumbPosition(Math.max(0, Math.min(1, realPosition)));
-      }
-    }
-  }, [currentBucket, isDragging]);
-
-  // Ref for debounce timeout
-  const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Track if we're programmatically scrolling (to avoid feedback loop)
-  const isProgrammaticScrollRef = useRef(false);
-
-  // Store the target scroll position to restore after data reloads
-  const targetScrollTopRef = useRef<number | null>(null);
-
-  // Store the target bucket to re-navigate after data changes
+  // Store the target bucket for re-navigation after data changes
   const targetBucketRef = useRef<number | null>(null);
-
-  // Store when we started programmatic scroll
-  const programmaticScrollStartRef = useRef<number>(0);
 
   // Debounce ref for drag scroll updates
   const dragScrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,28 +149,48 @@ export function useTimelineNavigation<T extends TimelineItem>(
   // Track last bucket click to prevent duplicate navigations
   const lastBucketClickRef = useRef<{ timestamp: number; time: number } | null>(null);
 
+  // Track ongoing navigation to prevent concurrent navigations to the same bucket
+  const pendingNavigationRef = useRef<number | null>(null);
+
   // Track current drag bucket to navigate on drag end
   const currentDragBucketRef = useRef<number | null>(null);
 
+  // Track current bucket for comparison without causing re-renders
+  const currentBucketRef = useRef<number | null>(null);
+
   // Cache for bucket index lookups (bucket timestamp -> index)
   const indexCacheRef = useRef<Map<number, CacheEntry>>(new Map());
+
+  // Track last scrolled bucket during drag to avoid duplicate calls
+  const lastDragScrolledBucketRef = useRef<number | null>(null);
 
   // Get cached index or fetch it
   const getCachedIndex = useCallback(async (bucketTimestamp: number): Promise<{ index: number; fromCache: boolean }> => {
     const cache = indexCacheRef.current;
     const cached = cache.get(bucketTimestamp);
+    const now = Date.now();
 
-    // Check if cache entry is valid (items length hasn't changed significantly)
-    if (cached && Math.abs(cached.itemsLength - items.length) < 100) {
+    // Cache is valid if:
+    // 1. Items length is exactly the same (data hasn't changed)
+    // 2. Cache is less than 5 seconds old (TTL)
+    const isCacheValid = cached &&
+      cached.itemsLength === items.length &&
+      (now - cached.loadedAt) < 5000;
+
+    if (isCacheValid) {
+      log('getCachedIndex: cache HIT for', new Date(bucketTimestamp).toISOString(), 'index:', cached.index);
       return { index: cached.index, fromCache: true };
     }
 
-    // Fetch the index
-    const targetTime = bucketTimestamp + bucketSizeMs;
+    log('getCachedIndex: cache MISS for', new Date(bucketTimestamp).toISOString(),
+      cached ? `(stale: itemsLen ${cached.itemsLength} vs ${items.length}, age ${now - cached.loadedAt}ms)` : '(no entry)');
+
+    // Fetch the index - use center of bucket for more consistent results
+    const targetTime = bucketTimestamp + Math.floor(bucketSizeMs / 2);
     const index = await getIndexByTime(targetTime);
 
-    // Store in cache
-    cache.set(bucketTimestamp, { index, itemsLength: items.length });
+    // Store in cache with current timestamp
+    cache.set(bucketTimestamp, { index, itemsLength: items.length, loadedAt: now });
 
     return { index, fromCache: false };
   }, [items.length, bucketSizeMs, getIndexByTime]);
@@ -212,13 +214,18 @@ export function useTimelineNavigation<T extends TimelineItem>(
     }
 
     // Pre-fetch in background (fire and forget)
+    const now = Date.now();
     adjacentTimestamps.forEach(timestamp => {
       const cached = indexCacheRef.current.get(timestamp);
-      if (!cached || Math.abs(cached.itemsLength - items.length) >= 100) {
-        // Not cached or stale, fetch it
-        const targetTime = timestamp + bucketSizeMs;
+      const isCacheValid = cached &&
+        cached.itemsLength === items.length &&
+        (now - cached.loadedAt) < 5000;
+
+      if (!isCacheValid) {
+        // Not cached or stale, fetch it - use center of bucket
+        const targetTime = timestamp + Math.floor(bucketSizeMs / 2);
         getIndexByTime(targetTime).then(index => {
-          indexCacheRef.current.set(timestamp, { index, itemsLength: items.length });
+          indexCacheRef.current.set(timestamp, { index, itemsLength: items.length, loadedAt: Date.now() });
         }).catch(() => {
           // Silently ignore prefetch errors
         });
@@ -226,132 +233,62 @@ export function useTimelineNavigation<T extends TimelineItem>(
     });
   }, [buckets, items.length, bucketSizeMs, getIndexByTime]);
 
-  // Update timeline position based on scroll position
-  const updateTimelineFromScroll = useCallback(() => {
-    // Don't update if we're in the middle of a programmatic scroll
-    if (isProgrammaticScrollRef.current) {
-      return;
-    }
-
-    // Also check if we're within the programmatic scroll window
-    const timeSinceScroll = Date.now() - programmaticScrollStartRef.current;
-    if (timeSinceScroll < PROGRAMMATIC_SCROLL_WINDOW_MS) {
-      return;
-    }
-
-    const container = scrollContainerRef.current;
-    if (!virtualizer || !items.length || !timeRange.minTime || !timeRange.maxTime || isDragging || !container) {
-      return;
-    }
-
-    // Get the scroll offset directly from container for accuracy
-    const scrollOffset = container.scrollTop;
-    const viewportHeight = container.clientHeight;
-    const centerOffset = scrollOffset + viewportHeight / 2;
-
-    // Estimate which row is at center
-    const centerIndex = Math.floor(centerOffset / estimatedRowHeight);
-    const clampedIndex = Math.max(0, Math.min(centerIndex, items.length - 1));
-
-    const centerItem = items[clampedIndex];
-    if (!centerItem) return;
-
-    // Update current bucket
-    const bucket = getBucketTimestamp(centerItem.time, bucketSizeMs);
-    const bucketChanged = bucket !== currentBucket;
-    setCurrentBucket(bucket);
-
-    // Pre-fetch adjacent buckets when bucket changes (during user scroll)
-    if (bucketChanged) {
-      prefetchAdjacentBuckets(bucket);
-    }
-
-    // Calculate thumb position based on bucket's position in the timeline
-    // Use real bucket positions if available, otherwise fallback to index-based calculation
-    if (buckets.length > 0) {
-      const realPosition = bucketPositionsRef.current.get(bucket);
-      if (realPosition !== undefined) {
-        setThumbPosition(Math.max(0, Math.min(1, realPosition)));
-      } else {
-        const bucketIndex = findBucketIndex(buckets, bucket);
-        if (bucketIndex >= 0) {
-          const position = (bucketIndex + 0.5) / buckets.length; // Center on the bucket
-          setThumbPosition(Math.max(0, Math.min(1, position)));
-        }
-      }
-    }
-  }, [virtualizer, items, timeRange, scrollContainerRef, isDragging, buckets, bucketSizeMs, estimatedRowHeight, currentBucket, prefetchAdjacentBuckets]);
-
-  // Listen to scroll events with debounce
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      // Skip if this is a programmatic scroll
-      if (isProgrammaticScrollRef.current) {
-        return;
-      }
-
-      // Debounce the timeline update
-      if (scrollDebounceRef.current) {
-        clearTimeout(scrollDebounceRef.current);
-      }
-      scrollDebounceRef.current = setTimeout(() => {
-        updateTimelineFromScroll();
-      }, SCROLL_DEBOUNCE_MS);
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      if (scrollDebounceRef.current) {
-        clearTimeout(scrollDebounceRef.current);
-      }
-      if (dragScrollDebounceRef.current) {
-        clearTimeout(dragScrollDebounceRef.current);
-      }
-    };
-  }, [scrollContainerRef, updateTimelineFromScroll]);
-
   // Snap thumb to current bucket when drag ends and navigate immediately
   useEffect(() => {
     // Detect drag end: was dragging, now not dragging
-    if (prevIsDraggingRef.current && !isDragging && currentBucket !== null) {
-      // Cancel any pending debounced scroll
+    if (prevIsDraggingRef.current && !isDragging) {
+      log('DRAG END');
+
+      // Reset the last scrolled bucket ref for next drag session
+      lastDragScrolledBucketRef.current = null;
+
+      // Cancel any pending debounced scrolls
       if (dragScrollDebounceRef.current) {
         clearTimeout(dragScrollDebounceRef.current);
         dragScrollDebounceRef.current = null;
       }
 
-      // Use real bucket position from TimelineScrollbar if available
-      const realPosition = bucketPositionsRef.current.get(currentBucket);
-      if (realPosition !== undefined) {
-        setThumbPosition(Math.max(0, Math.min(1, realPosition)));
-      } else if (buckets.length > 0) {
-        // Fallback to calculated position if real positions not available
-        const bucketIndex = findBucketIndex(buckets, currentBucket);
-        if (bucketIndex >= 0) {
-          const snappedPosition = (bucketIndex + 0.5) / buckets.length;
-          setThumbPosition(Math.max(0, Math.min(1, snappedPosition)));
+      // Use refs to get current values without adding them as dependencies
+      const bucket = currentBucketRef.current;
+
+      if (bucket !== null) {
+        // Use real bucket position from TimelineScrollbar if available
+        const realPosition = bucketPositionsRef.current.get(bucket);
+        if (realPosition !== undefined) {
+          setThumbPosition(Math.max(0, Math.min(1, realPosition)));
+        } else if (buckets.length > 0) {
+          // Fallback to calculated position if real positions not available
+          const bucketIndex = findBucketIndex(buckets, bucket);
+          if (bucketIndex >= 0) {
+            const snappedPosition = (bucketIndex + 0.5) / buckets.length;
+            setThumbPosition(Math.max(0, Math.min(1, snappedPosition)));
+          }
         }
       }
 
       // Navigate immediately to the final drag position
       const targetBucket = currentDragBucketRef.current;
+      log('DRAG END: targetBucket=', targetBucket ? new Date(targetBucket).toISOString() : null);
       if (targetBucket !== null && virtualizer) {
         // Use cache if available
         getCachedIndex(targetBucket)
           .then(({ index, fromCache }) => {
+            log('DRAG END: got index', index, 'fromCache:', fromCache);
             // Only show loading if not from cache
             if (!fromCache) {
               setIsNavigating(true);
             }
 
             const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
-            virtualizer.scrollToIndex(clampedIndex, {
-              align: 'start',
-              behavior: 'auto',
+
+            // Use requestAnimationFrame to avoid flushSync issues with virtualizer
+            requestAnimationFrame(() => {
+              if (!virtualizer) return;
+              log('DRAG END: scrolling to index', clampedIndex);
+              virtualizer.scrollToIndex(clampedIndex, {
+                align: 'start',
+                behavior: 'auto',
+              });
             });
 
             // Pre-fetch adjacent buckets
@@ -359,12 +296,11 @@ export function useTimelineNavigation<T extends TimelineItem>(
 
             return fromCache;
           })
-          .then((fromCache) => {
-            // Reset programmatic scroll flag and navigation state after navigation
+          .then(() => {
+            // Reset navigation state after navigation completes
             setTimeout(() => {
-              isProgrammaticScrollRef.current = false;
               setIsNavigating(false);
-            }, fromCache ? 50 : 100);
+            }, PROGRAMMATIC_SCROLL_WINDOW_MS);
           })
           .catch((error) => {
             console.error('Failed to scroll on drag end:', error);
@@ -376,63 +312,45 @@ export function useTimelineNavigation<T extends TimelineItem>(
       currentDragBucketRef.current = null;
     }
     prevIsDraggingRef.current = isDragging;
-  }, [isDragging, currentBucket, buckets, virtualizer, items.length, getCachedIndex, prefetchAdjacentBuckets]);
+  }, [isDragging, buckets, virtualizer, items.length, getCachedIndex, prefetchAdjacentBuckets]);
 
   // Track previous items length to detect when data is reloaded
   const prevItemsLengthRef = useRef(0);
 
-  // Navigate to a specific index (internal helper)
-  const scrollToIndex = useCallback((index: number) => {
-    if (!virtualizer || !scrollContainerRef.current) return;
-
-    const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
-
-    // Use virtualizer's scrollToIndex
-    virtualizer.scrollToIndex(clampedIndex, {
-      align: 'start',
-      behavior: 'auto',
-    });
-
-    // Also set scroll position directly as backup
-    const targetScrollTop = clampedIndex * estimatedRowHeight;
-    const container = scrollContainerRef.current;
-
-    requestAnimationFrame(() => {
-      if (container) {
-        container.scrollTop = targetScrollTop;
-      }
-    });
-  }, [virtualizer, scrollContainerRef, items.length, estimatedRowHeight]);
-
-  // Handle data changes - re-navigate if needed
+  // Ref to hold latest virtualizer to avoid dependency issues
+  const virtualizerRef = useRef(virtualizer);
   useEffect(() => {
-    const isFirstLoad = prevItemsLengthRef.current === 0 && items.length > 0;
-    // Only consider it a reload if the length changed significantly (not just new logs arriving)
+    virtualizerRef.current = virtualizer;
+  }, [virtualizer]);
+
+  // Handle data changes - re-sync thumb position after data reload
+  // NOTE: We do NOT call getIndexByTime here because that can trigger another data load,
+  // causing an infinite loop. The initial scrollToBucket already handles navigation.
+  // This effect only re-syncs the thumb position with new bucket positions.
+  useEffect(() => {
     const prevLength = prevItemsLengthRef.current;
     const lengthDiff = Math.abs(items.length - prevLength);
     const wasSignificantReload = prevLength > 0 && items.length > 0 && lengthDiff > 100;
     prevItemsLengthRef.current = items.length;
 
-    // If we're in a programmatic scroll and have a target bucket, re-navigate to it
-    // but only on significant data reloads (not small incremental updates)
-    if (isProgrammaticScrollRef.current && targetBucketRef.current !== null && wasSignificantReload) {
-      const targetTime = targetBucketRef.current + bucketSizeMs;
+    log('DATA EFFECT: items', items.length, 'prevLength', prevLength, 'wasSignificantReload', wasSignificantReload);
 
-      getIndexByTime(targetTime)
-        .then((index) => {
-          scrollToIndex(index);
-        })
-        .catch((error) => {
-          console.error('Failed to re-navigate to bucket:', error);
-        });
-      return;
-    }
+    // If we have a target bucket and data reloaded significantly, re-sync the thumb position
+    // but do NOT call getIndexByTime as it may trigger another data load
+    if (targetBucketRef.current !== null && wasSignificantReload) {
+      const targetBucket = targetBucketRef.current;
 
-    // Update timeline position on first load or when bucket data arrives
-    if ((isFirstLoad || (buckets.length > 0 && currentBucket === null)) && !isDragging && !isProgrammaticScrollRef.current) {
-      updateTimelineFromScroll();
+      // Re-sync the thumb position after data reload
+      setTimeout(() => {
+        const positions = bucketPositionsRef.current;
+        const realPosition = positions.get(targetBucket);
+        log('DATA EFFECT: re-syncing thumb after reload, bucket:', new Date(targetBucket).toISOString(), 'position:', realPosition);
+        if (realPosition !== undefined) {
+          setThumbPosition(Math.max(0, Math.min(1, realPosition)));
+        }
+      }, 100);
     }
-  }, [items.length, buckets.length, currentBucket, updateTimelineFromScroll, isDragging, scrollToIndex, getIndexByTime, bucketSizeMs]);
+  }, [items.length, bucketSizeMs]);
 
   // Scroll to a specific bucket
   const scrollToBucket = useCallback(async (timestamp: number) => {
@@ -440,73 +358,91 @@ export function useTimelineNavigation<T extends TimelineItem>(
       return;
     }
 
-    // Prevent duplicate navigations to the same bucket within 500ms
+    log('scrollToBucket:', new Date(timestamp).toISOString());
+
+    // Prevent concurrent navigations to the same bucket
+    if (pendingNavigationRef.current === timestamp) {
+      log('scrollToBucket: BLOCKED (already navigating to this bucket)');
+      return;
+    }
+
+    // Prevent duplicate navigations to the same bucket within 1000ms
     const now = Date.now();
     if (lastBucketClickRef.current &&
         lastBucketClickRef.current.timestamp === timestamp &&
-        now - lastBucketClickRef.current.time < 500) {
+        now - lastBucketClickRef.current.time < 1000) {
+      log('scrollToBucket: BLOCKED (duplicate within 1s)');
       return;
     }
     lastBucketClickRef.current = { timestamp, time: now };
 
+    // Mark this bucket as pending navigation
+    pendingNavigationRef.current = timestamp;
+
+    // Update current bucket immediately for visual feedback
+    currentBucketRef.current = timestamp;
+    setCurrentBucket(timestamp);
+
+    // Store target bucket for re-navigation after data changes
+    targetBucketRef.current = timestamp;
+
+    // Calculate thumb position immediately
+    if (buckets.length > 0) {
+      const bucketIndex = findBucketIndex(buckets, timestamp);
+      if (bucketIndex >= 0) {
+        const position = (bucketIndex + 0.5) / buckets.length;
+        setThumbPosition(Math.max(0, Math.min(1, position)));
+      }
+    }
+
     try {
       // Try to get from cache first
       const { index, fromCache } = await getCachedIndex(timestamp);
-      const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+      log('scrollToBucket: got index', index, 'fromCache:', fromCache, 'items.length:', items.length);
 
       // Only show loading if not from cache
       if (!fromCache) {
         setIsNavigating(true);
       }
 
-      // Mark as programmatic scroll
-      isProgrammaticScrollRef.current = true;
-      programmaticScrollStartRef.current = Date.now();
-      targetBucketRef.current = timestamp;
+      // Clamp index to current items length
+      const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
 
-      // Update current bucket immediately
-      setCurrentBucket(timestamp);
-
-      // Calculate thumb position
-      if (buckets.length > 0) {
-        const bucketIndex = findBucketIndex(buckets, timestamp);
-        if (bucketIndex >= 0) {
-          const position = (bucketIndex + 0.5) / buckets.length;
-          setThumbPosition(Math.max(0, Math.min(1, position)));
-        }
-      }
-
-      // Store target scroll position
-      const targetScrollTop = clampedIndex * estimatedRowHeight;
-      targetScrollTopRef.current = targetScrollTop;
-
-      // Scroll to index (single call, no backup needed)
-      virtualizer.scrollToIndex(clampedIndex, {
-        align: 'start',
-        behavior: 'auto',
+      // Scroll to index using requestAnimationFrame to avoid flushSync issues
+      requestAnimationFrame(() => {
+        if (!virtualizer) return;
+        virtualizer.scrollToIndex(clampedIndex, {
+          align: 'start',
+          behavior: 'auto',
+        });
       });
 
       // Pre-fetch adjacent buckets in background
       prefetchAdjacentBuckets(timestamp);
 
-      // Reset programmatic scroll flag and navigation state after delay
+      // Clear navigation state after delay
       setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-        targetScrollTopRef.current = null;
+        log('scrollToBucket: clearing pending navigation');
+        if (pendingNavigationRef.current === timestamp) {
+          pendingNavigationRef.current = null;
+        }
         targetBucketRef.current = null;
         setIsNavigating(false);
-      }, fromCache ? 100 : PROGRAMMATIC_SCROLL_WINDOW_MS); // Shorter delay if from cache
+      }, fromCache ? 100 : PROGRAMMATIC_SCROLL_WINDOW_MS + 500);
     } catch (error) {
       console.error('Failed to scroll to bucket:', error);
+      pendingNavigationRef.current = null;
       setIsNavigating(false);
     }
-  }, [virtualizer, items.length, buckets, bucketSizeMs, estimatedRowHeight, getCachedIndex, prefetchAdjacentBuckets]);
+  }, [virtualizer, items.length, buckets, getCachedIndex, prefetchAdjacentBuckets]);
 
   // Handle thumb drag
   const handleThumbDrag = useCallback((position: number) => {
     if (items.length === 0 || buckets.length === 0) {
       return;
     }
+
+    log('DRAG: position', position.toFixed(3));
 
     // Clamp position
     const clampedPosition = Math.max(0, Math.min(1, position));
@@ -545,15 +481,20 @@ export function useTimelineNavigation<T extends TimelineItem>(
     }
 
     // IMMEDIATE: Update current bucket highlight
+    log('DRAG: bucket changed to', new Date(timestamp).toISOString());
+    currentBucketRef.current = timestamp;
     setCurrentBucket(timestamp);
 
     // Store for drag end navigation
     currentDragBucketRef.current = timestamp;
 
-    // Mark as programmatic scroll
-    isProgrammaticScrollRef.current = true;
+    // Skip scroll if bucket hasn't changed (avoid duplicate API calls)
+    if (timestamp === lastDragScrolledBucketRef.current) {
+      log('DRAG: skip scroll, same bucket');
+      return;
+    }
 
-    // DEBOUNCED: Scroll item view
+    // DEBOUNCED: Scroll item view - only when bucket changes
     if (dragScrollDebounceRef.current) {
       clearTimeout(dragScrollDebounceRef.current);
     }
@@ -561,25 +502,32 @@ export function useTimelineNavigation<T extends TimelineItem>(
     dragScrollDebounceRef.current = setTimeout(async () => {
       if (!virtualizer) return;
 
-      try {
-        const targetTime = timestamp + bucketSizeMs;
-        const index = await getIndexByTime(targetTime);
-        const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+      // Double-check bucket hasn't been scrolled to already
+      if (timestamp === lastDragScrolledBucketRef.current) {
+        log('DRAG (debounced): skip, already scrolled');
+        return;
+      }
+      lastDragScrolledBucketRef.current = timestamp;
 
-        virtualizer.scrollToIndex(clampedIndex, {
-          align: 'start',
-          behavior: 'auto',
+      try {
+        // Use cached index to avoid redundant API calls
+        const { index } = await getCachedIndex(timestamp);
+        const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+        log('DRAG (debounced): scrolling to index', clampedIndex, 'for bucket', new Date(timestamp).toISOString());
+
+        // Use requestAnimationFrame to avoid flushSync issues with virtualizer
+        requestAnimationFrame(() => {
+          if (!virtualizer) return;
+          virtualizer.scrollToIndex(clampedIndex, {
+            align: 'start',
+            behavior: 'auto',
+          });
         });
       } catch (error) {
         console.error('Failed to scroll during drag:', error);
       }
-
-      // Reset flag after scroll completes
-      setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-      }, 50);
     }, DRAG_SCROLL_DEBOUNCE_MS);
-  }, [virtualizer, items, buckets, getIndexByTime, bucketSizeMs]);
+  }, [virtualizer, items, buckets, getCachedIndex]);
 
   return {
     thumbPosition,

@@ -71,6 +71,12 @@ const TICK_INTERVALS: Record<TickInterval, number> = {
   '5min': 5 * 60 * 1000,
 };
 
+/** Loaded time range for visual indication */
+export interface LoadedRange {
+  start: number;
+  end: number;
+}
+
 export interface TimelineScrollbarProps {
   /** Array of time buckets with counts */
   buckets: TimeBucketData[];
@@ -110,6 +116,8 @@ export interface TimelineScrollbarProps {
   showMinutes?: TimeDisplayMinutes;
   /** Optional: Tick interval - how often to show time markers (default: 'hour') */
   tickInterval?: TickInterval;
+  /** Optional: Currently loaded time range - buckets outside will appear dimmed */
+  loadedRange?: LoadedRange;
 }
 
 // Create time formatter based on format and minutes options
@@ -181,21 +189,25 @@ const BucketMarker = memo(function BucketMarker({
   count,
   maxCount,
   isCurrentBucket,
+  isInLoadedRange,
   showDate,
   showTime,
   formatTime,
   formatDate,
   sizes,
+  isDragging,
 }: {
   timestamp: number;
   count: number;
   maxCount: number;
   isCurrentBucket: boolean;
+  isInLoadedRange: boolean;
   showDate: boolean;
   showTime: boolean;
   formatTime: (timestamp: number) => string;
   formatDate: (timestamp: number) => string;
   sizes: Required<TimelineSizeConfig>;
+  isDragging: boolean;
 }) {
   // Calculate density bar width as percentage of max
   const densityWidth = maxCount > 0 ? Math.max(4, (count / maxCount) * 100) : 0;
@@ -216,9 +228,11 @@ const BucketMarker = memo(function BucketMarker({
       <div
         data-hour-row
         className={cn(
-          "flex items-center justify-end gap-1 pr-3 pl-1 cursor-pointer transition-colors",
-          "hover:bg-muted/50",
-          isCurrentBucket && "bg-primary/10"
+          "flex items-center justify-end gap-1 pr-3 pl-1 transition-colors",
+          !isDragging && "cursor-pointer hover:bg-muted/50",
+          isDragging && "cursor-grabbing",
+          isCurrentBucket && "bg-primary/10",
+          !isInLoadedRange && "opacity-40"
         )}
         style={{ height: `${sizes.bucketHeight}px` }}
       >
@@ -273,6 +287,7 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
   timeFormat = '24h',
   showMinutes = 'show',
   tickInterval = 'hour',
+  loadedRange,
 }: TimelineScrollbarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
@@ -320,6 +335,9 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
     });
   }, [buckets, tickIntervalMs]);
 
+  // Track previous positions to avoid redundant callbacks
+  const prevPositionsRef = useRef<string>('');
+
   // Measure content height and bucket positions after render
   useLayoutEffect(() => {
     if (contentWrapperRef.current) {
@@ -344,7 +362,15 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
           }
         });
 
-        onBucketPositionsChange(positions);
+        // Only call callback if positions actually changed
+        const positionsKey = Array.from(positions.entries())
+          .map(([k, v]) => `${k}:${v.toFixed(6)}`)
+          .join(',');
+
+        if (positionsKey !== prevPositionsRef.current) {
+          prevPositionsRef.current = positionsKey;
+          onBucketPositionsChange(positions);
+        }
       }
     }
   }, [buckets, sortedBuckets, onBucketPositionsChange]);
@@ -508,10 +534,17 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
         onMouseDown={handleTrackMouseDown}
       >
         {/* Content wrapper for positioning */}
-        <div ref={contentWrapperRef} className="relative">
+        <div ref={contentWrapperRef} className="relative pt-2">
           {sortedBuckets.map((bucket, index) => {
             const prevBucket = sortedBuckets[index - 1];
             const showDate = index === 0 || (prevBucket && isDifferentDay(bucket.timestamp, prevBucket.timestamp));
+
+            // Check if this bucket overlaps with the loaded time range
+            // Bucket spans [timestamp, timestamp + tickIntervalMs)
+            const bucketEnd = bucket.timestamp + tickIntervalMs;
+            const isInLoadedRange = !loadedRange || (
+              bucket.timestamp < loadedRange.end && bucketEnd > loadedRange.start
+            );
 
             return (
               <div
@@ -530,11 +563,13 @@ export const TimelineScrollbar = memo(function TimelineScrollbar({
                   count={bucket.count}
                   maxCount={maxCount}
                   isCurrentBucket={currentBucket === bucket.timestamp}
+                  isInLoadedRange={isInLoadedRange}
                   showDate={showDate}
                   showTime={showTime}
                   formatTime={formatTime}
                   formatDate={formatDate}
                   sizes={sizes}
+                  isDragging={isDragging}
                 />
               </div>
             );

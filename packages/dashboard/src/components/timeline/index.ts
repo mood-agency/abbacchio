@@ -66,6 +66,7 @@ export {
   type TimeDisplayFormat,
   type TimeDisplayMinutes,
   type TickInterval,
+  type LoadedRange,
 } from './TimelineScrollbar';
 
 // Hooks
