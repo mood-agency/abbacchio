@@ -13,7 +13,8 @@ Real-time log viewer dashboard with HTTP ingestion. Works with **any logging lib
 - **Expandable JSON** - click to expand structured data
 - **Dark/Light mode** - automatic system preference detection
 - **Auto-scroll** - pauses when you scroll up, with "new logs" indicator
-- **Zero persistence** - logs stay in memory only
+- **Claude Code integration** - MCP server for AI-assisted debugging (desktop app)
+- **Zero persistence** - logs stay in memory only (server-side)
 
 ## Quick Start
 
@@ -59,6 +60,7 @@ logger.info({ user: "john" }, "User logged in");
 - [Dashboard](docs/dashboard.md) - URL parameters and filtering
 - [Terminal UI](docs/tui.md) - CLI for viewing logs in terminal
 - [Desktop App](docs/desktop.md) - Native app with background support
+- [Claude Code](docs/claude-code.md) - AI-assisted debugging with MCP
 - [Configuration](docs/configuration.md) - Environment variables
 - [Development](docs/development.md) - Contributing and releasing
 
