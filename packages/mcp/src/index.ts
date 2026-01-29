@@ -52,7 +52,11 @@ interface SearchParams {
   limit?: number;
 }
 
-// Database helper
+/**
+ * Open the Abbacchio logs SQLite database in read-only mode if the file exists.
+ *
+ * @returns A read-only SQLite `Database` connected to the logs database, or `null` if the database file does not exist.
+ */
 function getDatabase(): Database.Database | null {
   if (!existsSync(DB_PATH)) {
     return null;
@@ -60,6 +64,12 @@ function getDatabase(): Database.Database | null {
   return new Database(DB_PATH, { readonly: true });
 }
 
+/**
+ * Convert a raw database row into a LogEntry, mapping columns to their typed fields and parsing the `data` JSON.
+ *
+ * @param row - Raw row object from the logs SQLite table
+ * @returns A LogEntry whose fields mirror the row columns and whose `data` property is the parsed JSON object
+ */
 function rowToLogEntry(row: Record<string, unknown>): LogEntry {
   return {
     id: row.id as string,
@@ -199,7 +209,12 @@ const tools: Tool[] = [
   },
 ];
 
-// Tool handlers
+/**
+ * Searches stored logs using the provided filters.
+ *
+ * @param params - Filter options: `query` matches as a substring against the log `msg` or `data`; `channel` filters by exact channel name; `level` returns logs whose numeric level is greater than or equal to the named level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`); `from` and `to` are inclusive timestamps (milliseconds since epoch); `limit` caps the number of returned entries (defaults to 50).
+ * @returns An array of `LogEntry` objects that match the filters, ordered by `time` descending; contains at most `limit` entries (50 if unspecified).
+ */
 function searchLogs(params: SearchParams): LogEntry[] {
   const db = getDatabase();
   if (!db) return [];
@@ -256,6 +271,14 @@ function searchLogs(params: SearchParams): LogEntry[] {
   }
 }
 
+/**
+ * Fetch recent error (and fatal) log entries within a recent time window.
+ *
+ * @param channel - Optional channel name to restrict results to a single channel
+ * @param limit - Maximum number of entries to return (default: 20)
+ * @param minutes - Time window in minutes to look back from now (default: 60)
+ * @returns An array of matching LogEntry objects ordered by time (most recent first)
+ */
 function getRecentErrors(params: {
   channel?: string;
   limit?: number;
@@ -272,6 +295,14 @@ function getRecentErrors(params: {
   });
 }
 
+/**
+ * Fetches logs within a time window centered on the given timestamp.
+ *
+ * @param timestamp - Center timestamp in milliseconds since the Unix epoch
+ * @param window - Half-width of the time window in milliseconds; defaults to 5000
+ * @param limit - Maximum number of log entries to return; defaults to 100
+ * @returns An array of LogEntry objects whose timestamps fall between `timestamp - window` and `timestamp + window`, ordered by time descending up to `limit`
+ */
 function getLogsAroundTime(params: {
   timestamp: number;
   window?: number;
@@ -288,6 +319,16 @@ function getLogsAroundTime(params: {
   });
 }
 
+/**
+ * List log channels with their message counts and the timestamp of most recent activity.
+ *
+ * If the logs database cannot be opened, returns an empty array.
+ *
+ * @returns An array of objects describing each channel:
+ * - `channel` — the channel name
+ * - `count` — number of log entries in that channel
+ * - `lastActivity` — timestamp (milliseconds since epoch) of the most recent log in the channel
+ */
 function getChannels(): Array<{
   channel: string;
   count: number;
@@ -313,6 +354,15 @@ function getChannels(): Array<{
   }
 }
 
+/**
+ * Compute summary statistics for logs, optionally restricted to a single channel.
+ *
+ * @param params.channel - If provided, restrict statistics to this channel
+ * @returns An object containing:
+ *  - `total`: the total number of matching log rows,
+ *  - `byLevel`: a mapping from `level_label` to the count of logs with that label,
+ *  - `timeRange`: `{ min, max }` timestamps of matching logs (`number` or `null` if no rows)
+ */
 function getLogStats(params: { channel?: string }): {
   total: number;
   byLevel: Record<string, number>;
@@ -361,6 +411,13 @@ function getLogStats(params: { channel?: string }): {
   }
 }
 
+/**
+ * Finds logs likely related to a provided error message and returns those logs with a brief summary.
+ *
+ * @param params.error - The error message text to analyze for related log entries
+ * @param params.channel - Optional channel name to restrict searches to a specific channel
+ * @returns An object containing `relatedLogs` (up to 20 matching LogEntry items, newest first) and `summary` (a short text describing counts and involved channels)
+ */
 function analyzeError(params: { error: string; channel?: string }): {
   relatedLogs: LogEntry[];
   summary: string;
@@ -478,7 +535,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   };
 });
 
-// Start server
+/**
+ * Start the MCP server and connect it over a stdio transport.
+ *
+ * Establishes a StdioServerTransport and connects the module-level server instance.
+ * Logs a startup message to stderr when the connection completes.
+ */
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

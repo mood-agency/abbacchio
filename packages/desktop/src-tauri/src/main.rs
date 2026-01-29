@@ -6,6 +6,20 @@ mod database;
 
 use database::Database;
 
+/// Application entry point that initializes the database, starts the Tauri application,
+/// registers plugins and command handlers, and spawns the Centrifugo connection manager
+/// in the background.
+///
+/// The function constructs and runs the Tauri runtime, manages a shared `Database` instance,
+/// wires centrifugo- and database-related commands for frontend invocation, and launches
+/// an asynchronous task to maintain Centrifugo connections.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Start the application (runs the Tauri event loop)
+/// crate::main();
+/// ```
 fn main() {
     // Initialize database
     let db = Database::new().expect("Failed to initialize database");

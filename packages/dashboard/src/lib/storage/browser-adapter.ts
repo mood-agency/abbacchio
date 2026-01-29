@@ -23,7 +23,9 @@ import SqliteWorker from '../sqlite-worker?worker';
 type SQLiteRow = Record<string, string | number | null>;
 
 /**
- * Convert a row from SQLite to a LogEntry object
+ * Convert a SQLite row into a LogEntry with properly typed fields.
+ *
+ * @returns A LogEntry with properties mapped from the input row; `data` is parsed from JSON, and numeric flag fields (`encrypted`, `decryptionFailed`, `wasEncrypted`) are converted to booleans.
  */
 function rowToLogEntry(row: SQLiteRow): LogEntry {
   return {
