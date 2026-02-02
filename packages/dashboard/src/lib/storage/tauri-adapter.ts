@@ -25,6 +25,11 @@ type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
 let invoke: InvokeFn | null = null;
 
+/**
+ * Lazily imports and caches Tauri's `invoke` function for making IPC commands.
+ *
+ * @returns The cached or newly imported Tauri `invoke` function used to invoke native commands.
+ */
 async function getInvoke(): Promise<InvokeFn> {
   if (invoke) return invoke;
 

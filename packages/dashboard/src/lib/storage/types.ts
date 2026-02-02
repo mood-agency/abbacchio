@@ -179,7 +179,9 @@ export interface LogDatabase {
 export type StorageBackend = 'browser' | 'tauri';
 
 /**
- * Detect which storage backend to use based on environment
+ * Choose the storage backend appropriate for the current runtime environment.
+ *
+ * @returns `'tauri'` when running inside a Tauri environment, `'browser'` otherwise.
  */
 export function detectStorageBackend(): StorageBackend {
   // Check if running in Tauri
