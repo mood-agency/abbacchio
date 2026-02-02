@@ -168,6 +168,7 @@ export function useChannelLogStream(options: UseChannelLogStreamOptions): UseCha
       setHourlyData([]);
       setLogTimeRange({ minTime: null, maxTime: null });
       setLoadedTimeRange(null);
+      setIsLoading(false);
       return [];
     }
 

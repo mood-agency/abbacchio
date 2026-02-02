@@ -180,11 +180,12 @@ export async function verifyPassword(password: string): Promise<boolean> {
 }
 
 /**
- * Clear all secure storage
+ * Clear all secure storage (including session password)
  */
 export function clearSecureStorage(): void {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(SALT_STORAGE_KEY);
+  sessionStorage.removeItem(SESSION_PASSWORD_KEY);
 }
 
 /**

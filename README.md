@@ -18,17 +18,36 @@ Real-time log viewer dashboard with HTTP ingestion. Works with **any logging lib
 
 ## Quick Start
 
-### 1. Start the server
+### 1. Start Centrifugo (required for real-time streaming)
+
+**Option A: Using Docker (recommended)**
 
 ```bash
-npx abbacchio
-# or
-pnpm dlx abbacchio
+docker-compose up -d
 ```
 
-Dashboard available at http://localhost:4000
+**Option B: Using the binary**
 
-### 2. Send logs
+Download from [Centrifugo releases](https://github.com/centrifugal/centrifugo/releases) and run:
+
+```bash
+./centrifugo -c centrifugo.json
+```
+
+Centrifugo will be available at http://localhost:8000
+
+### 2. Start the server
+
+```bash
+# Development (from cloned repo)
+pnpm install
+pnpm dev
+```
+
+- API available at http://localhost:4000
+- Dashboard available at http://localhost:5173
+
+### 3. Send logs
 
 ```typescript
 import pino from "pino";

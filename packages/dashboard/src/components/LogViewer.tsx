@@ -523,9 +523,9 @@ export function LogViewer() {
     return null;
   }
 
-  // Show onboarding wizard only if no channels AND no existing encrypted storage
-  // (new user who hasn't set up yet)
-  if (channels.length === 0 && !hasExistingStorage()) {
+  // Show onboarding wizard if no channels are configured
+  // This handles both new users and users who reset their data
+  if (channels.length === 0) {
     return (
       <OnboardingWizard
         onComplete={async (channelName, secretKey, masterPassword) => {

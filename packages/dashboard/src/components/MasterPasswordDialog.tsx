@@ -19,6 +19,7 @@ import {
   clearSecureStorage,
   hasPasswordInSession,
   getPasswordFromSession,
+  clearPasswordFromSession,
   type SecureChannelConfig,
 } from '@/lib/secure-storage';
 
@@ -139,6 +140,7 @@ export function MasterPasswordDialog({
 
   const handleReset = () => {
     clearSecureStorage();
+    clearPasswordFromSession();
     setShowResetConfirm(false);
     setMode('create');
     setPassword('');
