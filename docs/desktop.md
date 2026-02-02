@@ -20,6 +20,12 @@ The web version uses a Web Worker for the WebSocket connection, but browsers thr
 2. The Rust process is never throttled, regardless of window state
 3. Logs are buffered and delivered to the frontend when active
 
+### Claude Code Integration
+
+The desktop app also enables **AI-assisted debugging** via Claude Code. Unlike the browser (which uses sandboxed OPFS storage), the desktop app stores logs in a native SQLite database at `~/.abbacchio/logs.db` that the MCP server can access.
+
+This means you can paste an error into Claude Code and it will automatically search your logs for context. See [Claude Code Integration](claude-code.md) for setup instructions.
+
 ## Building from Source
 
 ### Prerequisites
