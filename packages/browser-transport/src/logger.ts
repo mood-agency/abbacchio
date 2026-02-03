@@ -6,7 +6,9 @@
 import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry } from './client.js';
 
 export interface LoggerOptions extends AbbacchioClientOptions {
-  /** Logger name (namespace). Defaults to 'app' */
+  /** Logger namespace. Takes precedence over `name` */
+  namespace?: string;
+  /** @deprecated Use `namespace` instead. Logger name (used as namespace). Defaults to 'app' */
   name?: string;
   /** Minimum log level. Defaults to 'debug' (20) */
   level?: number | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
@@ -32,14 +34,14 @@ type LogLevel = keyof typeof LOG_LEVELS;
  */
 export class Logger {
   private client: AbbacchioClient;
-  private name: string;
+  private loggerNamespace: string;
   private minLevel: number;
   private includeUrl: boolean;
   private bindings: Record<string, unknown> = {};
 
   constructor(options: LoggerOptions = {}) {
     this.client = new AbbacchioClient(options);
-    this.name = options.name || 'app';
+    this.loggerNamespace = options.namespace || options.name || 'app';
     this.minLevel = this.parseLevel(options.level || 'debug');
     this.includeUrl = options.includeUrl ?? false;
   }
@@ -59,7 +61,7 @@ export class Logger {
     const entry: LogEntry = {
       level,
       time: Date.now(),
-      name: this.name,
+      namespace: this.loggerNamespace,
       msg,
       ...this.bindings,
       ...data,

@@ -460,16 +460,17 @@ pub fn get_distinct_namespaces(
 
     let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
 
-    let rows = if let Some(ref ch) = channel {
-        stmt.query_map([ch], |row| row.get(0))
+    let mut namespaces: Vec<String> = Vec::new();
+    if let Some(ref ch) = channel {
+        let rows = stmt.query_map([ch], |row| row.get(0)).map_err(|e| e.to_string())?;
+        for row in rows {
+            namespaces.push(row.map_err(|e| e.to_string())?);
+        }
     } else {
-        stmt.query_map([], |row| row.get(0))
-    }
-    .map_err(|e| e.to_string())?;
-
-    let mut namespaces = Vec::new();
-    for row in rows {
-        namespaces.push(row.map_err(|e| e.to_string())?);
+        let rows = stmt.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?;
+        for row in rows {
+            namespaces.push(row.map_err(|e| e.to_string())?);
+        }
     }
 
     Ok(namespaces)

@@ -12,6 +12,8 @@ export interface AbbacchioClientOptions {
   secretKey?: string;
   /** Channel/app name for multi-app support. Defaults to 'default' */
   channel?: string;
+  /** Default namespace for all logs. Per-log namespace/name fields take precedence */
+  namespace?: string;
   /** Number of logs to batch before sending. Defaults to 10 */
   batchSize?: number;
   /** Interval in ms between flushes. Defaults to 1000 */
@@ -36,6 +38,7 @@ export class AbbacchioClient {
   private url: string;
   private secretKey?: string;
   private channel: string;
+  private namespace?: string;
   private batchSize: number;
   private flushInterval: number;
   private headers: Record<string, string>;
@@ -48,6 +51,7 @@ export class AbbacchioClient {
     this.url = options.url || 'http://localhost:4000/api/logs';
     this.secretKey = options.secretKey;
     this.channel = options.channel || 'default';
+    this.namespace = options.namespace;
     this.batchSize = options.batchSize || 10;
     this.flushInterval = options.flushInterval || 1000;
     this.headers = options.headers || {};
@@ -60,13 +64,19 @@ export class AbbacchioClient {
   }
 
   /**
-   * Process a log entry (encrypt if secretKey is provided)
+   * Process a log entry: inject default namespace, then encrypt if needed
    */
   private async processLog(log: LogEntry): Promise<unknown> {
-    if (this.secretKey) {
-      return { encrypted: await encrypt(JSON.stringify(log), this.secretKey) };
+    let processed: LogEntry = log;
+
+    if (this.namespace && !processed.namespace && !processed.name) {
+      processed = { ...processed, namespace: this.namespace };
     }
-    return log;
+
+    if (this.secretKey) {
+      return { encrypted: await encrypt(JSON.stringify(processed), this.secretKey) };
+    }
+    return processed;
   }
 
   /**
@@ -154,6 +164,7 @@ export class AbbacchioClient {
     if (options.url !== undefined) this.url = options.url;
     if (options.secretKey !== undefined) this.secretKey = options.secretKey;
     if (options.channel !== undefined) this.channel = options.channel;
+    if (options.namespace !== undefined) this.namespace = options.namespace;
     if (options.batchSize !== undefined) this.batchSize = options.batchSize;
     if (options.flushInterval !== undefined) this.flushInterval = options.flushInterval;
     if (options.headers !== undefined) this.headers = options.headers;

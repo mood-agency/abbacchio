@@ -90,6 +90,20 @@ export class AbbacchioBunyanStream extends Writable {
   }
 
   /**
+   * Change the namespace dynamically
+   */
+  setNamespace(namespace: string | undefined): void {
+    this.client.setNamespace(namespace);
+  }
+
+  /**
+   * Get the current namespace
+   */
+  getNamespace(): string | undefined {
+    return this.client.getNamespace();
+  }
+
+  /**
    * Close the stream
    */
   _final(callback: (error?: Error | null) => void): void {

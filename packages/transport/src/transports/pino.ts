@@ -9,6 +9,10 @@ export interface AbbacchioPinoStream extends Transform {
   setChannel(channel: string | undefined): void;
   /** Get the current channel */
   getChannel(): string | undefined;
+  /** Change the namespace dynamically */
+  setNamespace(namespace: string | undefined): void;
+  /** Get the current namespace */
+  getNamespace(): string | undefined;
   /** Flush pending logs and close the client */
   close(): Promise<void>;
 }
@@ -26,6 +30,7 @@ export interface AbbacchioPinoStream extends Transform {
  *     options: {
  *       url: "http://localhost:4000/api/logs",
  *       channel: "my-app",
+ *       namespace: "auth-service",
  *       secretKey: "optional-encryption-key",
  *     },
  *   },
@@ -107,6 +112,14 @@ export function createPinoStream(opts: PinoTransportOptions = {}): AbbacchioPino
 
   stream.getChannel = () => {
     return client.getChannel();
+  };
+
+  stream.setNamespace = (namespace: string | undefined) => {
+    client.setNamespace(namespace);
+  };
+
+  stream.getNamespace = () => {
+    return client.getNamespace();
   };
 
   stream.close = async () => {

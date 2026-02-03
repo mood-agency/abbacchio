@@ -7,6 +7,8 @@ export interface AbbacchioClientOptions {
   secretKey?: string;
   /** Channel/app name for multi-app support. Defaults to 'default' */
   channel?: string;
+  /** Default namespace for all logs. Per-log namespace/name fields take precedence */
+  namespace?: string;
   /** Number of logs to batch before sending. Defaults to 10 */
   batchSize?: number;
   /** Interval in ms between flushes. Defaults to 1000 */
@@ -23,6 +25,7 @@ export class AbbacchioClient {
   private url: string;
   private secretKey?: string;
   private channel?: string;
+  private namespace?: string;
   private batchSize: number;
   private interval: number;
   private headers: Record<string, string>;
@@ -34,6 +37,7 @@ export class AbbacchioClient {
     this.url = options.url || "http://localhost:4000/api/logs";
     this.secretKey = options.secretKey;
     this.channel = options.channel;
+    this.namespace = options.namespace;
     this.batchSize = options.batchSize || 10;
     this.interval = options.interval || 1000;
     this.headers = options.headers || {};
@@ -54,13 +58,36 @@ export class AbbacchioClient {
   }
 
   /**
-   * Process a log entry (encrypt if secretKey is provided)
+   * Change the namespace dynamically after initialization
+   */
+  setNamespace(namespace: string | undefined): void {
+    this.namespace = namespace;
+  }
+
+  /**
+   * Get the current namespace
+   */
+  getNamespace(): string | undefined {
+    return this.namespace;
+  }
+
+  /**
+   * Process a log entry: inject default namespace, then encrypt if needed
    */
   private processLog(log: unknown): unknown {
-    if (this.secretKey) {
-      return { encrypted: encrypt(JSON.stringify(log), this.secretKey) };
+    let processed = log;
+
+    if (this.namespace && typeof processed === 'object' && processed !== null) {
+      const obj = processed as Record<string, unknown>;
+      if (!obj.namespace && !obj.name) {
+        processed = { ...obj, namespace: this.namespace };
+      }
     }
-    return log;
+
+    if (this.secretKey) {
+      return { encrypted: encrypt(JSON.stringify(processed), this.secretKey) };
+    }
+    return processed;
   }
 
   /**

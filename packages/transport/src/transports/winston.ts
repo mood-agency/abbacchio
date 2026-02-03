@@ -97,6 +97,20 @@ export class AbbacchioWinstonTransport extends TransportStream {
   }
 
   /**
+   * Change the namespace dynamically
+   */
+  setNamespace(namespace: string | undefined): void {
+    this.client.setNamespace(namespace);
+  }
+
+  /**
+   * Get the current namespace
+   */
+  getNamespace(): string | undefined {
+    return this.client.getNamespace();
+  }
+
+  /**
    * Close the transport
    */
   close(): void {

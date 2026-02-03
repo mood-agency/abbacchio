@@ -6,6 +6,8 @@
 import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry } from './client.js';
 
 export interface ConsoleInterceptorOptions extends AbbacchioClientOptions {
+  /** Namespace for console logs. Takes precedence over `appName` */
+  namespace?: string;
   /** App name to use as the logger name. Defaults to 'browser' */
   appName?: string;
   /** Whether to still output to the original console. Defaults to true */
@@ -179,7 +181,7 @@ function createLogEntry(method: string, args: unknown[]): LogEntry {
   const entry: LogEntry = {
     level: LEVEL_MAP[method] || 30,
     time: Date.now(),
-    name: options.appName || 'browser',
+    namespace: options.namespace || options.appName || 'browser',
     msg,
   };
 
