@@ -20,6 +20,8 @@ export interface AbbacchioClientOptions {
   flushInterval?: number;
   /** Additional headers to send with requests */
   headers?: Record<string, string>;
+  /** Whether to send logs to the server. Defaults to true */
+  enabled?: boolean;
 }
 
 export interface LogEntry {
@@ -42,6 +44,7 @@ export class AbbacchioClient {
   private batchSize: number;
   private flushInterval: number;
   private headers: Record<string, string>;
+  private enabled: boolean;
 
   private buffer: LogEntry[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -55,6 +58,7 @@ export class AbbacchioClient {
     this.batchSize = options.batchSize || 10;
     this.flushInterval = options.flushInterval || 1000;
     this.headers = options.headers || {};
+    this.enabled = options.enabled ?? true;
 
     // Flush on page unload
     if (typeof window !== 'undefined') {
@@ -80,10 +84,31 @@ export class AbbacchioClient {
   }
 
   /**
+   * Enable sending logs to the server
+   */
+  enable(): void {
+    this.enabled = true;
+  }
+
+  /**
+   * Disable sending logs to the server. Logs will be silently dropped.
+   */
+  disable(): void {
+    this.enabled = false;
+  }
+
+  /**
+   * Check if the client is currently enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
    * Add a log to the buffer and trigger send if needed
    */
   add(log: LogEntry): void {
-    if (this.isClosed) return;
+    if (!this.enabled || this.isClosed) return;
 
     this.buffer.push(log);
 
@@ -165,6 +190,7 @@ export class AbbacchioClient {
     if (options.secretKey !== undefined) this.secretKey = options.secretKey;
     if (options.channel !== undefined) this.channel = options.channel;
     if (options.namespace !== undefined) this.namespace = options.namespace;
+    if (options.enabled !== undefined) this.enabled = options.enabled;
     if (options.batchSize !== undefined) this.batchSize = options.batchSize;
     if (options.flushInterval !== undefined) this.flushInterval = options.flushInterval;
     if (options.headers !== undefined) this.headers = options.headers;

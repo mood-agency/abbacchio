@@ -48,7 +48,7 @@ import { interceptConsole, stopInterceptConsole } from '@abbacchio/browser-trans
 interceptConsole({
   url: 'http://localhost:4000/api/logs',
   channel: 'my-frontend',
-  appName: 'my-app',
+  namespace: 'my-app',
   secretKey: 'optional-encryption-key', // optional
 })
 
@@ -69,7 +69,7 @@ import { createLogger } from '@abbacchio/browser-transport'
 const log = createLogger({
   url: 'http://localhost:4000/api/logs',
   channel: 'my-app',
-  name: 'my-service',
+  namespace: 'my-service',
 })
 
 log.info('User logged in', { userId: 123 })
@@ -121,7 +121,9 @@ Start intercepting console methods.
 interface ConsoleInterceptorOptions {
   url?: string           // Server URL (default: 'http://localhost:4000/api/logs')
   channel?: string       // Channel name (default: 'default')
+  namespace?: string     // Namespace for logs (takes precedence over appName)
   appName?: string       // Logger name (default: 'browser')
+  enabled?: boolean      // Whether to send logs (default: true)
   secretKey?: string     // Encryption key (optional)
   batchSize?: number     // Logs per batch (default: 10)
   flushInterval?: number // Ms between flushes (default: 1000)
@@ -138,7 +140,9 @@ Create a structured logger instance.
 interface LoggerOptions {
   url?: string
   channel?: string
-  name?: string          // Logger name/namespace
+  namespace?: string     // Logger namespace (takes precedence over name)
+  name?: string          // Logger name (deprecated, use namespace)
+  enabled?: boolean      // Whether to send logs (default: true)
   level?: number | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
   secretKey?: string
   batchSize?: number
@@ -178,6 +182,32 @@ React context provider for logging.
 ```tsx
 const log = useLogger()              // Get logger instance
 const { info, warn, error } = useAbbacchio()  // Get logging methods
+```
+
+## Disabling in Production
+
+Use `enabled: false` to prevent logs from being sent. Logs are silently dropped.
+
+```javascript
+import { createLogger } from '@abbacchio/browser-transport'
+
+const log = createLogger({
+  channel: 'my-app',
+  enabled: process.env.NODE_ENV !== 'production',
+})
+
+// Or toggle at runtime via the underlying client
+import { createClient } from '@abbacchio/browser-transport'
+
+const client = createClient({ enabled: false })
+client.enable()   // start sending
+client.disable()  // stop sending
+```
+
+You can also toggle via `configure()`:
+
+```javascript
+client.configure({ enabled: true })
 ```
 
 ## Encryption

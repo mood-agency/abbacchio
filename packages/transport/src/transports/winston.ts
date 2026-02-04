@@ -111,6 +111,27 @@ export class AbbacchioWinstonTransport extends TransportStream {
   }
 
   /**
+   * Enable sending logs to the server
+   */
+  enable(): void {
+    this.client.enable();
+  }
+
+  /**
+   * Disable sending logs to the server
+   */
+  disable(): void {
+    this.client.disable();
+  }
+
+  /**
+   * Check if the client is currently enabled
+   */
+  isEnabled(): boolean {
+    return this.client.isEnabled();
+  }
+
+  /**
    * Close the transport
    */
   close(): void {

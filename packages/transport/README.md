@@ -26,6 +26,7 @@ const logger = pino({
         options: {
           url: "http://localhost:4000/api/logs",
           channel: "my-app",
+          namespace: "auth-service",
         },
       },
     ],
@@ -75,16 +76,63 @@ logger.info({ user: "john" }, "User logged in");
 ```
 
 
+### Dynamic Control (Pino)
+
+Use `createPinoStream` for runtime control over channel, namespace, and enabled state:
+
+```typescript
+import pino from "pino";
+import { createPinoStream } from "@abbacchio/transport/transports/pino";
+
+const stream = createPinoStream({
+  url: "http://localhost:4000/api/logs",
+  channel: "my-app",
+  namespace: "api",
+  enabled: process.env.ABBACCHIO_ENABLED === "true",
+});
+
+const logger = pino(stream);
+
+// Toggle at runtime
+stream.disable(); // stop sending logs
+stream.enable();  // resume sending logs
+
+// Change namespace dynamically
+stream.setNamespace("worker");
+```
+
 ## Options
 
-| Option      | Type   | Default                          | Description                             |
-| ----------- | ------ | -------------------------------- | --------------------------------------- |
-| `url`       | string | `http://localhost:4000/api/logs` | Abbacchio server URL                    |
-| `channel`   | string | `default`                        | Channel name for multi-app support      |
-| `secretKey` | string | -                                | Encryption key (enables E2E encryption) |
-| `batchSize` | number | `10`                             | Send batch when this many logs accumulate |
-| `interval`  | number | `1000`                           | Send batch after this many ms           |
-| `headers`   | object | `{}`                             | Additional HTTP headers                 |
+| Option      | Type    | Default                          | Description                                    |
+| ----------- | ------- | -------------------------------- | ---------------------------------------------- |
+| `url`       | string  | `http://localhost:4000/api/logs` | Abbacchio server URL                           |
+| `channel`   | string  | `default`                        | Channel name for multi-app support             |
+| `namespace` | string  | -                                | Default namespace (overridden by per-log values)|
+| `enabled`   | boolean | `true`                           | Whether to send logs to the server             |
+| `secretKey` | string  | -                                | Encryption key (enables E2E encryption)        |
+| `batchSize` | number  | `10`                             | Send batch when this many logs accumulate      |
+| `interval`  | number  | `1000`                           | Send batch after this many ms                  |
+| `headers`   | object  | `{}`                             | Additional HTTP headers                        |
+
+### Namespace
+
+The `namespace` option sets a default namespace for all logs. Per-log `namespace` or `name` fields (e.g. from Pino child loggers) take precedence:
+
+```typescript
+const logger = pino({
+  transport: {
+    target: "@abbacchio/transport/transports/pino",
+    options: { namespace: "api" },
+  },
+});
+
+logger.info("hello");                           // namespace = "api"
+logger.child({ name: "db" }).info("query");     // namespace = "db" (overrides)
+```
+
+### Enabled Toggle
+
+Set `enabled: false` to prevent logs from being sent to the server. Logs are silently dropped (not buffered). All transports expose `enable()`, `disable()`, and `isEnabled()` methods for runtime control.
 
 ## End-to-End Encryption
 

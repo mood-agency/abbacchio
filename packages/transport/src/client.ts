@@ -15,6 +15,8 @@ export interface AbbacchioClientOptions {
   interval?: number;
   /** Additional headers to send with requests */
   headers?: Record<string, string>;
+  /** Whether to send logs to the server. Defaults to true */
+  enabled?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export class AbbacchioClient {
   private batchSize: number;
   private interval: number;
   private headers: Record<string, string>;
+  private enabled: boolean;
 
   private buffer: unknown[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -41,6 +44,7 @@ export class AbbacchioClient {
     this.batchSize = options.batchSize || 10;
     this.interval = options.interval || 1000;
     this.headers = options.headers || {};
+    this.enabled = options.enabled ?? true;
   }
 
   /**
@@ -72,6 +76,27 @@ export class AbbacchioClient {
   }
 
   /**
+   * Enable sending logs to the server
+   */
+  enable(): void {
+    this.enabled = true;
+  }
+
+  /**
+   * Disable sending logs to the server. Logs will be silently dropped.
+   */
+  disable(): void {
+    this.enabled = false;
+  }
+
+  /**
+   * Check if the client is currently enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
    * Process a log entry: inject default namespace, then encrypt if needed
    */
   private processLog(log: unknown): unknown {
@@ -94,6 +119,7 @@ export class AbbacchioClient {
    * Add a log to the buffer and trigger send if needed
    */
   add(log: unknown): void {
+    if (!this.enabled) return;
     this.buffer.push(this.processLog(log));
 
     if (this.buffer.length >= this.batchSize) {
@@ -107,6 +133,7 @@ export class AbbacchioClient {
    * Add multiple logs at once
    */
   addBatch(logs: unknown[]): void {
+    if (!this.enabled) return;
     for (const log of logs) {
       this.buffer.push(this.processLog(log));
     }
@@ -122,6 +149,7 @@ export class AbbacchioClient {
    * Send logs immediately without batching
    */
   async send(logs: unknown[]): Promise<void> {
+    if (!this.enabled) return;
     const processedLogs = logs.map(log => this.processLog(log));
     await this.sendToServer(processedLogs);
   }

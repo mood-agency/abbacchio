@@ -13,6 +13,12 @@ export interface AbbacchioPinoStream extends Transform {
   setNamespace(namespace: string | undefined): void;
   /** Get the current namespace */
   getNamespace(): string | undefined;
+  /** Enable sending logs to the server */
+  enable(): void;
+  /** Disable sending logs to the server */
+  disable(): void;
+  /** Check if the client is currently enabled */
+  isEnabled(): boolean;
   /** Flush pending logs and close the client */
   close(): Promise<void>;
 }
@@ -120,6 +126,18 @@ export function createPinoStream(opts: PinoTransportOptions = {}): AbbacchioPino
 
   stream.getNamespace = () => {
     return client.getNamespace();
+  };
+
+  stream.enable = () => {
+    client.enable();
+  };
+
+  stream.disable = () => {
+    client.disable();
+  };
+
+  stream.isEnabled = () => {
+    return client.isEnabled();
   };
 
   stream.close = async () => {
