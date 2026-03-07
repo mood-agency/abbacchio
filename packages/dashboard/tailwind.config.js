@@ -58,6 +58,24 @@ export default {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
+  			},
+  			json: {
+  				key: 'hsl(var(--json-key))',
+  				string: 'hsl(var(--json-string))',
+  				number: 'hsl(var(--json-number))',
+  				boolean: 'hsl(var(--json-boolean))',
+  				null: 'hsl(var(--json-null))',
+  				bracket: 'hsl(var(--json-bracket))',
+  				punctuation: 'hsl(var(--json-punctuation))',
+  				muted: 'hsl(var(--json-muted))',
+  			},
+  			sql: {
+  				keyword: 'hsl(var(--sql-keyword))',
+  				function: 'hsl(var(--sql-function))',
+  				string: 'hsl(var(--sql-string))',
+  				number: 'hsl(var(--sql-number))',
+  				operator: 'hsl(var(--sql-operator))',
+  				comment: 'hsl(var(--sql-comment))',
   			}
   		}
   	}

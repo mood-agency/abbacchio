@@ -46,7 +46,7 @@ interface LogSidebarProps {
 }
 
 const LEVELS: LogLevelLabel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-const TIME_RANGE_OPTIONS: TimeRange[] = ['30m', '1h', '12h', '1d', '3d', '1w', '2w', 'all'];
+const TIME_RANGE_OPTIONS: TimeRange[] = ['5m', '10m', '15m', '30m', '1h', '12h', '1d', '3d', '1w', '2w', 'all'];
 
 export function LogSidebar({
   levelFilters,

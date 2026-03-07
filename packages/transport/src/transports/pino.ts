@@ -5,14 +5,10 @@ import { Transform } from "stream";
 export interface PinoTransportOptions extends AbbacchioClientOptions {}
 
 export interface AbbacchioPinoStream extends Transform {
-  /** Change the channel dynamically */
-  setChannel(channel: string | undefined): void;
-  /** Get the current channel */
-  getChannel(): string | undefined;
-  /** Change the namespace dynamically */
-  setNamespace(namespace: string | undefined): void;
-  /** Get the current namespace */
-  getNamespace(): string | undefined;
+  /** Change the service name dynamically */
+  setServiceName(name: string): void;
+  /** Get the current service name */
+  getServiceName(): string;
   /** Enable sending logs to the server */
   enable(): void;
   /** Disable sending logs to the server */
@@ -24,7 +20,7 @@ export interface AbbacchioPinoStream extends Transform {
 }
 
 /**
- * Pino transport for Abbacchio.
+ * Pino transport for Abbacchio (OTLP native).
  *
  * @example
  * ```typescript
@@ -32,12 +28,10 @@ export interface AbbacchioPinoStream extends Transform {
  *
  * const logger = pino({
  *   transport: {
- *     target: "@abbacchio/client/transports/pino",
+ *     target: "@abbacchio/transport/pino",
  *     options: {
- *       url: "http://localhost:4000/api/logs",
- *       channel: "my-app",
- *       namespace: "auth-service",
- *       secretKey: "optional-encryption-key",
+ *       endpoint: "http://localhost:4002",
+ *       serviceName: "my-app",
  *     },
  *   },
  * });
@@ -53,7 +47,6 @@ export default async function pinoTransport(opts: PinoTransportOptions = {}) {
       for await (const obj of source) {
         client.add(obj);
       }
-      // Flush remaining on close
       await client.flush();
     },
     {
@@ -64,14 +57,10 @@ export default async function pinoTransport(opts: PinoTransportOptions = {}) {
   );
 }
 
-/**
- * Named export for programmatic usage
- */
 export { pinoTransport };
 
 /**
  * Create a Pino destination stream with direct access to the client.
- * Use this when you need to change the channel dynamically.
  *
  * @example
  * ```typescript
@@ -79,18 +68,15 @@ export { pinoTransport };
  * import { createPinoStream } from "@abbacchio/transport/transports/pino";
  *
  * const stream = createPinoStream({
- *   url: "http://localhost:4000/api/logs",
- *   channel: "initial-channel",
+ *   endpoint: "http://localhost:4002",
+ *   serviceName: "my-app",
  * });
  *
  * const logger = pino(stream);
+ * logger.info("Log to OTLP");
  *
- * logger.info("Log to initial channel");
- *
- * // Change channel dynamically
- * stream.setChannel("new-channel");
- *
- * logger.info("Log to new channel");
+ * stream.setServiceName("other-service");
+ * logger.info("Log with different service name");
  * ```
  */
 export function createPinoStream(opts: PinoTransportOptions = {}): AbbacchioPinoStream {
@@ -112,37 +98,12 @@ export function createPinoStream(opts: PinoTransportOptions = {}): AbbacchioPino
     },
   }) as AbbacchioPinoStream;
 
-  stream.setChannel = (channel: string | undefined) => {
-    client.setChannel(channel);
-  };
-
-  stream.getChannel = () => {
-    return client.getChannel();
-  };
-
-  stream.setNamespace = (namespace: string | undefined) => {
-    client.setNamespace(namespace);
-  };
-
-  stream.getNamespace = () => {
-    return client.getNamespace();
-  };
-
-  stream.enable = () => {
-    client.enable();
-  };
-
-  stream.disable = () => {
-    client.disable();
-  };
-
-  stream.isEnabled = () => {
-    return client.isEnabled();
-  };
-
-  stream.close = async () => {
-    await client.close();
-  };
+  stream.setServiceName = (name: string) => client.setServiceName(name);
+  stream.getServiceName = () => client.getServiceName();
+  stream.enable = () => client.enable();
+  stream.disable = () => client.disable();
+  stream.isEnabled = () => client.isEnabled();
+  stream.close = async () => { await client.close(); };
 
   return stream;
 }

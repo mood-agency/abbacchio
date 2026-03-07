@@ -1398,6 +1398,72 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
         break;
       }
 
+      case 'executeSql': {
+        const { sql } = payload as { sql: string; channel?: string };
+
+        // Strip SQL comments and normalize whitespace for validation
+        const stripped = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+        const firstWord = stripped.split(/\s+/)[0]?.toUpperCase();
+
+        // Only allow SELECT and WITH (CTEs)
+        if (firstWord !== 'SELECT' && firstWord !== 'WITH') {
+          throw new Error('Only SELECT queries are allowed');
+        }
+
+        // Block dangerous statements that could appear inside CTEs
+        const upperSql = stripped.toUpperCase();
+        for (const keyword of ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'ATTACH', 'DETACH', 'PRAGMA', 'VACUUM', 'REINDEX']) {
+          // Check for keyword as a standalone word (not inside a string literal)
+          const regex = new RegExp(`\\b${keyword}\\b`);
+          // Only check outside of the initial WITH/SELECT context
+          if (keyword !== 'SELECT' && regex.test(upperSql)) {
+            // Allow it if it's only inside a subquery context (SELECT ... FROM)
+            // But block if it appears as a statement
+            const beforeKeyword = upperSql.indexOf(keyword);
+            const prefix = upperSql.slice(0, beforeKeyword).trim();
+            // If the keyword is preceded by something that looks like a statement boundary, block it
+            if (!prefix.endsWith('(') && !prefix.endsWith(',') && !prefix.endsWith('AS')) {
+              throw new Error(`${keyword} statements are not allowed`);
+            }
+          }
+        }
+
+        // Enforce LIMIT if not present
+        let finalSql = sql;
+        if (!/\bLIMIT\b/i.test(stripped)) {
+          finalSql = `${sql.replace(/;\s*$/, '')} LIMIT 10000`;
+        }
+
+        // No channel filtering in SQL panel - users have full access to query all data
+        // and can add their own WHERE channel = '...' clause if needed
+
+        const startTime = performance.now();
+        const columns: string[] = [];
+        const rows: Record<string, unknown>[] = [];
+        let firstRow = true;
+
+        db.exec({
+          sql: finalSql,
+          rowMode: 'object',
+          callback: (row: Record<string, unknown>) => {
+            if (firstRow) {
+              columns.push(...Object.keys(row));
+              firstRow = false;
+            }
+            rows.push({ ...row });
+          },
+        });
+
+        const executionTimeMs = Math.round((performance.now() - startTime) * 100) / 100;
+
+        self.postMessage({
+          id,
+          success: true,
+          result: { columns, rows, rowCount: rows.length, executionTimeMs },
+        });
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

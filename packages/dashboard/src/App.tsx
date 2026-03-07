@@ -1,14 +1,12 @@
-import { useEffect, useCallback } from 'react';
-import { BrowserRouter } from 'react-router-dom';
+import { useEffect, useCallback, useMemo } from 'react';
+import { BrowserRouter, useSearchParams } from 'react-router-dom';
 import { LogViewer } from './components/LogViewer';
 import { Toaster } from './components/ui/sonner';
-import { SecureStorageProvider, useSecureStorage } from './contexts/SecureStorageContext';
-import { MasterPasswordDialog } from './components/MasterPasswordDialog';
-import type { SecureChannelConfig } from './lib/secure-storage';
+
+type ViewType = 'logs' | 'metrics' | 'traces';
+const VALID_VIEWS: ViewType[] = ['logs', 'metrics', 'traces'];
 
 function AppContent() {
-  const { setReady, setMasterPassword, setInitialChannels, saveToSession } = useSecureStorage();
-
   // Initialize dark mode from system preference
   useEffect(() => {
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -16,19 +14,28 @@ function AppContent() {
     }
   }, []);
 
-  const handleUnlock = useCallback((password: string, channels: SecureChannelConfig[], shouldSaveToSession: boolean) => {
-    setMasterPassword(password);
-    setInitialChannels(channels);
-    if (shouldSaveToSession) {
-      saveToSession(password);
-    }
-    setReady(true);
-  }, [setMasterPassword, setInitialChannels, setReady, saveToSession]);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const activeView = useMemo<ViewType>(() => {
+    const param = searchParams.get('view');
+    return param && VALID_VIEWS.includes(param as ViewType) ? (param as ViewType) : 'logs';
+  }, [searchParams]);
+
+  const setActiveView = useCallback((view: ViewType) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (view === 'logs') {
+        next.delete('view');
+      } else {
+        next.set('view', view);
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   return (
     <>
-      <MasterPasswordDialog onUnlock={handleUnlock} />
-      <LogViewer />
+      <LogViewer activeView={activeView} onViewChange={setActiveView} />
       <Toaster position="bottom-right" />
     </>
   );
@@ -37,9 +44,7 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <SecureStorageProvider>
-        <AppContent />
-      </SecureStorageProvider>
+      <AppContent />
     </BrowserRouter>
   );
 }

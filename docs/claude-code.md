@@ -10,7 +10,7 @@ Abbacchio includes an MCP (Model Context Protocol) server that enables [Claude C
 ## How It Works
 
 ```
-Your App → Abbacchio API → Centrifugo → Tauri Desktop App
+Your App → Abbacchio API → Tauri Desktop App
                                               ↓
                                     Native SQLite (~/.abbacchio/logs.db)
                                               ↑

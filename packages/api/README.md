@@ -1,15 +1,16 @@
 # @abbacchio/api
 
-Real-time log streaming server with HTTP ingestion supporting multiple logging libraries (Pino, Winston, Bunyan, Console).
+Real-time log server with HTTP ingestion and SQLite persistence, supporting multiple logging libraries (Pino, Winston, Bunyan, Console).
 
 ## Features
 
-- **Real-time Streaming**: SSE-based log streaming to connected clients
+- **HTTP Polling**: Clients poll for new logs via `GET /api/logs?afterId=X`
+- **SQLite Persistence**: Logs stored in SQLite via `bun:sqlite`
 - **Multi-logger Support**: Works with Pino, Winston, Bunyan, and console
 - **Channel Isolation**: Namespace logs by app/service
 - **End-to-End Encryption**: Optional client-side encryption support
 - **Production Ready**: Rate limiting, connection limits, backpressure handling
-- **Zero Storage**: Logs stream through without server-side persistence
+- **OTLP Support**: Native OTLP/HTTP JSON receiver for logs, metrics, and traces
 
 ## Installation
 
@@ -22,11 +23,11 @@ pnpm add @abbacchio/api
 ## Quick Start
 
 ```bash
-# Start the server
-npm start
+# Start the server (requires Bun runtime)
+bun start
 
 # Or with environment variables
-PORT=4000 npm start
+PORT=4000 bun start
 ```
 
 Send a test log:
@@ -42,13 +43,16 @@ curl -X POST http://localhost:4000/api/logs \
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/logs` | Ingest single or batch logs |
-| `GET` | `/api/logs/stream?channel=X` | SSE stream for real-time logs |
-| `GET` | `/api/logs` | Get buffered logs (empty in streaming mode) |
+| `GET` | `/api/logs` | Get buffered logs (supports `afterId` for polling) |
 | `DELETE` | `/api/logs` | Clear logs/channels |
 | `GET` | `/api/channels` | List registered channels |
+| `POST` | `/api/sql` | Execute SQL queries against stored logs |
 | `GET` | `/api/stats` | Server statistics |
 | `GET` | `/api/generate-key` | Generate encryption key |
 | `GET` | `/health` | Health check |
+| `POST` | `/v1/logs` | OTLP JSON log records |
+| `POST` | `/v1/metrics` | OTLP JSON metric data points |
+| `POST` | `/v1/traces` | OTLP JSON trace spans |
 
 ### Log Ingestion
 
@@ -72,20 +76,23 @@ curl -X POST http://localhost:4000/api/logs \
   }'
 ```
 
-### SSE Streaming
+### HTTP Polling
 
 ```javascript
-const eventSource = new EventSource('http://localhost:4000/api/logs/stream?channel=my-app');
+let afterId = null;
 
-eventSource.addEventListener('log', (e) => {
-  const log = JSON.parse(e.data);
-  console.log(log);
-});
+setInterval(async () => {
+  const params = new URLSearchParams({ channel: 'my-app' });
+  if (afterId) params.set('afterId', afterId);
 
-eventSource.addEventListener('batch', (e) => {
-  const logs = JSON.parse(e.data);
-  logs.forEach(log => console.log(log));
-});
+  const res = await fetch(`http://localhost:4000/api/logs?${params}`);
+  const { logs } = await res.json();
+
+  if (logs.length > 0) {
+    afterId = logs[logs.length - 1].id;
+    logs.forEach(log => console.log(log));
+  }
+}, 1000);
 ```
 
 ### Log Entry Format
@@ -116,10 +123,6 @@ NODE_ENV=production
 CORS_ORIGIN=*
 API_KEY=your-secret-key        # Optional authentication
 
-# Connection Limits
-MAX_CONNECTIONS=1000           # Max concurrent SSE connections
-CONNECTION_TIMEOUT=3600000     # 1 hour timeout
-
 # Rate Limiting
 ENABLE_RATE_LIMIT=true
 RATE_LIMIT_WINDOW=60000        # 60 second window
@@ -134,9 +137,6 @@ MAX_SINGLE_LOG_SIZE=65536      # 64KB per log
 MAX_CHANNELS=10000             # Max registered channels
 CHANNEL_TTL=86400000           # 24 hour TTL for inactive channels
 
-# Backpressure
-MAX_QUEUE_SIZE=1000            # Queue size per connection
-
 # Shutdown
 SHUTDOWN_TIMEOUT=30000         # 30 second graceful shutdown
 ```
@@ -146,7 +146,7 @@ SHUTDOWN_TIMEOUT=30000         # 30 second graceful shutdown
 Enable API key authentication by setting `API_KEY`:
 
 ```bash
-API_KEY=my-secret-key npm start
+API_KEY=my-secret-key bun start
 ```
 
 Then include the key in requests:
@@ -184,12 +184,11 @@ The server passes encrypted payloads through unchanged. Decryption happens in th
 pnpm install
 
 # Run with hot reload
-pnpm dev
+bun run dev
 
 # Run tests
-pnpm test
-pnpm test:watch
-pnpm test:coverage
+bun test
+bun test --watch
 
 # Build
 pnpm build
@@ -201,30 +200,28 @@ pnpm tsc --noEmit
 ## Architecture
 
 ```
-Logger → Transport → POST /api/logs → LogBuffer.add() → emit('log')
-                                                            ↓
-Dashboard ← SSE /api/logs/stream ← EventEmitter listener
+Logger → Transport → POST /api/logs → LogBuffer.add() + SQLite insert
+                                                    ↓
+Dashboard ← GET /api/logs?afterId=X ← LogBuffer query
 ```
 
 ### Key Components
 
 | Component | Purpose |
 |-----------|---------|
-| `LogBuffer` | EventEmitter for log broadcasting, channel management |
-| `ConnectionManager` | SSE connection tracking, limits, stale detection |
+| `LogBuffer` | In-memory ring buffer for log polling, channel management |
+| `LogDatabase` | SQLite persistence layer (bun:sqlite) |
 | `IdPool` | Pre-generated IDs for high-throughput ingestion |
 | `RateLimiter` | Token bucket rate limiting per IP |
 | `Validator` | Payload size and batch validation |
 
 ### Scalability Features
 
-- **Connection Limits**: Configurable max SSE connections (default 1000)
 - **Rate Limiting**: Token bucket per IP (default 1000 req/min)
-- **Backpressure**: Per-connection message queues with overflow handling
 - **Channel Limits**: LRU eviction when channel limit reached
 - **ID Pool**: Pre-generated IDs eliminate crypto overhead on hot path
 - **Pre-serialization**: JSON serialized once per log, shared across clients
-- **Graceful Shutdown**: Clean connection closure on SIGTERM/SIGINT
+- **Graceful Shutdown**: Clean shutdown on SIGTERM/SIGINT
 
 ## Health Check
 
@@ -237,33 +234,7 @@ Response:
 {
   "status": "ok",
   "uptime": 3600.5,
-  "connections": 42,
-  "maxConnections": 1000,
   "channels": 5
-}
-```
-
-## Statistics
-
-```bash
-curl http://localhost:4000/api/stats
-```
-
-Response:
-```json
-{
-  "connections": {
-    "totalConnections": 42,
-    "connectionsByChannel": { "app-1": 20, "app-2": 22 },
-    "totalBytesSent": 1048576,
-    "totalMessagesSent": 5000,
-    "totalMessagesDropped": 0
-  },
-  "channels": {
-    "channelCount": 5,
-    "maxChannels": 10000,
-    "channels": [...]
-  }
 }
 ```
 

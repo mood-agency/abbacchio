@@ -26,7 +26,7 @@ export function createTestApp(options: CreateTestAppOptions = {}) {
     });
   }
 
-  app.route('/api', routes);
+  app.route('/', routes);
 
   return app;
 }

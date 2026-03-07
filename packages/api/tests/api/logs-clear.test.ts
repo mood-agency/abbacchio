@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, jest } from 'bun:test';
 import { createTestApp } from '../helpers/test-app.js';
 import { getLogBuffer, DEFAULT_CHANNEL } from '../../src/lib/log-buffer.js';
 
@@ -25,7 +25,7 @@ describe('DELETE /api/logs', () => {
   it('should emit clear event', async () => {
     const app = createTestApp();
     const buffer = getLogBuffer();
-    const callback = vi.fn();
+    const callback = jest.fn();
     buffer.on('clear', callback);
 
     await app.request('/api/logs', { method: 'DELETE' });

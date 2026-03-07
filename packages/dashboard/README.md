@@ -1,6 +1,6 @@
 # Abbacchio Dashboard
 
-React frontend for the Abbacchio real-time log viewer. Connects to the API via Server-Sent Events (SSE), displays logs with filtering/search, and optionally persists logs in browser SQLite.
+React frontend for the Abbacchio real-time log viewer. Connects to the API via HTTP polling, displays logs with filtering/search, and optionally persists logs in browser SQLite.
 
 ## Getting Started
 
@@ -16,7 +16,7 @@ npm run preview       # Preview production build
 
 ## Features
 
-- Real-time log streaming via SSE
+- Real-time log streaming via HTTP polling
 - Multi-channel support with tabs
 - Full-text search with highlighting
 - Filter by level, namespace, and time range
@@ -41,9 +41,11 @@ Pre-configure the dashboard via URL:
 ## Architecture
 
 ```
-SSE /api/logs/stream
+HTTP polling /api/logs?afterId=X
     ↓
-useLogStore (decrypt → batch → SQLite write)
+useChannelManager (poll → decrypt → batch)
+    ↓
+useLogStore (process → SQLite write)
     ↓
 useChannelLogStream (SQL query with filters)
     ↓

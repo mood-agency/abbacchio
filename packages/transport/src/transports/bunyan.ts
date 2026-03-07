@@ -7,22 +7,20 @@ export interface BunyanStreamOptions extends AbbacchioClientOptions {
 }
 
 /**
- * Bunyan stream for Abbacchio.
- * Implements the Node.js Writable stream interface for Bunyan.
+ * Bunyan stream for Abbacchio (OTLP native).
  *
  * @example
  * ```typescript
  * import bunyan from "bunyan";
- * import { bunyanStream } from "@abbacchio/client/transports/bunyan";
+ * import { bunyanStream } from "@abbacchio/transport/transports/bunyan";
  *
  * const logger = bunyan.createLogger({
  *   name: "myapp",
  *   streams: [
  *     { stream: process.stdout },
  *     bunyanStream({
- *       url: "http://localhost:4000/api/logs",
- *       channel: "my-app",
- *       secretKey: "optional-encryption-key",
+ *       endpoint: "http://localhost:4002",
+ *       serviceName: "my-app",
  *     }),
  *   ],
  * });
@@ -40,16 +38,12 @@ export class AbbacchioBunyanStream extends Writable {
     this.level = opts.level;
   }
 
-  /**
-   * Writable stream _write method - called for each log entry
-   */
   _write(
     chunk: Record<string, unknown>,
     _encoding: BufferEncoding,
     callback: (error?: Error | null) => void
   ): void {
     try {
-      // Transform Bunyan format to Abbacchio format
       const log = this.transformLog(chunk);
       this.client.add(log);
       callback();
@@ -58,9 +52,6 @@ export class AbbacchioBunyanStream extends Writable {
     }
   }
 
-  /**
-   * Transform Bunyan log format to a normalized format
-   */
   private transformLog(record: Record<string, unknown>): Record<string, unknown> {
     const { name, hostname, pid, level, msg, time, v, ...rest } = record;
 
@@ -75,67 +66,17 @@ export class AbbacchioBunyanStream extends Writable {
     };
   }
 
-  /**
-   * Change the channel dynamically
-   */
-  setChannel(channel: string | undefined): void {
-    this.client.setChannel(channel);
-  }
+  setServiceName(name: string): void { this.client.setServiceName(name); }
+  getServiceName(): string { return this.client.getServiceName(); }
+  enable(): void { this.client.enable(); }
+  disable(): void { this.client.disable(); }
+  isEnabled(): boolean { return this.client.isEnabled(); }
 
-  /**
-   * Get the current channel
-   */
-  getChannel(): string | undefined {
-    return this.client.getChannel();
-  }
-
-  /**
-   * Change the namespace dynamically
-   */
-  setNamespace(namespace: string | undefined): void {
-    this.client.setNamespace(namespace);
-  }
-
-  /**
-   * Get the current namespace
-   */
-  getNamespace(): string | undefined {
-    return this.client.getNamespace();
-  }
-
-  /**
-   * Enable sending logs to the server
-   */
-  enable(): void {
-    this.client.enable();
-  }
-
-  /**
-   * Disable sending logs to the server
-   */
-  disable(): void {
-    this.client.disable();
-  }
-
-  /**
-   * Check if the client is currently enabled
-   */
-  isEnabled(): boolean {
-    return this.client.isEnabled();
-  }
-
-  /**
-   * Close the stream
-   */
   _final(callback: (error?: Error | null) => void): void {
     this.client.close().then(() => callback()).catch(callback);
   }
 }
 
-/**
- * Factory function to create a Bunyan stream
- * Returns an object with stream and optional level for Bunyan's streams array
- */
 export function bunyanStream(opts?: BunyanStreamOptions): { stream: AbbacchioBunyanStream; level?: number | string; type: "raw" } {
   const stream = new AbbacchioBunyanStream(opts);
   return {

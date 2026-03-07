@@ -114,7 +114,7 @@ export function useTimelineNavigation<T extends TimelineItem>(
     virtualizer,
     getIndexByTime,
     bucketSizeMs = DEFAULT_BUCKET_SIZE_MS,
-    estimatedRowHeight = 36,
+    estimatedRowHeight: _estimatedRowHeight = 36,
   } = options;
 
   const [thumbPosition, setThumbPosition] = useState(0);
@@ -369,8 +369,8 @@ export function useTimelineNavigation<T extends TimelineItem>(
     // Prevent duplicate navigations to the same bucket within 1000ms
     const now = Date.now();
     if (lastBucketClickRef.current &&
-        lastBucketClickRef.current.timestamp === timestamp &&
-        now - lastBucketClickRef.current.time < 1000) {
+      lastBucketClickRef.current.timestamp === timestamp &&
+      now - lastBucketClickRef.current.time < 1000) {
       log('scrollToBucket: BLOCKED (duplicate within 1s)');
       return;
     }

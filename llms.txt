@@ -2,7 +2,7 @@
 
 > Real-time log viewer dashboard with HTTP ingestion for any logging library
 
-Abbacchio is a zero-persistence, real-time log viewer. Send logs from your application via HTTP and view them in a searchable, filterable dashboard or terminal UI. Works with Pino, Winston, Bunyan, console, or any HTTP client.
+Abbacchio is a real-time log viewer with SQLite persistence. Send logs from your application via HTTP and view them in a searchable, filterable dashboard or terminal UI. Works with Pino, Winston, Bunyan, console, or any HTTP client.
 
 ## Installation
 
@@ -159,25 +159,13 @@ Send logs (single or batch).
 { "received": 2, "channel": "my-app" }
 ```
 
-### GET /api/logs/stream
-
-SSE endpoint for real-time logs.
-
-**Query params:**
-- `channel` - Filter by channel (required)
-
-**Events:**
-- `batch` - Initial buffered logs
-- `log` - New log entry
-- `channels` - Available channels list
-- `ping` - Keep-alive every 15s
-
 ### GET /api/logs
 
-Get all buffered logs.
+Get buffered logs with polling support.
 
 **Query params:**
 - `channel` - Filter by channel (optional)
+- `afterId` - Return only logs after this ID (for incremental polling)
 
 ### DELETE /api/logs
 

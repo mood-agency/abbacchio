@@ -83,7 +83,7 @@ RATE_LIMIT_MAX=1000              # Max requests per window (default: 1000)
 Prevents DoS attacks by limiting connections:
 
 ```bash
-MAX_CONNECTIONS=1000             # Total max SSE connections
+MAX_CONNECTIONS=1000             # Total max connections
 MAX_CONNECTIONS_PER_IP=10        # Max connections per IP address
 CONNECTION_TIMEOUT=3600000       # Connection timeout in ms (1 hour)
 ```

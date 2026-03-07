@@ -1,6 +1,6 @@
 {
   "name": "abbacchio",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "private": true,
   "description": "Real-time log viewer dashboard with HTTP ingestion for Pino, Winston, Bunyan, and other loggers",
   "type": "module",
@@ -16,7 +16,7 @@
     "build:dashboard": "pnpm --filter @abbacchio/dashboard build",
     "build:desktop": "pnpm --filter @abbacchio/desktop build",
     "build:tui": "pnpm --filter @abbacchio/tui build",
-    "tui": "pnpm --filter @abbacchio/tui dev --",
+"tui": "pnpm --filter @abbacchio/tui dev --",
     "start": "pnpm --filter @abbacchio/api start",
     "test": "pnpm -r test",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules",
@@ -30,7 +30,7 @@
     "logging",
     "dashboard",
     "real-time",
-    "sse",
+    "http-polling",
     "viewer",
     "transport"
   ],

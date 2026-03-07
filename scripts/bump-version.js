@@ -28,6 +28,8 @@ const VERSION_FILES = [
   { path: "packages/api/package.json", type: "json", field: "version" },
   { path: "packages/dashboard/package.json", type: "json", field: "version" },
   { path: "packages/tui/package.json", type: "json", field: "version" },
+  { path: "packages/desktop/package.json", type: "json", field: "version" },
+  { path: "packages/mcp/package.json", type: "json", field: "version" },
   {
     path: "packages/desktop/src-tauri/tauri.conf.json",
     type: "json",

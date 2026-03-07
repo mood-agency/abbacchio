@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, jest } from 'bun:test';
 import { LogBuffer, getLogBuffer, DEFAULT_CHANNEL } from '../../src/lib/log-buffer.js';
 
 describe('LogBuffer', () => {
@@ -98,25 +98,21 @@ describe('LogBuffer', () => {
       expect(entry.channel).toBe('my-app');
     });
 
-    it('should emit log event', () => {
+    it('should update channel logCount on add', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
-      buffer.on('log', callback);
-
       buffer.add({ level: 30, msg: 'Test' });
 
-      expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0].msg).toBe('Test');
+      const info = buffer.getChannelInfo(DEFAULT_CHANNEL);
+      expect(info?.logCount).toBe(1);
     });
 
-    it('should emit channel-specific log event', () => {
+    it('should register channel on add', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
-      buffer.on('log:my-app', callback);
-
       buffer.add({ level: 30, msg: 'Test' }, 'my-app');
 
-      expect(callback).toHaveBeenCalledTimes(1);
+      expect(buffer.getChannels()).toContain('my-app');
+      const info = buffer.getChannelInfo('my-app');
+      expect(info?.logCount).toBe(1);
     });
   });
 
@@ -134,37 +130,35 @@ describe('LogBuffer', () => {
       expect(entries).toHaveLength(3);
     });
 
-    it('should emit batch event', () => {
+    it('should update channel logCount for batch', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
-      buffer.on('batch', callback);
-
       buffer.addBatch([{ level: 30, msg: 'Log 1' }, { level: 30, msg: 'Log 2' }]);
 
-      expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toHaveLength(2);
+      const info = buffer.getChannelInfo(DEFAULT_CHANNEL);
+      expect(info?.logCount).toBe(2);
     });
 
-    it('should emit channel-specific batch event', () => {
+    it('should register channel for batch', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
-      buffer.on('batch:my-app', callback);
-
       buffer.addBatch([{ level: 30, msg: 'Log 1' }], 'my-app');
 
-      expect(callback).toHaveBeenCalledTimes(1);
+      expect(buffer.getChannels()).toContain('my-app');
+      const info = buffer.getChannelInfo('my-app');
+      expect(info?.logCount).toBe(1);
     });
   });
 
   describe('getAll()', () => {
-    it('should return empty array (no storage)', () => {
+    it('should return stored logs', () => {
       const buffer = new LogBuffer();
       buffer.add({ level: 30, msg: 'Log 1' });
       buffer.add({ level: 30, msg: 'Log 2' });
 
       const logs = buffer.getAll();
 
-      expect(logs).toHaveLength(0);
+      expect(logs).toHaveLength(2);
+      expect(logs[0].msg).toBe('Log 1');
+      expect(logs[1].msg).toBe('Log 2');
     });
   });
 
@@ -201,7 +195,7 @@ describe('LogBuffer', () => {
 
     it('should emit clear event', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
+      const callback = jest.fn();
       buffer.on('clear', callback);
 
       buffer.clear();
@@ -211,55 +205,31 @@ describe('LogBuffer', () => {
   });
 
   describe('getSize()', () => {
-    it('should return 0 (no storage)', () => {
+    it('should return count of stored logs', () => {
       const buffer = new LogBuffer();
       buffer.add({ level: 30, msg: 'Log 1' });
       buffer.add({ level: 30, msg: 'Log 2' });
 
-      expect(buffer.getSize()).toBe(0);
+      expect(buffer.getSize()).toBe(2);
     });
   });
 
-  describe('subscribe()', () => {
-    it('should subscribe to all logs', () => {
+  describe('getStats()', () => {
+    it('should return buffer stats', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
+      buffer.add({ level: 30, msg: 'Test' }, 'app-1');
+      buffer.add({ level: 30, msg: 'Test' }, 'app-2');
 
-      buffer.subscribe(callback);
-      buffer.add({ level: 30, msg: 'Test' });
-
-      expect(callback).toHaveBeenCalledTimes(1);
-    });
-
-    it('should subscribe to specific channel', () => {
-      const buffer = new LogBuffer();
-      const callback = vi.fn();
-
-      buffer.subscribe(callback, 'app-1');
-      buffer.add({ level: 30, msg: 'App 1' }, 'app-1');
-      buffer.add({ level: 30, msg: 'App 2' }, 'app-2');
-
-      expect(callback).toHaveBeenCalledTimes(1);
-    });
-
-    it('should return unsubscribe function', () => {
-      const buffer = new LogBuffer();
-      const callback = vi.fn();
-
-      const unsubscribe = buffer.subscribe(callback);
-      buffer.add({ level: 30, msg: 'First' });
-
-      unsubscribe();
-      buffer.add({ level: 30, msg: 'Second' });
-
-      expect(callback).toHaveBeenCalledTimes(1);
+      const stats = buffer.getStats();
+      expect(stats.channelCount).toBe(3); // default + app-1 + app-2
+      expect(stats.channels).toHaveLength(3);
     });
   });
 
   describe('channel:added event', () => {
     it('should emit channel:added when new channel is used', () => {
       const buffer = new LogBuffer();
-      const callback = vi.fn();
+      const callback = jest.fn();
       buffer.on('channel:added', callback);
 
       buffer.add({ level: 30, msg: 'Test' }, 'new-channel');
@@ -271,7 +241,7 @@ describe('LogBuffer', () => {
       const buffer = new LogBuffer();
       buffer.add({ level: 30, msg: 'First' }, 'my-channel');
 
-      const callback = vi.fn();
+      const callback = jest.fn();
       buffer.on('channel:added', callback);
       buffer.add({ level: 30, msg: 'Second' }, 'my-channel');
 

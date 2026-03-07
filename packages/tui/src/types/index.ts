@@ -26,7 +26,7 @@ export const LOG_LEVEL_NAMES: Record<LogLevelLabel, LogLevelNumber> = {
 };
 
 /**
- * Normalized log entry from SSE
+ * Normalized log entry
  */
 export interface LogEntry {
   id: string;
@@ -40,11 +40,6 @@ export interface LogEntry {
   encrypted?: boolean;
   encryptedData?: string;
 }
-
-/**
- * SSE event types
- */
-export type SSEEventType = 'log' | 'batch' | 'ping' | 'channels' | 'channel:added';
 
 /**
  * Connection status

@@ -17,6 +17,7 @@ import type {
   LogTimeRange,
   GetHourlyLogCountsOptions,
   GetLogIndexByTimeOptions,
+  SqlQueryResult,
 } from './types';
 import SqliteWorker from '../sqlite-worker?worker';
 
@@ -217,5 +218,10 @@ export class BrowserLogDatabase implements LogDatabase {
   async pruneOldLogs(options?: PruneOptions): Promise<void> {
     await this.init();
     await this.sendMessage('pruneOldLogs', options);
+  }
+
+  async executeSql(sql: string, channel?: string): Promise<SqlQueryResult> {
+    await this.init();
+    return this.sendMessage<SqlQueryResult>('executeSql', { sql, channel });
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createTestApp } from '../helpers/test-app.js';
 import { getLogBuffer, DEFAULT_CHANNEL } from '../../src/lib/log-buffer.js';
 

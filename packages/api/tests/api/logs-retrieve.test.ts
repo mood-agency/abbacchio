@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createTestApp } from '../helpers/test-app.js';
 
 describe('GET /api/logs', () => {
-  it('should return empty logs (no storage architecture)', async () => {
+  it('should return empty logs when none ingested', async () => {
     const app = createTestApp();
     const response = await app.request('/api/logs');
 
@@ -15,25 +15,54 @@ describe('GET /api/logs', () => {
     });
   });
 
-  it('should return empty logs even after ingestion (streaming-only)', async () => {
+  it('should return logs after ingestion', async () => {
     const app = createTestApp();
 
-    // Ingest some logs
+    // Ingest a log
     await app.request('/api/logs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ level: 30, msg: 'Ingested log' }),
     });
 
-    // Retrieve logs - should be empty since we don't store
+    // Retrieve logs
     const response = await app.request('/api/logs');
     const json = await response.json();
 
-    expect(json.count).toBe(0);
-    expect(json.logs).toEqual([]);
+    expect(json.count).toBe(1);
+    expect(json.logs).toHaveLength(1);
+    expect(json.logs[0].msg).toBe('Ingested log');
   });
 
-  it('should return empty array for any channel', async () => {
+  it('should support afterId for incremental polling', async () => {
+    const app = createTestApp();
+
+    // Ingest two logs
+    await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: 30, msg: 'First log' }),
+    });
+    await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: 30, msg: 'Second log' }),
+    });
+
+    // Get all logs to find the first ID
+    const allResponse = await app.request('/api/logs');
+    const allJson = await allResponse.json();
+    const firstId = allJson.logs[0].id;
+
+    // Get logs after the first ID
+    const response = await app.request(`/api/logs?afterId=${firstId}`);
+    const json = await response.json();
+
+    expect(json.count).toBe(1);
+    expect(json.logs[0].msg).toBe('Second log');
+  });
+
+  it('should return empty array for non-existent channel', async () => {
     const app = createTestApp();
 
     const response = await app.request('/api/logs?channel=any-channel');

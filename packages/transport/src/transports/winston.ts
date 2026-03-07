@@ -7,21 +7,19 @@ export interface WinstonTransportOptions extends AbbacchioClientOptions {
 }
 
 /**
- * Winston transport for Abbacchio.
- * Extends winston-transport for proper integration.
+ * Winston transport for Abbacchio (OTLP native).
  *
  * @example
  * ```typescript
  * import winston from "winston";
- * import { AbbacchioWinstonTransport } from "@abbacchio/client/transports/winston";
+ * import { AbbacchioWinstonTransport } from "@abbacchio/transport/transports/winston";
  *
  * const logger = winston.createLogger({
  *   transports: [
  *     new winston.transports.Console(),
  *     new AbbacchioWinstonTransport({
- *       url: "http://localhost:4000/api/logs",
- *       channel: "my-app",
- *       secretKey: "optional-encryption-key",
+ *       endpoint: "http://localhost:4002",
+ *       serviceName: "my-app",
  *     }),
  *   ],
  * });
@@ -37,24 +35,16 @@ export class AbbacchioWinstonTransport extends TransportStream {
     this.client = new AbbacchioClient(opts);
   }
 
-  /**
-   * Winston log method - called for each log entry
-   */
   log(info: Record<string, unknown>, callback: () => void): void {
     setImmediate(() => {
       this.emit("logged", info);
     });
 
-    // Transform Winston format to Abbacchio format
     const log = this.transformLog(info);
     this.client.add(log);
-
     callback();
   }
 
-  /**
-   * Transform Winston log format to a normalized format
-   */
   private transformLog(info: Record<string, unknown>): Record<string, unknown> {
     const { level, message, timestamp, ...rest } = info;
 
@@ -66,9 +56,6 @@ export class AbbacchioWinstonTransport extends TransportStream {
     };
   }
 
-  /**
-   * Convert Winston level string to Pino-style number
-   */
   private levelToNumber(level: string): number {
     const levels: Record<string, number> = {
       error: 50,
@@ -82,66 +69,17 @@ export class AbbacchioWinstonTransport extends TransportStream {
     return levels[level] || 30;
   }
 
-  /**
-   * Change the channel dynamically
-   */
-  setChannel(channel: string | undefined): void {
-    this.client.setChannel(channel);
-  }
+  setServiceName(name: string): void { this.client.setServiceName(name); }
+  getServiceName(): string { return this.client.getServiceName(); }
+  enable(): void { this.client.enable(); }
+  disable(): void { this.client.disable(); }
+  isEnabled(): boolean { return this.client.isEnabled(); }
 
-  /**
-   * Get the current channel
-   */
-  getChannel(): string | undefined {
-    return this.client.getChannel();
-  }
-
-  /**
-   * Change the namespace dynamically
-   */
-  setNamespace(namespace: string | undefined): void {
-    this.client.setNamespace(namespace);
-  }
-
-  /**
-   * Get the current namespace
-   */
-  getNamespace(): string | undefined {
-    return this.client.getNamespace();
-  }
-
-  /**
-   * Enable sending logs to the server
-   */
-  enable(): void {
-    this.client.enable();
-  }
-
-  /**
-   * Disable sending logs to the server
-   */
-  disable(): void {
-    this.client.disable();
-  }
-
-  /**
-   * Check if the client is currently enabled
-   */
-  isEnabled(): boolean {
-    return this.client.isEnabled();
-  }
-
-  /**
-   * Close the transport
-   */
   close(): void {
     this.client.close();
   }
 }
 
-/**
- * Factory function to create a Winston transport
- */
 export function winstonTransport(opts?: WinstonTransportOptions): AbbacchioWinstonTransport {
   return new AbbacchioWinstonTransport(opts);
 }

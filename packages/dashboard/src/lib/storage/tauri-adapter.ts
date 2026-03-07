@@ -18,6 +18,7 @@ import type {
   LogTimeRange,
   GetHourlyLogCountsOptions,
   GetLogIndexByTimeOptions,
+  SqlQueryResult,
 } from './types';
 
 // Tauri invoke function - dynamically imported to avoid errors in browser
@@ -187,5 +188,9 @@ export class TauriLogDatabase implements LogDatabase {
     await this.init();
     const inv = await getInvoke();
     await inv('prune_old_logs', { options });
+  }
+
+  async executeSql(_sql: string, _channel?: string): Promise<SqlQueryResult> {
+    throw new Error('SQL queries are not yet supported in Tauri');
   }
 }

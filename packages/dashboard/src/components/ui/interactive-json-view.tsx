@@ -17,16 +17,16 @@ interface InteractiveJsonViewProps {
   maxDepth?: number;
 }
 
-// Color scheme matching nightOwl theme
-const colors = {
-  key: 'rgb(127, 219, 202)',      // teal for keys
-  string: 'rgb(173, 219, 103)',    // green for strings
-  number: 'rgb(247, 140, 108)',    // orange for numbers
-  boolean: 'rgb(255, 88, 116)',    // red for booleans
-  null: 'rgb(255, 88, 116)',       // red for null
-  bracket: 'rgb(199, 146, 234)',   // purple for brackets
-  punctuation: 'rgb(199, 146, 234)', // purple for : and ,
-  muted: 'rgb(99, 119, 119)',      // muted for truncation indicator
+// Theme-aware color classes using CSS custom properties
+const colorClasses = {
+  key: 'text-json-key',
+  string: 'text-json-string',
+  number: 'text-json-number',
+  boolean: 'text-json-boolean',
+  null: 'text-json-null',
+  bracket: 'text-json-bracket',
+  punctuation: 'text-json-punctuation',
+  muted: 'text-json-muted',
 };
 
 // Default limits for performance
@@ -65,7 +65,7 @@ export function InteractiveJsonView({
           <Button
             variant="ghost"
             size="icon"
-            className="absolute top-2 right-2 h-7 w-7 text-white/60 hover:text-white hover:bg-white/10"
+            className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted"
             onClick={handleCopyAll}
           >
             <Copy className="w-4 h-4" />
@@ -112,14 +112,13 @@ const PrimitiveValue = memo(function PrimitiveValue({
   comma: string;
   type: 'string' | 'number' | 'boolean' | 'null';
 }) {
-  const color = colors[type];
+  const colorClass = colorClasses[type];
   const displayValue = type === 'string' ? `"${value}"` : String(value);
   const copyValue = String(value);
 
   return (
     <span
-      className="hover:bg-white/10 rounded px-0.5 cursor-context-menu"
-      style={{ color }}
+      className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClass}`}
       onContextMenu={(e) => {
         e.preventDefault();
         onCopy(copyValue, 'value');
@@ -167,8 +166,7 @@ const JsonNode = memo(function JsonNode({
   if (depth >= maxDepth) {
     return (
       <span
-        className="hover:bg-white/10 rounded px-0.5 cursor-pointer"
-        style={{ color: colors.muted }}
+        className={`hover:bg-muted rounded px-0.5 cursor-pointer ${colorClasses.muted}`}
         onClick={() => setIsExpanded(!isExpanded)}
         title="Click to expand (depth limit reached)"
       >
@@ -182,8 +180,7 @@ const JsonNode = memo(function JsonNode({
     if (value.length === 0) {
       return (
         <span
-          className="hover:bg-white/10 rounded px-0.5 cursor-context-menu"
-          style={{ color: colors.bracket }}
+          className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClasses.bracket}`}
           onContextMenu={(e) => {
             e.preventDefault();
             onCopy('[]', 'value');
@@ -207,15 +204,14 @@ const JsonNode = memo(function JsonNode({
         }}
       >
         <span
-          className="cursor-pointer hover:bg-white/10 rounded"
+          className={`cursor-pointer hover:bg-muted rounded ${colorClasses.bracket}`}
           onClick={() => setIsExpanded(!isExpanded)}
-          style={{ color: colors.bracket }}
         >
           {isExpanded ? <ChevronDown className="inline w-3 h-3" /> : <ChevronRight className="inline w-3 h-3" />}
           {'['}
         </span>
         {!isExpanded ? (
-          <span style={{ color: colors.muted }}>{`...${value.length} items`}</span>
+          <span className={colorClasses.muted}>{`...${value.length} items`}</span>
         ) : (
           <>
             {'\n'}
@@ -238,8 +234,7 @@ const JsonNode = memo(function JsonNode({
               <span>
                 {indentStr}{'  '}
                 <span
-                  className="cursor-pointer hover:underline"
-                  style={{ color: colors.muted }}
+                  className={`cursor-pointer hover:underline ${colorClasses.muted}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowAll(true);
@@ -253,7 +248,7 @@ const JsonNode = memo(function JsonNode({
             {indentStr}
           </>
         )}
-        <span style={{ color: colors.bracket }}>]{comma}</span>
+        <span className={colorClasses.bracket}>]{comma}</span>
       </span>
     );
   }
@@ -265,8 +260,7 @@ const JsonNode = memo(function JsonNode({
     if (entries.length === 0) {
       return (
         <span
-          className="hover:bg-white/10 rounded px-0.5 cursor-context-menu"
-          style={{ color: colors.bracket }}
+          className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClasses.bracket}`}
           onContextMenu={(e) => {
             e.preventDefault();
             onCopy('{}', 'value');
@@ -293,15 +287,14 @@ const JsonNode = memo(function JsonNode({
         }}
       >
         <span
-          className="cursor-pointer hover:bg-white/10 rounded"
+          className={`cursor-pointer hover:bg-muted rounded ${colorClasses.bracket}`}
           onClick={() => setIsExpanded(!isExpanded)}
-          style={{ color: colors.bracket }}
         >
           {isExpanded ? <ChevronDown className="inline w-3 h-3" /> : <ChevronRight className="inline w-3 h-3" />}
           {'{'}
         </span>
         {!isExpanded ? (
-          <span style={{ color: colors.muted }}>{`...${entries.length} keys`}</span>
+          <span className={colorClasses.muted}>{`...${entries.length} keys`}</span>
         ) : (
           <>
             {'\n'}
@@ -310,8 +303,7 @@ const JsonNode = memo(function JsonNode({
                 {indentStr}{'  '}
                 <span
                   data-json-key
-                  className="hover:bg-white/10 rounded px-0.5 cursor-context-menu"
-                  style={{ color: colors.key }}
+                  className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClasses.key}`}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -320,7 +312,7 @@ const JsonNode = memo(function JsonNode({
                 >
                   "{key}"
                 </span>
-                <span style={{ color: colors.punctuation }}>: </span>
+                <span className={colorClasses.punctuation}>: </span>
                 <span data-json-value>
                   <JsonNode
                     value={val}
@@ -339,8 +331,7 @@ const JsonNode = memo(function JsonNode({
               <span>
                 {indentStr}{'  '}
                 <span
-                  className="cursor-pointer hover:underline"
-                  style={{ color: colors.muted }}
+                  className={`cursor-pointer hover:underline ${colorClasses.muted}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowAll(true);
@@ -354,7 +345,7 @@ const JsonNode = memo(function JsonNode({
             {indentStr}
           </>
         )}
-        <span style={{ color: colors.bracket }}>{'}'}{comma}</span>
+        <span className={colorClasses.bracket}>{'}'}{comma}</span>
       </span>
     );
   }

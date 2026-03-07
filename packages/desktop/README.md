@@ -2,7 +2,7 @@
 
 Native desktop application for Abbacchio log viewer, built with [Tauri](https://tauri.app/).
 
-The desktop app maintains a persistent WebSocket connection to Centrifugo in the Rust backend, ensuring logs are received even when the app window is minimized or in the background.
+The desktop app wraps the dashboard in a native window, providing a dedicated experience for log viewing without browser tab limitations.
 
 ## Prerequisites
 
@@ -118,8 +118,7 @@ packages/desktop/
 │   │   └── default.json     # App permissions
 │   ├── icons/               # App icons (all sizes)
 │   └── src/
-│       ├── main.rs          # App entry point
-│       └── centrifugo.rs    # WebSocket connection handler
+│       └── main.rs          # App entry point
 ```
 
 ## Architecture
@@ -127,27 +126,17 @@ packages/desktop/
 ```
 ┌─────────────────────────────────────────┐
 │  Rust Backend (always active)           │
-│  ├── WebSocket connection to Centrifugo │
-│  ├── Receives logs in background        │
-│  └── Sends to frontend via Tauri Events │
+│  └── Sends events to frontend via Tauri │
 └─────────────────────────────────────────┘
                     │
                     ▼
 ┌─────────────────────────────────────────┐
 │  WebView (React frontend)               │
 │  ├── Same codebase as web dashboard     │
-│  ├── Listens to Tauri Events            │
+│  ├── HTTP polling for log updates       │
 │  └── Stores logs in SQLite (WASM)       │
 └─────────────────────────────────────────┘
 ```
-
-### Why Tauri?
-
-The web version uses a Web Worker for the WebSocket connection, but browsers throttle background tabs, causing missed logs. The Tauri desktop app solves this by:
-
-1. Running the WebSocket connection in the Rust backend process
-2. The Rust process is never throttled, regardless of window state
-3. Logs are buffered and delivered to the frontend when active
 
 ## Configuration
 

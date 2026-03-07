@@ -15,6 +15,7 @@ on:
           - transport
           - browser-transport
           - tui
+          - sqlite-api
         default: all
       dry_run:
         description: 'Dry run (no publish)'
@@ -38,6 +39,8 @@ jobs:
             filter: '@abbacchio/browser-transport'
           - name: tui
             filter: '@abbacchio/tui'
+          - name: sqlite-api
+            filter: '@abbacchio/sqlite-api'
 
     name: Publish ${{ matrix.package.name }}
 

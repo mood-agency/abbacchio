@@ -130,6 +130,16 @@ export interface GetLogIndexByTimeOptions {
 }
 
 /**
+ * Result of a SQL query execution
+ */
+export interface SqlQueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  executionTimeMs: number;
+}
+
+/**
  * Abstract interface for log database storage.
  * Implemented by browser (Web Worker + OPFS) and native (Tauri + SQLite file) backends.
  */
@@ -171,6 +181,9 @@ export interface LogDatabase {
 
   // Maintenance
   pruneOldLogs(options?: PruneOptions): Promise<void>;
+
+  // SQL
+  executeSql(sql: string, channel?: string): Promise<SqlQueryResult>;
 }
 
 /**

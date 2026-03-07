@@ -181,3 +181,10 @@ export async function pruneOldLogs(
 ): Promise<void> {
   return getLogDatabase().pruneOldLogs(options);
 }
+
+export async function executeSql(
+  sql: string,
+  channel?: string
+): Promise<import('./types').SqlQueryResult> {
+  return getLogDatabase().executeSql(sql, channel);
+}

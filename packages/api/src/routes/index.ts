@@ -1,29 +1,22 @@
 import { Hono } from 'hono';
-import { ingestLogs, clearLogs, getLogs, getChannels, generateKey, getStats } from './logs.handlers.js';
-import { getConnectionToken, refreshToken } from './centrifugo.handlers.js';
+import { getLogs, ingestLogs, clearLogs, getChannels, getStats, getMetrics, getTraces, executeSql } from './logs.handlers.js';
+import { ingestOtlpLogs, ingestOtlpMetrics, ingestOtlpTraces } from './otlp.handlers.js';
 
-const routes = new Hono();
+const router = new Hono();
 
-// Log ingestion
-routes.post('/logs', ingestLogs);
+// Standard API routes (under /api)
+router.post('/api/logs', ingestLogs);
+router.get('/api/logs', getLogs);
+router.delete('/api/logs', clearLogs);
+router.get('/api/channels', getChannels);
+router.get('/api/metrics', getMetrics);
+router.get('/api/traces', getTraces);
+router.get('/api/stats', getStats);
+router.post('/api/sql', executeSql);
 
-// Get buffered logs
-routes.get('/logs', getLogs);
+// OTLP Ingestion Routes (under /v1 per OpenTelemetry spec)
+router.post('/v1/logs', ingestOtlpLogs);
+router.post('/v1/metrics', ingestOtlpMetrics);
+router.post('/v1/traces', ingestOtlpTraces);
 
-// Clear logs
-routes.delete('/logs', clearLogs);
-
-// Get available channels
-routes.get('/channels', getChannels);
-
-// Generate encryption key
-routes.get('/generate-key', generateKey);
-
-// Server statistics
-routes.get('/stats', getStats);
-
-// Centrifugo token endpoints
-routes.get('/centrifugo/token', getConnectionToken);
-routes.post('/centrifugo/refresh', refreshToken);
-
-export default routes;
+export default router;

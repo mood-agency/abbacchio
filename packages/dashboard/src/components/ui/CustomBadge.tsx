@@ -13,7 +13,7 @@ export function LevelBadge({ level, highlight = false }: LevelBadgeProps) {
   return (
     <Badge
       variant="secondary"
-      className={`uppercase border-0 ${highlight ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
+      className={`uppercase border-0 px-1.5 py-0 text-[10px] leading-4 ${highlight ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
       style={{ backgroundColor: colors.bg, color: colors.text }}
     >
       {level}

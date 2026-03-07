@@ -1,55 +1,47 @@
 {
   "name": "@abbacchio/api",
-  "version": "0.1.4",
-  "description": "Abbacchio API - Real-time log viewer HTTP API with SSE streaming",
+  "version": "0.2.0",
+  "description": "Abbacchio API - Real-time log viewer HTTP API with SQLite persistence",
   "type": "module",
-  "main": "dist/server.js",
-  "types": "dist/server.d.ts",
+  "main": "src/server.ts",
+  "types": "src/server.ts",
   "exports": {
     ".": {
-      "types": "./dist/server.d.ts",
-      "default": "./dist/server.js"
+      "types": "./src/server.ts",
+      "default": "./src/server.ts"
     }
   },
   "bin": {
-    "abbacchio": "dist/server.js"
+    "abbacchio": "src/server.ts"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "dev": "bun --watch src/server.ts",
+    "build": "bun build src/server.ts --outdir dist --target bun",
+    "start": "bun src/server.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "keywords": [
     "logs",
     "logging",
     "dashboard",
     "real-time",
-    "sse",
     "viewer",
-    "server"
+    "server",
+    "sqlite",
+    "bun"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
     "dotenv": "^17.2.3",
     "hono": "^4.6.14",
-    "jsonwebtoken": "^9.0.3",
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^4.0.17",
-    "eventsource-parser": "^3.0.6",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vitest": "^4.0.17"
+    "@types/bun": "latest"
   },
   "engines": {
-    "node": ">=18"
+    "bun": ">=1.0"
   }
 }

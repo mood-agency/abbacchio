@@ -30,6 +30,37 @@ export interface LogEntry {
   wasEncrypted?: boolean;
 }
 
+export interface TraceSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  /** Start time in Unix Epoch milliseconds (converted from nanos at ingestion) */
+  startTimeMs: number;
+  /** End time in Unix Epoch milliseconds (converted from nanos at ingestion) */
+  endTimeMs: number;
+  channel: string;
+  attributes: Record<string, string | number | boolean>;
+  status?: {
+    code: number;
+    message?: string;
+  };
+}
+
+export interface MetricDataPoint {
+  name: string;
+  description?: string;
+  unit?: string;
+  type: 'Sum' | 'Gauge' | 'Histogram';
+  channel: string;
+  timeUnixNano: number;
+  value: number;
+  count?: number;
+  bucketCounts?: number[];
+  explicitBounds?: number[];
+  attributes: Record<string, string | number | boolean>;
+}
+
 export type FilterLevel = 'all' | LogLevelLabel;
 
 /** Array of selected log levels for multi-select filtering */
@@ -40,8 +71,12 @@ export type FilterNamespaces = string[];
 
 /** Time range options for filtering logs */
 export const TIME_RANGE_OPTIONS = {
+  '5m': 5 * 60 * 1000,
+  '10m': 10 * 60 * 1000,
+  '15m': 15 * 60 * 1000,
   '30m': 30 * 60 * 1000,
   '1h': 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
   '12h': 12 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
   '3d': 3 * 24 * 60 * 60 * 1000,

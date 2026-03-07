@@ -36,11 +36,7 @@ interface UseLogStreamResult {
   pageSize: PageSize;
   setPageSize: (size: PageSize) => void;
   totalPages: number;
-  /** Connection status */
-  isConnected: boolean;
-  isConnecting: boolean;
   clearLogs: () => void;
-  connectionError: string | null;
   secretKey: string;
   setSecretKey: (key: string) => void;
   hasEncryptedLogs: boolean;
@@ -64,9 +60,6 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
     clearLogs: clearStore,
     onNewLogs,
     onClear,
-    isConnected,
-    isConnecting,
-    connectionError,
     secretKey,
     setSecretKey,
     hasEncryptedLogs,
@@ -204,10 +197,7 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
     pageSize,
     setPageSize,
     totalPages,
-    isConnected,
-    isConnecting,
     clearLogs,
-    connectionError,
     secretKey,
     setSecretKey,
     hasEncryptedLogs,

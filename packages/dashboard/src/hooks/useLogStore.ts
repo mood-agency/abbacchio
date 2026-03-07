@@ -11,7 +11,6 @@ import {
   hasEncryptedLogs as checkHasEncryptedLogs,
   getLogsNeedingDecryption,
 } from '../lib/sqlite-db';
-import { isTauri } from '../lib/tauri-centrifugo';
 
 const LOG_LEVELS: Record<number, LogLevelLabel> = {
   10: 'trace',
@@ -33,10 +32,6 @@ export interface UseLogStoreResult {
   onNewLogs: (callback: (logs: LogEntry[]) => void) => () => void;
   /** Subscribe to clear notifications */
   onClear: (callback: () => void) => () => void;
-  /** Connection status */
-  isConnected: boolean;
-  isConnecting: boolean;
-  connectionError: string | null;
   /** Encryption */
   secretKey: string;
   setSecretKey: (key: string) => void;
@@ -47,6 +42,8 @@ export interface UseLogStoreResult {
   /** Persistence toggle */
   persistLogs: boolean;
   setPersistLogs: (persist: boolean) => void;
+  /** Queue logs for batched processing */
+  queueLogs: (logs: LogEntry[]) => void;
 }
 
 // Cache initial URL params (read once before React StrictMode double-invocation)
@@ -68,29 +65,9 @@ const initialUrlParams = (() => {
   return { channel, key };
 })();
 
-// Get Centrifugo WebSocket URL
-function getCentrifugoUrl(): string {
-  // In production, use the configured URL or derive from current host
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return import.meta.env.VITE_CENTRIFUGO_URL || `${wsProtocol}//${window.location.hostname}:8000/connection/websocket`;
-}
-
-// Fetch Centrifugo token from API
-async function fetchCentrifugoToken(): Promise<string> {
-  const response = await fetch('/api/centrifugo/token');
-  if (!response.ok) {
-    throw new Error('Failed to fetch Centrifugo token');
-  }
-  const data = await response.json();
-  return data.token;
-}
-
 export function useLogStore(): UseLogStoreResult {
   const [totalCount, setTotalCount] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(true);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
   // Secret key is kept in memory only - never persisted for security
   const [secretKey, setSecretKey] = useState(initialUrlParams.key);
   const [channels] = useState<string[]>(['default']);
@@ -98,9 +75,6 @@ export function useLogStore(): UseLogStoreResult {
   const [hasEncryptedLogs, setHasEncryptedLogs] = useState(false);
   const [persistLogs, setPersistLogs] = useState(true);
 
-  const workerRef = useRef<Worker | null>(null);
-  const reconnectTimeoutRef = useRef<number>();
-  const reconnectAttempts = useRef(0);
   const secretKeyRef = useRef(secretKey);
   const newLogsCallbacks = useRef<Set<(logs: LogEntry[]) => void>>(new Set());
   const clearCallbacks = useRef<Set<() => void>>(new Set());
@@ -295,170 +269,14 @@ export function useLogStore(): UseLogStoreResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secretKey]);
 
-  // Handle Centrifugo publication data
-  const handlePublication = useCallback(
-    async (data: unknown) => {
-      if (!data || typeof data !== 'object') return;
-
-      const publication = data as { type: string; data: LogEntry | LogEntry[] };
-
-      if (publication.type === 'log' && publication.data) {
-        const entry = publication.data as LogEntry;
-        const processed = await processEntry(entry);
-        queueLogs([processed]);
-      } else if (publication.type === 'batch' && Array.isArray(publication.data)) {
-        const entries = publication.data as LogEntry[];
-        const processed = await Promise.all(entries.map(processEntry));
-        queueLogs(processed);
-      }
-    },
-    [processEntry, queueLogs]
-  );
-
-  // Schedule reconnection with exponential backoff
-  const scheduleReconnect = useCallback(() => {
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-    reconnectAttempts.current++;
-    setConnectionError(`Connection lost. Reconnecting in ${delay / 1000}s...`);
-
-    reconnectTimeoutRef.current = window.setTimeout(() => {
-      // Will trigger reconnect via connect()
-      setIsConnecting(true);
-    }, delay);
-  }, []);
-
-  // Centrifugo Connection (Web Worker for browser, Tauri API for desktop)
-  const connect = useCallback(async () => {
-    setIsConnecting(true);
-    setConnectionError(null);
-
-    try {
-      const token = await fetchCentrifugoToken();
-      const centrifugoUrl = getCentrifugoUrl();
-      const channelName = urlChannel || 'default';
-
-      if (isTauri()) {
-        // Tauri: Use Rust backend for Centrifugo connection
-        const { connectCentrifugo, subscribeChannel, listenCentrifugoEvents } = await import('../lib/tauri-centrifugo');
-
-        // Listen for events
-        await listenCentrifugoEvents((event) => {
-          switch (event.type) {
-            case 'connected':
-              setIsConnected(true);
-              setIsConnecting(false);
-              setConnectionError(null);
-              reconnectAttempts.current = 0;
-              break;
-
-            case 'disconnected':
-              setIsConnected(false);
-              setIsConnecting(false);
-              scheduleReconnect();
-              break;
-
-            case 'error':
-              setConnectionError(event.error || 'Connection error');
-              break;
-
-            case 'publication':
-              if (event.data) {
-                handlePublication(event.data);
-              }
-              break;
-          }
-        });
-
-        await connectCentrifugo(centrifugoUrl, token);
-
-        // Subscribe to channel
-        await subscribeChannel('main', channelName);
-
-      } else {
-        // Browser: Use Web Worker for Centrifugo connection
-        const worker = new Worker(
-          new URL('../lib/centrifugo-worker.ts', import.meta.url),
-          { type: 'module' }
-        );
-        workerRef.current = worker;
-
-        worker.onmessage = (event) => {
-          const message = event.data;
-
-          switch (message.type) {
-            case 'connected':
-              setIsConnected(true);
-              setIsConnecting(false);
-              setConnectionError(null);
-              reconnectAttempts.current = 0;
-
-              // Subscribe to channel after connected
-              worker.postMessage({
-                type: 'subscribe',
-                channelId: 'main',
-                channelName,
-              });
-              break;
-
-            case 'disconnected':
-              setIsConnected(false);
-              setIsConnecting(false);
-              setConnectionError(`Disconnected: ${message.reason}`);
-              scheduleReconnect();
-              break;
-
-            case 'error':
-              setConnectionError(message.error);
-              break;
-
-            case 'publication':
-              handlePublication(message.data);
-              break;
-
-            case 'token-needed':
-              // Refresh token when needed
-              fetchCentrifugoToken()
-                .then((newToken) => {
-                  worker.postMessage({ type: 'refresh-token', token: newToken });
-                })
-                .catch((err) => {
-                  console.error('Failed to refresh token:', err);
-                });
-              break;
-          }
-        };
-
-        worker.postMessage({
-          type: 'connect',
-          url: centrifugoUrl,
-          token,
-        });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Connection failed';
-      setConnectionError(message);
-      setIsConnecting(false);
-      scheduleReconnect();
-    }
-  }, [urlChannel, handlePublication, scheduleReconnect]);
-
-  // Start connection on mount
+  // Cleanup on unmount
   useEffect(() => {
-    connect();
-
     return () => {
-      if (workerRef.current) {
-        workerRef.current.postMessage({ type: 'disconnect' });
-        workerRef.current.terminate();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
       if (flushTimeoutRef.current) {
         clearTimeout(flushTimeoutRef.current);
       }
     };
-  }, [connect]);
+  }, []);
 
   // Clear logs function
   const clearLogs = useCallback(async () => {
@@ -475,9 +293,6 @@ export function useLogStore(): UseLogStoreResult {
     clearLogs,
     onNewLogs,
     onClear,
-    isConnected,
-    isConnecting,
-    connectionError,
     secretKey,
     setSecretKey,
     hasEncryptedLogs,
@@ -485,5 +300,6 @@ export function useLogStore(): UseLogStoreResult {
     urlChannel,
     persistLogs,
     setPersistLogs,
+    queueLogs,
   };
 }

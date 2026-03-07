@@ -1,5 +1,5 @@
 /**
- * Auto-initialize console interception
+ * Auto-initialize console interception (OTLP native)
  *
  * Simply import this module to start capturing console output:
  *
@@ -7,7 +7,7 @@
  * ```typescript
  * import '@abbacchio/browser-transport/auto'
  *
- * // All console.log calls now go to Abbacchio
+ * // All console.log calls now go to Abbacchio via OTLP
  * console.log('This is captured!')
  * ```
  *
@@ -17,10 +17,9 @@
  * ```html
  * <script>
  *   window.__ABBACCHIO_CONFIG__ = {
- *     url: 'http://localhost:4000/api/logs',
- *     channel: 'my-app',
+ *     endpoint: 'http://localhost:4002',
+ *     serviceName: 'my-app',
  *     appName: 'my-web-app',
- *     secretKey: 'optional-encryption-key',
  *   }
  * </script>
  * <script type="module">
@@ -31,21 +30,18 @@
 
 import { interceptConsole, type ConsoleInterceptorOptions } from './console.js';
 
-// Extend Window interface for TypeScript
 declare global {
   interface Window {
     __ABBACCHIO_CONFIG__?: ConsoleInterceptorOptions;
   }
 }
 
-// Get configuration from global variable or use defaults
 const config: ConsoleInterceptorOptions =
   (typeof window !== 'undefined' && window.__ABBACCHIO_CONFIG__) || {};
 
-// Start intercepting with merged config
 interceptConsole({
-  url: 'http://localhost:4000/api/logs',
-  channel: 'browser',
+  endpoint: 'http://localhost:4002',
+  serviceName: 'browser',
   appName: 'auto',
   ...config,
 });

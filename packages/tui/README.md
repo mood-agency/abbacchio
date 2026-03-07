@@ -1,6 +1,6 @@
 # @abbacchio/tui
 
-Terminal user interface for the Abbacchio real-time log viewer. Connects to Centrifugo via WebSocket (same as Dashboard) and displays logs in the terminal with colors, filtering, and keyboard navigation.
+Terminal user interface for the Abbacchio real-time log viewer. Connects to the API via HTTP polling and displays logs in the terminal with colors, filtering, and keyboard navigation.
 
 ## Installation
 
@@ -136,7 +136,7 @@ src/
 │   ├── HelpOverlay.tsx   # Full help screen
 │   └── ChannelSelector.tsx # Channel/key management UI
 ├── hooks/
-│   ├── useCentrifugo.ts  # Centrifugo WebSocket connection
+│   ├── usePolling.ts     # HTTP polling connection
 │   ├── useLogStore.ts    # Log state and filtering
 │   ├── useKeyBindings.ts # Keyboard input
 │   └── useChannelConfig.ts # Channel config persistence
@@ -153,8 +153,6 @@ src/
 - **ink** - React for CLI
 - **react** - UI framework
 - **meow** - CLI argument parsing
-- **centrifuge** - Centrifugo client for WebSocket
-- **ws** - WebSocket implementation for Node.js
 - **chalk** - Terminal colors
 - **ink-text-input** - Text input component
 - **ink-select-input** - Select/dropdown component
@@ -162,13 +160,10 @@ src/
 ## Connection Flow
 
 ```
-1. TUI fetches token from API: GET /api/centrifugo/token
-2. TUI connects directly to Centrifugo: ws://localhost:8000/connection/websocket
-3. TUI subscribes to channel: logs:{channelName}
-4. Logs are received in real-time via WebSocket
+1. TUI polls API: GET /api/logs?channel=X&afterId=Y
+2. New logs are fetched every 1 second
+3. Logs are displayed in real-time in the terminal
 ```
-
-This is the same connection flow used by the Dashboard and Tauri app.
 
 ## Data Storage
 

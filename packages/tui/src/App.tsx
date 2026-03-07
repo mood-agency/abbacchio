@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Box, useApp } from 'ink';
 import type { CLIOptions } from './types/index.js';
 import { useLogStore } from './hooks/useLogStore.js';
-import { useCentrifugo } from './hooks/useCentrifugo.js';
+import { usePolling } from './hooks/usePolling.js';
 import { useKeyBindings } from './hooks/useKeyBindings.js';
 import { useChannelConfig } from './hooks/useChannelConfig.js';
 import { Header } from './components/Header.js';
@@ -46,7 +46,7 @@ export function App({ options }: AppProps): React.ReactElement {
 
   const store = useLogStore(encryptionKey);
 
-  const { status } = useCentrifugo({
+  const { status } = usePolling({
     apiUrl: options.apiUrl,
     channel: currentChannel,
     onLog: store.addLog,

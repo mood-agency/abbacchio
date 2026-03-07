@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Abbacchio Dashboard** is the React frontend for the Abbacchio real-time log viewer. It connects to the API via Server-Sent Events (SSE), displays logs with filtering/search, and optionally persists logs in browser SQLite.
+**Abbacchio Dashboard** is the React frontend for the Abbacchio real-time log viewer. It connects to the API via HTTP polling, displays logs with filtering/search, and optionally persists logs in browser SQLite.
 
 ## Monorepo Structure
 
 This package is part of a pnpm workspace:
 - `packages/dashboard` - React frontend (Vite + Tailwind) - **you are here**
-- `packages/api` - Backend server (Hono framework)
+- `packages/api` - Backend server (Hono framework, Bun runtime)
 - `packages/transport` - Client libraries for loggers (Pino, Winston, Bunyan, Console)
 
 ## Common Commands
@@ -30,22 +30,23 @@ npm run preview       # Preview production build
 
 ### Key Design Decisions
 
-1. **Browser SQLite for Persistence**: Logs are stored in SQLite (sql.js) running in a Web Worker. All queries happen off-main-thread via `sqlite-worker.ts`.
+1. **Browser SQLite for Local Persistence**: Logs are stored in SQLite (sql.js) running in a Web Worker. All queries happen off-main-thread via `sqlite-worker.ts`.
 
 2. **Two-Hook Pattern**:
-   - `useLogStore` manages SSE connection, encryption, and SQLite writes
-   - `useLogStream` handles pagination, filtering, and search queries
+   - `useChannelManager` manages HTTP polling, encryption, and channel state
+   - `useLogStore` handles log processing, batching, and SQLite writes
 
 3. **Client-Side Decryption**: Server passes encrypted payloads through unchanged. Decryption uses AES-256-GCM with user-provided key (`crypto.ts`).
 
-4. **Batched Writes**: Incoming SSE logs are batched (100ms interval) before SQLite insertion to reduce write overhead.
+4. **Batched Writes**: Incoming logs are batched (100ms interval) before SQLite insertion to reduce write overhead.
 
 ### Core Files
 
 | File | Purpose |
 |------|---------|
-| `src/hooks/useLogStore.ts` | SSE connection, encryption, SQLite persistence, batching |
-| `src/hooks/useLogStream.ts` | Pagination, filtering, search - consumes useLogStore |
+| `src/hooks/useChannelManager.ts` | HTTP polling, channel management, encryption |
+| `src/hooks/useLogStore.ts` | Log processing, batching, SQLite persistence |
+| `src/hooks/useChannelLogStream.ts` | Pagination, filtering, search |
 | `src/lib/sqlite-db.ts` | Worker message interface for SQLite operations |
 | `src/lib/sqlite-worker.ts` | Web Worker running sql.js with OPFS persistence |
 | `src/lib/crypto.ts` | AES-256-GCM decryption using Web Crypto API |
@@ -56,11 +57,13 @@ npm run preview       # Preview production build
 ### Data Flow
 
 ```
-SSE /api/logs/stream
+HTTP polling /api/logs?afterId=X
     ↓
-useLogStore (decrypt → batch → SQLite write)
+useChannelManager (poll → decrypt → batch)
     ↓
-useLogStream (SQL query with filters)
+useLogStore (process → SQLite write)
+    ↓
+useChannelLogStream (SQL query with filters)
     ↓
 LogViewer → LogRow (virtual scrolling via @tanstack/react-virtual)
 ```
@@ -76,7 +79,7 @@ The dashboard accepts query parameters for pre-configuration:
 TypeScript is configured with `@/*` → `src/*` for imports:
 ```typescript
 import { LogEntry } from '@/types';
-import { useLogStream } from '@/hooks/useLogStream';
+import { useChannelLogStream } from '@/hooks/useChannelLogStream';
 ```
 
 ## Key Technologies

@@ -46,29 +46,32 @@ Ingest logs (single or batch).
 { "received": 2, "channel": "my-app" }
 ```
 
-## GET /api/logs/stream
-
-SSE endpoint for real-time logs.
-
-**Query params:**
-
-- `channel` - Filter by specific channel (required)
-
-**Events:**
-
-- `batch` - Initial batch of buffered logs
-- `log` - New log entry
-- `channels` - List of available channels
-- `channel:added` - New channel detected
-- `ping` - Keep-alive (every 15s)
-
 ## GET /api/logs
 
-Get all buffered logs.
+Get buffered logs, with optional polling support.
 
 **Query params:**
 
 - `channel` - Filter by specific channel (optional)
+- `afterId` - Return only logs after this ID (for incremental polling)
+
+**Response:**
+
+```json
+{
+  "logs": [
+    {
+      "id": "abc123",
+      "level": 30,
+      "levelLabel": "info",
+      "time": 1705420800000,
+      "msg": "Request completed",
+      "channel": "my-app",
+      "data": {}
+    }
+  ]
+}
+```
 
 ## DELETE /api/logs
 
@@ -86,6 +89,27 @@ Get list of available channels.
 
 ```json
 { "channels": ["default", "api-server", "worker"] }
+```
+
+## POST /api/sql
+
+Execute SQL queries against stored logs.
+
+**Body:**
+
+```json
+{ "query": "SELECT * FROM logs WHERE level >= 50 LIMIT 10" }
+```
+
+**Response:**
+
+```json
+{
+  "columns": ["id", "level", "msg", "channel", "time"],
+  "rows": [...],
+  "rowCount": 10,
+  "executionTimeMs": 5
+}
 ```
 
 ## GET /api/generate-key

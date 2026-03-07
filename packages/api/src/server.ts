@@ -1,6 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import 'dotenv/config';
-import { serve, type ServerType } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -11,7 +10,10 @@ import routes from './routes/index.js';
 import { createRateLimiterMiddleware, resetRateLimiter } from './middleware/rate-limiter.js';
 import { createValidatorMiddleware } from './middleware/validator.js';
 import { resetLogBuffer, getLogBuffer } from './lib/log-buffer.js';
+import { resetMetricBuffer } from './lib/metric-buffer.js';
+import { resetTraceBuffer } from './lib/trace-buffer.js';
 import { resetIdPool } from './lib/id-pool.js';
+import { getDatabase, resetDatabase } from './lib/database.js';
 
 // Configuration from environment
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -22,8 +24,8 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || (IS_DEV ? '*' : 'http://localhost
 const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT !== 'false';
 // SECURITY: Trust proxy headers only when explicitly enabled
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
-// SECURITY: Require API key in production (warn in dev)
-const REQUIRE_API_KEY = process.env.REQUIRE_API_KEY === 'true' || !IS_DEV;
+// Authentication is disabled by default. Set API_KEY to enable it.
+const REQUIRE_API_KEY = process.env.REQUIRE_API_KEY === 'true';
 
 // Graceful shutdown configuration
 const SHUTDOWN_TIMEOUT = parseInt(process.env.SHUTDOWN_TIMEOUT || '30000', 10);
@@ -38,34 +40,25 @@ app.use('*', logger());
 // Rate limiting middleware (optional, enabled by default)
 if (ENABLE_RATE_LIMIT) {
   app.use('/api/*', createRateLimiterMiddleware());
+  app.use('/v1/*', createRateLimiterMiddleware());
 }
 
-// Input validation middleware for log ingestion
+// Input validation middleware for standard log ingestion (not OTLP)
 app.use('/api/logs', createValidatorMiddleware());
 
-// SECURITY: API key authentication
-// In production, API_KEY is required for all endpoints
-// In development, API_KEY is optional but recommended
-if (REQUIRE_API_KEY && !API_KEY) {
-  console.warn('\n⚠️  WARNING: API_KEY is not set. Set API_KEY environment variable for production use.\n');
-}
-
+// API key authentication (opt-in: set API_KEY env var to enable)
 if (API_KEY) {
-  app.use('/api/*', async (c, next) => {
+  const authMiddleware = async (c: any, next: any) => {
     const key = c.req.header('X-API-KEY') || c.req.query('apiKey');
-
-    // SECURITY: All endpoints require authentication when API_KEY is set
-    // No more bypass for SSE streams - all connections must be authenticated
     if (key !== API_KEY) {
       return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
     }
     return next();
-  });
+  };
+  app.use('/api/*', authMiddleware);
+  app.use('/v1/*', authMiddleware);
 } else if (REQUIRE_API_KEY) {
-  // Block all API requests if API_KEY is required but not set
-  app.use('/api/*', async (c) => {
-    return c.json({ error: 'Service Unavailable', message: 'API key not configured on server' }, 503);
-  });
+  console.warn('\n⚠️  WARNING: REQUIRE_API_KEY is set but API_KEY is not configured.\n');
 }
 
 // SECURITY: Add security headers to all responses
@@ -95,8 +88,9 @@ app.use('*', async (c, next) => {
   }
 });
 
-// API routes
-app.route('/api', routes);
+// Main standard and OTLP REST routes under the same router instance
+// The index routes define /api/, /v1/logs, /v1/traces, /v1/metrics
+app.route('/', routes);
 
 // Health check with detailed status
 app.get('/health', (c) => {
@@ -121,30 +115,14 @@ if (shouldServeDashboard) {
     const filePath = join(dashboardPath, path);
 
     if (existsSync(filePath)) {
-      const { readFile } = await import('fs/promises');
-      const content = await readFile(filePath);
-
-      // Set content type based on extension
-      const ext = path.split('.').pop()?.toLowerCase();
-      const contentTypes: Record<string, string> = {
-        'html': 'text/html',
-        'css': 'text/css',
-        'js': 'application/javascript',
-        'json': 'application/json',
-        'svg': 'image/svg+xml',
-        'png': 'image/png',
-        'ico': 'image/x-icon',
-      };
-      const contentType = contentTypes[ext || ''] || 'application/octet-stream';
-
-      return c.body(content, 200, { 'Content-Type': contentType });
+      const file = Bun.file(filePath);
+      return new Response(file);
     }
 
     // SPA fallback - serve index.html for non-file routes
     if (!path.includes('.')) {
-      const { readFile } = await import('fs/promises');
-      const content = await readFile(join(dashboardPath, 'index.html'));
-      return c.body(content, 200, { 'Content-Type': 'text/html' });
+      const file = Bun.file(join(dashboardPath, 'index.html'));
+      return new Response(file);
     }
 
     return next();
@@ -166,11 +144,17 @@ if (shouldServeDashboard) {
           ${devMessage}
           <h2>API Endpoints</h2>
           <ul>
-            <li><code>POST /api/logs</code> - Ingest logs</li>
+            <li><code>POST /api/logs</code> - Ingest standard logs</li>
+            <li><code>POST /v1/logs</code> - Ingest OTLP JSON logs</li>
+            <li><code>POST /v1/metrics</code> - Ingest OTLP JSON metrics</li>
+            <li><code>POST /v1/traces</code> - Ingest OTLP JSON traces</li>
             <li><code>GET /api/logs</code> - Get buffered logs</li>
             <li><code>DELETE /api/logs</code> - Clear logs</li>
+            <li><code>GET /api/metrics</code> - Get buffered metrics</li>
+            <li><code>GET /api/traces</code> - Get buffered traces</li>
+            <li><code>GET /api/channels</code> - List channels</li>
             <li><code>GET /api/stats</code> - Server statistics</li>
-            <li><code>GET /api/centrifugo/token</code> - Get Centrifugo connection token</li>
+            <li><code>POST /api/sql</code> - Execute SQL queries</li>
           </ul>
           <h2>Test</h2>
           <pre>curl -X POST http://localhost:${PORT}/api/logs \\
@@ -182,8 +166,10 @@ if (shouldServeDashboard) {
   });
 }
 
-// Server instance for graceful shutdown
-let server: ServerType | null = null;
+// Initialize database eagerly
+getDatabase();
+
+// Server state for graceful shutdown
 let isShuttingDown = false;
 
 /**
@@ -206,19 +192,15 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
   try {
     // Close the HTTP server to stop accepting new connections
-    if (server) {
-      await new Promise<void>((resolve, reject) => {
-        server!.close((err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      console.log('HTTP server closed');
-    }
+    server.stop();
+    console.log('HTTP server closed');
 
     // Clean up resources
     resetRateLimiter();
+    resetDatabase();
     resetLogBuffer();
+    resetMetricBuffer();
+    resetTraceBuffer();
     resetIdPool();
 
     clearTimeout(shutdownTimer);
@@ -246,19 +228,21 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Start server
+const dbPath = process.env.SQLITE_PATH || './data/logs.db';
 const dashboardUrl = IS_DEV ? 'http://localhost:4001' : `http://localhost:${PORT}`;
 console.log(`
   ╔═══════════════════════════════════════════╗
   ║                                           ║
   ║   Abbacchio${IS_DEV ? ' (dev)' : ''}                          ║
-  ║   Real-time log viewer                    ║
+  ║   Bun + SQLite                            ║
   ║                                           ║
   ║   API:       http://localhost:${PORT}/api/logs  ║
+  ║   DB:        ${dbPath.padEnd(28)}║
   ║                                           ║
   ╚═══════════════════════════════════════════╝
 `);
 
-server = serve({
+const server = Bun.serve({
   fetch: app.fetch,
   port: PORT,
 });

@@ -19,8 +19,12 @@
     "clear": "Limpiar selección"
   },
   "timeRange": {
+    "5m": "Últimos 5 minutos",
+    "10m": "Últimos 10 minutos",
+    "15m": "Últimos 15 minutos",
     "30m": "Últimos 30 minutos",
     "1h": "Última hora",
+    "6h": "Últimas 6 horas",
     "12h": "Últimas 12 horas",
     "1d": "Último día",
     "3d": "Últimos 3 días",

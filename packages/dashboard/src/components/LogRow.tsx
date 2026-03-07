@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lock, AlertTriangle, Check, ShieldCheck, ShieldOff, ShieldAlert, Copy } from 'lucide-react';
+import { Lock, AlertTriangle, Check, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LogRowProps {
@@ -160,8 +160,65 @@ function highlightText(text: string, query: string, caseSensitive = false, useRe
   return result;
 }
 
+// JSON color CSS classes (theme-aware via CSS custom properties)
+const jsonColorClasses = {
+  key: 'text-json-key',
+  string: 'text-json-string',
+  number: 'text-json-number',
+  boolean: 'text-json-boolean',
+  null: 'text-json-null',
+  bracket: 'text-json-bracket',
+};
+
+/**
+ * Syntax-highlight a JSON string using theme-aware CSS classes
+ */
+function syntaxHighlightJson(jsonString: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let ki = 0;
+  let m: RegExpExecArray | null;
+
+  // Combined regex for all tokens
+  const allTokens = /("(?:\\.|[^"\\])*")(\s*:)?|(\b(?:true|false)\b)|(null)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+  while ((m = allTokens.exec(jsonString)) !== null) {
+    // Add plain text before this token
+    if (m.index > lastIndex) {
+      parts.push(jsonString.slice(lastIndex, m.index));
+    }
+
+    if (m[1] && m[2]) {
+      // Key: string followed by colon
+      parts.push(<span key={ki++} className={jsonColorClasses.key}>{m[1]}</span>);
+      parts.push(m[2]);
+    } else if (m[1]) {
+      // String value
+      parts.push(<span key={ki++} className={jsonColorClasses.string}>{m[1]}</span>);
+    } else if (m[3]) {
+      // Boolean
+      parts.push(<span key={ki++} className={jsonColorClasses.boolean}>{m[3]}</span>);
+    } else if (m[4]) {
+      // Null
+      parts.push(<span key={ki++} className={jsonColorClasses.null}>{m[4]}</span>);
+    } else if (m[5]) {
+      // Number
+      parts.push(<span key={ki++} className={jsonColorClasses.number}>{m[5]}</span>);
+    }
+
+    lastIndex = m.index + m[0].length;
+  }
+
+  // Remaining text (closing braces, etc.)
+  if (lastIndex < jsonString.length) {
+    parts.push(jsonString.slice(lastIndex));
+  }
+
+  return parts;
+}
+
 /**
  * Highlight search in data (receives pre-computed dataString to avoid JSON.stringify on each render)
+ * When no search query, applies JSON syntax highlighting
  */
 function highlightData(
   dataString: string,
@@ -169,9 +226,9 @@ function highlightData(
   caseSensitive = false,
   useRegex = false
 ): React.ReactNode {
-  // Fast path: no query
+  // No query: apply syntax highlighting
   if (!query) {
-    return dataString;
+    return syntaxHighlightJson(dataString);
   }
 
   if (!useRegex) {
@@ -179,7 +236,7 @@ function highlightData(
     const dataToCheck = caseSensitive ? dataString : dataString.toLowerCase();
     const queryToCheck = caseSensitive ? query : query.toLowerCase();
     if (!dataToCheck.includes(queryToCheck)) {
-      return dataString;
+      return syntaxHighlightJson(dataString);
     }
   }
 
@@ -201,9 +258,6 @@ export const LogRow = memo(function LogRow({
   const showData = hasData(log.data);
   const isEncrypted = log.encrypted && !log.decryptionFailed;
   const decryptionFailed = log.decryptionFailed;
-  // Check if message was originally sent encrypted (persists after decryption)
-  const wasSentEncrypted = log.wasEncrypted === true;
-
   // Cache the JSON stringified data to avoid recalculating on each render
   const dataString = useMemo(() => JSON.stringify(log.data), [log.data]);
 
@@ -214,7 +268,7 @@ export const LogRow = memo(function LogRow({
   );
 
   const highlightedData = useMemo(
-    () => searchQuery ? highlightData(dataString, searchQuery, caseSensitive, useRegex) : dataString,
+    () => highlightData(dataString, searchQuery, caseSensitive, useRegex),
     [dataString, searchQuery, caseSensitive, useRegex]
   );
 
@@ -268,7 +322,7 @@ export const LogRow = memo(function LogRow({
       <div className="flex items-center text-sm">
         {/* Selection area */}
         <div
-          className="w-10 flex-shrink-0 flex items-center justify-center py-2 cursor-pointer hover:bg-muted/80 border-r border-border"
+          className="w-10 flex-shrink-0 flex items-center justify-center py-1 cursor-pointer hover:bg-muted/80 border-r border-border"
           onClick={handleSelectionClick}
         >
           <div className={`w-4 h-4 rounded border ${isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/50'} flex items-center justify-center transition-colors`}>
@@ -278,7 +332,7 @@ export const LogRow = memo(function LogRow({
 
         {/* Clickable row content */}
         <div
-          className="flex-1 flex items-center gap-3 px-4 py-2 cursor-pointer"
+          className="flex-1 flex items-center gap-3 px-4 py-1 cursor-pointer"
           onClick={handleRowClick}
         >
           {/* Date/Time */}
@@ -287,24 +341,6 @@ export const LogRow = memo(function LogRow({
               {formatDateTime(log.time)}
             </span>
           </CopyableCell>
-
-          {/* Encryption status icon */}
-          <div className="w-5 flex-shrink-0 flex items-center justify-center">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {decryptionFailed ? (
-                  <ShieldAlert className="w-4 h-4 text-yellow-500" />
-                ) : wasSentEncrypted ? (
-                  <ShieldCheck className="w-4 h-4 text-green-500" />
-                ) : (
-                  <ShieldOff className="w-4 h-4 text-destructive" />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                {decryptionFailed ? t('encryption.decryptionFailed') : wasSentEncrypted ? t('encryption.encryptedAtSource') : t('encryption.notEncrypted')}
-              </TooltipContent>
-            </Tooltip>
-          </div>
 
           {/* Level - show lock icon for encrypted logs since actual level is unknown */}
           <div className="w-16 flex-shrink-0">
@@ -354,7 +390,7 @@ export const LogRow = memo(function LogRow({
           </div>
 
           {/* Message */}
-          <div className="w-48 flex-shrink-0 text-foreground font-mono text-xs min-w-0">
+          <div className="w-96 flex-shrink-0 text-foreground font-mono text-xs min-w-0">
             {isEncrypted && (
               <Tooltip>
                 <TooltipTrigger asChild>

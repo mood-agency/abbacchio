@@ -1,4 +1,4 @@
-import { forwardRef, memo, useState } from 'react';
+import { forwardRef, memo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -30,7 +30,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Search, X, CaseSensitive, Pause, Play, Copy, Save, Filter, Trash2, Regex } from 'lucide-react';
+import { Search, X, CaseSensitive, Pause, Play, Copy, Save, Filter, Trash2, Regex, Database } from 'lucide-react';
 import type { FilterLevels, FilterNamespaces, TimeRange } from '../types';
 import type { SavedFilter } from '../hooks/useSavedFilters';
 
@@ -59,6 +59,9 @@ interface FilterBarProps {
   onSaveFilter?: () => void;
   onLoadFilter?: (filter: SavedFilter) => void;
   onDeleteFilter?: (filterId: string) => void;
+  // SQL mode
+  sqlMode?: boolean;
+  onToggleSqlMode?: () => void;
 }
 
 export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar({
@@ -83,12 +86,39 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
   onSaveFilter,
   onLoadFilter,
   onDeleteFilter,
+  sqlMode,
+  onToggleSqlMode,
 }, ref) {
   const { t } = useTranslation('filters');
   const { t: tCommon } = useTranslation('common');
   const [savedFiltersOpen, setSavedFiltersOpen] = useState(false);
   const [deleteConfirmFilter, setDeleteConfirmFilter] = useState<SavedFilter | null>(null);
   const hasFilters = namespaceFilters.length > 0 || searchQuery !== '' || caseSensitive || useRegex || levelFilters.length > 0 || timeRange !== 'all';
+
+  // Local state for search input to prevent character loss from URL param sync
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Sync external changes (e.g. clearing filters, loading saved filter) to local state
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Debounce URL param updates
+  const handleSearchChange = (value: string) => {
+    setLocalSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value);
+    }, 200);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-background relative z-10">
@@ -110,19 +140,36 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
       {/* Divider */}
       <div className="h-6 w-px bg-border" />
 
-      {/* Search */}
-      <div className="relative max-w-md flex items-center gap-1">
+      {/* SQL mode toggle */}
+      {onToggleSqlMode && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-9 w-9 ${sqlMode ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+              onClick={onToggleSqlMode}
+            >
+              <Database className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{sqlMode ? 'Switch to search' : 'Switch to SQL'}</TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Search - hidden in SQL mode since SqlQueryPanel has its own textarea */}
+      <div className={`relative flex items-center gap-1 max-w-3xl flex-1 transition-all ${sqlMode ? 'hidden' : ''}`}>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             ref={ref}
             type="text"
             placeholder={t('search.placeholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={localSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9 pr-3 h-9"
           />
-          {searchQuery && matchCount !== undefined && (
+          {localSearch && matchCount !== undefined && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
               {t('search.match', { count: matchCount })}
             </span>

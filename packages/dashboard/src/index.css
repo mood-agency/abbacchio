@@ -32,25 +32,11 @@ body {
   background: hsl(var(--foreground) / 0.5);
 }
 
-/* JSON syntax highlighting */
-.json-key {
+/* JSON syntax highlighting - unused legacy classes kept for reference */
+
+/* SQL editor overlay */
+.sql-editor-backdrop {
   color: hsl(var(--foreground));
-}
-
-.json-string {
-  color: hsl(var(--muted-foreground));
-}
-
-.json-number {
-  color: hsl(var(--foreground) / 0.8);
-}
-
-.json-boolean {
-  color: hsl(var(--muted-foreground));
-}
-
-.json-null {
-  color: hsl(var(--muted-foreground) / 0.7);
 }
 
 /* Search highlight */
@@ -102,6 +88,22 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+    /* JSON syntax highlighting - light mode */
+    --json-key: 240 60% 45%;
+    --json-string: 22 80% 42%;
+    --json-number: 160 65% 32%;
+    --json-boolean: 340 70% 45%;
+    --json-null: 340 70% 45%;
+    --json-bracket: 0 0% 40%;
+    --json-punctuation: 0 0% 40%;
+    --json-muted: 0 0% 50%;
+    /* SQL syntax highlighting - light mode */
+    --sql-keyword: 240 60% 45%;
+    --sql-function: 280 55% 50%;
+    --sql-string: 22 80% 42%;
+    --sql-number: 160 65% 32%;
+    --sql-operator: 0 0% 35%;
+    --sql-comment: 0 0% 55%;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -128,6 +130,22 @@ body {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+    /* JSON syntax highlighting - dark mode */
+    --json-key: 170 65% 68%;
+    --json-string: 90 60% 63%;
+    --json-number: 15 85% 70%;
+    --json-boolean: 350 100% 67%;
+    --json-null: 350 100% 67%;
+    --json-bracket: 270 60% 75%;
+    --json-punctuation: 270 60% 75%;
+    --json-muted: 180 10% 47%;
+    /* SQL syntax highlighting - dark mode */
+    --sql-keyword: 210 80% 70%;
+    --sql-function: 45 80% 65%;
+    --sql-string: 90 60% 63%;
+    --sql-number: 15 85% 70%;
+    --sql-operator: 0 0% 70%;
+    --sql-comment: 0 0% 50%;
   }
 }
 

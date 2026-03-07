@@ -24,6 +24,8 @@ export interface IncomingLog {
   namespace?: string;
   name?: string; // Alternative to namespace (child logger)
   channel?: string; // Optional per-log channel override
+  traceId?: string; // OTLP correlation
+  spanId?: string; // OTLP correlation
   [key: string]: unknown;
 }
 
@@ -52,6 +54,9 @@ export interface LogEntry {
   /** Channel/app identifier for multi-app support */
   channel: string;
   data: Record<string, unknown>;
+  /** OTLP correlation fields */
+  traceId?: string;
+  spanId?: string;
   /** If true, the log is encrypted and needs client-side decryption */
   encrypted?: boolean;
   /** The encrypted payload (only present if encrypted=true) */
@@ -76,9 +81,49 @@ export interface ServerConfig {
 }
 
 /**
- * SSE event types
+ * Internal Trace Span representation
  */
-export type SSEEventType = 'log' | 'batch' | 'ping' | 'channels' | 'channel:added';
+export interface TraceSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  /** Start time in Unix Epoch milliseconds (converted from nanos at ingestion) */
+  startTimeMs: number;
+  /** End time in Unix Epoch milliseconds (converted from nanos at ingestion) */
+  endTimeMs: number;
+  /** Channel/app identifier */
+  channel: string;
+  attributes: Record<string, string | number | boolean>;
+  status?: {
+    code: number; // 0 = UNSET, 1 = OK, 2 = ERROR
+    message?: string;
+  };
+}
+
+/**
+ * Internal Metric representation (Counter or Gauge)
+ */
+export interface MetricDataPoint {
+  name: string;
+  description?: string;
+  unit?: string;
+  type: 'Sum' | 'Gauge' | 'Histogram';
+  /** Channel/app identifier */
+  channel: string;
+  /** Time of recording in Unix Epoch microseconds */
+  timeUnixNano: number;
+  value: number;
+  count?: number;
+  bucketCounts?: number[];
+  explicitBounds?: number[];
+  attributes: Record<string, string | number | boolean>;
+}
+
+/**
+ * API event types
+ */
+export type APIEventType = 'log' | 'batch' | 'ping' | 'channels' | 'channel:added' | 'metric' | 'trace';
 
 /**
  * Server statistics response

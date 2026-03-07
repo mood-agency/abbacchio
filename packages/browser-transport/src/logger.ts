@@ -1,14 +1,12 @@
 /**
- * Logger class for Abbacchio
+ * Logger class for Abbacchio (OTLP native)
  * Provides a structured logging API similar to Pino
  */
 
-import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry } from './client.js';
+import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry, type MetricRecord } from './client.js';
 
 export interface LoggerOptions extends AbbacchioClientOptions {
-  /** Logger namespace. Takes precedence over `name` */
-  namespace?: string;
-  /** @deprecated Use `namespace` instead. Logger name (used as namespace). Defaults to 'app' */
+  /** Logger name (used as namespace attribute). Defaults to 'app' */
   name?: string;
   /** Minimum log level. Defaults to 'debug' (20) */
   level?: number | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
@@ -16,7 +14,6 @@ export interface LoggerOptions extends AbbacchioClientOptions {
   includeUrl?: boolean;
 }
 
-// Log level numbers (Pino compatible)
 export const LOG_LEVELS = {
   trace: 10,
   debug: 20,
@@ -29,39 +26,32 @@ export const LOG_LEVELS = {
 type LogLevel = keyof typeof LOG_LEVELS;
 
 /**
- * Browser logger for Abbacchio
- * Provides structured logging with automatic batching and optional encryption
+ * Browser logger for Abbacchio (OTLP native)
  */
 export class Logger {
   private client: AbbacchioClient;
-  private loggerNamespace: string;
+  private loggerName: string;
   private minLevel: number;
   private includeUrl: boolean;
   private bindings: Record<string, unknown> = {};
 
   constructor(options: LoggerOptions = {}) {
     this.client = new AbbacchioClient(options);
-    this.loggerNamespace = options.namespace || options.name || 'app';
+    this.loggerName = options.name || 'app';
     this.minLevel = this.parseLevel(options.level || 'debug');
     this.includeUrl = options.includeUrl ?? false;
   }
 
-  /**
-   * Parse level string or number to numeric level
-   */
   private parseLevel(level: number | LogLevel): number {
     if (typeof level === 'number') return level;
     return LOG_LEVELS[level] ?? LOG_LEVELS.info;
   }
 
-  /**
-   * Create a log entry
-   */
   private createEntry(level: number, msg: string, data?: Record<string, unknown>): LogEntry {
     const entry: LogEntry = {
       level,
       time: Date.now(),
-      namespace: this.loggerNamespace,
+      name: this.loggerName,
       msg,
       ...this.bindings,
       ...data,
@@ -74,19 +64,12 @@ export class Logger {
     return entry;
   }
 
-  /**
-   * Internal log method
-   */
   private log(level: number, msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     if (level < this.minLevel) return;
 
     let msg: string;
     let data: Record<string, unknown> | undefined;
 
-    // Handle different call signatures:
-    // log(level, 'message')
-    // log(level, 'message', { data })
-    // log(level, { data }, 'message')
     if (typeof msgOrData === 'string') {
       msg = msgOrData;
       data = typeof dataOrMsg === 'object' ? dataOrMsg : undefined;
@@ -99,94 +82,87 @@ export class Logger {
     this.client.add(entry);
   }
 
-  /**
-   * Log at trace level (10)
-   */
   trace(msg: string, data?: Record<string, unknown>): void;
   trace(data: Record<string, unknown>, msg?: string): void;
   trace(msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     this.log(LOG_LEVELS.trace, msgOrData, dataOrMsg);
   }
 
-  /**
-   * Log at debug level (20)
-   */
   debug(msg: string, data?: Record<string, unknown>): void;
   debug(data: Record<string, unknown>, msg?: string): void;
   debug(msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     this.log(LOG_LEVELS.debug, msgOrData, dataOrMsg);
   }
 
-  /**
-   * Log at info level (30)
-   */
   info(msg: string, data?: Record<string, unknown>): void;
   info(data: Record<string, unknown>, msg?: string): void;
   info(msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     this.log(LOG_LEVELS.info, msgOrData, dataOrMsg);
   }
 
-  /**
-   * Log at warn level (40)
-   */
   warn(msg: string, data?: Record<string, unknown>): void;
   warn(data: Record<string, unknown>, msg?: string): void;
   warn(msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     this.log(LOG_LEVELS.warn, msgOrData, dataOrMsg);
   }
 
-  /**
-   * Log at error level (50)
-   */
   error(msg: string, data?: Record<string, unknown>): void;
   error(data: Record<string, unknown>, msg?: string): void;
   error(msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     this.log(LOG_LEVELS.error, msgOrData, dataOrMsg);
   }
 
-  /**
-   * Log at fatal level (60)
-   */
   fatal(msg: string, data?: Record<string, unknown>): void;
   fatal(data: Record<string, unknown>, msg?: string): void;
   fatal(msgOrData: string | Record<string, unknown>, dataOrMsg?: string | Record<string, unknown>): void {
     this.log(LOG_LEVELS.fatal, msgOrData, dataOrMsg);
   }
 
-  /**
-   * Create a child logger with additional bindings
-   */
+  metric(record: MetricRecord): void {
+    this.client.addMetric(record);
+  }
+
+  startSpan(name: string, attrs?: Record<string, string>): { end: (status?: 'OK' | 'ERROR') => void } {
+    const traceId = crypto.randomUUID().replace(/-/g, '');
+    const spanId = traceId.slice(0, 16);
+    const startNano = BigInt(Date.now()) * 1_000_000n;
+
+    return {
+      end: (status: 'OK' | 'ERROR' = 'OK') => {
+        const endNano = BigInt(Date.now()) * 1_000_000n;
+        this.client.addSpan({
+          traceId,
+          spanId,
+          name,
+          kind: 1,
+          startTimeUnixNano: startNano.toString(),
+          endTimeUnixNano: endNano.toString(),
+          attributes: { ...attrs, 'logger.name': this.loggerName },
+          status: { code: status === 'OK' ? 1 : 2 },
+        });
+      },
+    };
+  }
+
   child(bindings: Record<string, unknown>): Logger {
     const child = Object.create(this) as Logger;
     child.bindings = { ...this.bindings, ...bindings };
     return child;
   }
 
-  /**
-   * Flush buffered logs
-   */
   async flush(): Promise<void> {
     await this.client.flush();
   }
 
-  /**
-   * Close the logger and flush remaining logs
-   */
   async close(): Promise<void> {
     await this.client.close();
   }
 
-  /**
-   * Set the minimum log level
-   */
   setLevel(level: number | LogLevel): void {
     this.minLevel = this.parseLevel(level);
   }
 }
 
-/**
- * Create a new logger instance
- */
 export function createLogger(options?: LoggerOptions): Logger {
   return new Logger(options);
 }

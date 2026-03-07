@@ -1,6 +1,6 @@
 // Core client
 export { AbbacchioClient, createClient } from "./client.js";
-export type { AbbacchioClientOptions } from "./client.js";
+export type { AbbacchioClientOptions, LogRecord, MetricRecord, HistogramRecord, SpanRecord } from "./client.js";
 
 // Encryption utilities
 export { generateKey, encrypt, decrypt, encryptLog, decryptLog } from "./encrypt.js";

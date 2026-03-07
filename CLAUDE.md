@@ -2,7 +2,7 @@
 
 ## Overview
 
-Abbacchio is a real-time log viewer dashboard with HTTP ingestion. It works with any logging library (Pino, Winston, Bunyan, console) via HTTP transports. Logs are streamed in real-time via SSE and displayed in a searchable, filterable UI.
+Abbacchio is a real-time log viewer dashboard with HTTP ingestion. It works with any logging library (Pino, Winston, Bunyan, console) via HTTP transports. Logs are delivered in real-time via HTTP polling and displayed in a searchable, filterable UI.
 
 ## Project Structure
 
@@ -10,12 +10,13 @@ This is a **pnpm monorepo** with the following packages:
 
 ```
 packages/
-├── api/          # Hono-based HTTP server (log ingestion + SSE streaming)
+├── api/          # Hono-based HTTP server (Bun runtime, SQLite persistence)
 ├── dashboard/    # React frontend (Vite + TailwindCSS)
 ├── transport/    # Node.js transports for Pino, Winston, Bunyan
 ├── browser-transport/  # Browser-side transport for sending logs
 ├── tui/          # Terminal UI for viewing logs (Ink + React)
 ├── desktop/      # Tauri desktop app wrapper
+├── mcp/          # MCP server for Claude Code integration
 python/           # Python transport package (PyPI: abbacchio)
 ```
 
@@ -46,12 +47,12 @@ pnpm test             # Run all tests
 
 ### Log Flow
 1. Application sends logs via HTTP POST to `/api/logs` (or `/api/logs/:channel`)
-2. API server stores logs in memory (no persistence)
-3. Dashboard/TUI connects via SSE to `/api/logs/stream`
-4. Real-time streaming of new logs to all connected clients
+2. API server stores logs in SQLite and in-memory buffer
+3. Dashboard/TUI polls `/api/logs` for new logs via HTTP polling
+4. Real-time delivery of new logs to all connected clients
 
 ### Key Technologies
-- **API**: Hono (lightweight web framework), Node.js
+- **API**: Hono (lightweight web framework), Bun runtime, SQLite (bun:sqlite)
 - **Dashboard**: React 19, Vite, TailwindCSS, shadcn/ui components
 - **TUI**: Ink (React for CLI), blessed-contrib
 - **Desktop**: Tauri (Rust-based desktop wrapper)
@@ -69,15 +70,16 @@ Optional end-to-end encryption using Web Crypto API (AES-GCM). Logs are encrypte
 
 ## Important Files
 
-- `packages/api/src/index.ts` - Main API server entry point
-- `packages/api/src/routes/logs.ts` - Log ingestion and SSE streaming routes
+- `packages/api/src/server.ts` - Main API server entry point
+- `packages/api/src/routes/logs.handlers.ts` - Log ingestion and retrieval handlers
+- `packages/api/src/lib/database.ts` - SQLite persistence layer
 - `packages/dashboard/src/App.tsx` - Dashboard main component
-- `packages/dashboard/src/hooks/useLogStream.ts` - SSE connection hook
-- `packages/transport/src/pino.ts` - Pino transport implementation
+- `packages/dashboard/src/hooks/useChannelManager.ts` - HTTP polling and channel management
+- `packages/transport/src/transports/pino.ts` - Pino transport implementation
 
 ## Conventions
 
 - TypeScript throughout (except Python package)
 - ESM modules (`"type": "module"`)
-- Node.js 18+ required
+- Bun runtime for API, Node.js 18+ for other packages
 - Uses Biome for formatting/linting in some packages

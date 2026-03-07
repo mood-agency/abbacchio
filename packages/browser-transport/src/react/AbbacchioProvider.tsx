@@ -1,5 +1,5 @@
 /**
- * React Context Provider for Abbacchio
+ * React Context Provider for Abbacchio (OTLP native)
  * Provides logging functionality to React components via context
  */
 
@@ -8,18 +8,14 @@ import { Logger, createLogger, type LoggerOptions } from '../logger.js';
 import { interceptConsole, stopInterceptConsole, type ConsoleInterceptorOptions } from '../console.js';
 
 export interface AbbacchioContextValue {
-  /** Logger instance for structured logging */
   logger: Logger;
-  /** Log at info level */
   info: Logger['info'];
-  /** Log at warn level */
   warn: Logger['warn'];
-  /** Log at error level */
   error: Logger['error'];
-  /** Log at debug level */
   debug: Logger['debug'];
-  /** Create a child logger with additional bindings */
   child: Logger['child'];
+  metric: Logger['metric'];
+  startSpan: Logger['startSpan'];
 }
 
 const AbbacchioContext = createContext<AbbacchioContextValue | null>(null);
@@ -40,8 +36,8 @@ export interface AbbacchioProviderProps extends LoggerOptions {
  * function App() {
  *   return (
  *     <AbbacchioProvider
- *       url="http://localhost:4000/api/logs"
- *       channel="my-react-app"
+ *       endpoint="http://localhost:4002"
+ *       serviceName="my-react-app"
  *       captureConsole
  *     >
  *       <MyApp />
@@ -56,10 +52,9 @@ export function AbbacchioProvider({
   consoleOptions,
   ...loggerOptions
 }: AbbacchioProviderProps) {
-  // Create logger instance
   const logger = useMemo(() => createLogger(loggerOptions), [
-    loggerOptions.url,
-    loggerOptions.channel,
+    loggerOptions.endpoint,
+    loggerOptions.serviceName,
     loggerOptions.secretKey,
     loggerOptions.name,
     loggerOptions.level,
@@ -67,7 +62,6 @@ export function AbbacchioProvider({
     loggerOptions.flushInterval,
   ]);
 
-  // Setup console interception if enabled
   useEffect(() => {
     if (captureConsole) {
       interceptConsole({
@@ -76,20 +70,14 @@ export function AbbacchioProvider({
         appName: consoleOptions?.appName || loggerOptions.name,
       });
 
-      return () => {
-        stopInterceptConsole();
-      };
+      return () => { stopInterceptConsole(); };
     }
   }, [captureConsole, loggerOptions, consoleOptions]);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      logger.close();
-    };
+    return () => { logger.close(); };
   }, [logger]);
 
-  // Create context value with bound methods
   const value = useMemo<AbbacchioContextValue>(() => ({
     logger,
     info: logger.info.bind(logger),
@@ -97,6 +85,8 @@ export function AbbacchioProvider({
     error: logger.error.bind(logger),
     debug: logger.debug.bind(logger),
     child: logger.child.bind(logger),
+    metric: logger.metric.bind(logger),
+    startSpan: logger.startSpan.bind(logger),
   }), [logger]);
 
   return (
@@ -106,22 +96,6 @@ export function AbbacchioProvider({
   );
 }
 
-/**
- * Hook to access the Abbacchio logger from any component
- *
- * @example
- * ```tsx
- * function MyComponent() {
- *   const { info, error } = useAbbacchio()
- *
- *   const handleClick = () => {
- *     info('Button clicked', { component: 'MyComponent' })
- *   }
- *
- *   return <button onClick={handleClick}>Click me</button>
- * }
- * ```
- */
 export function useAbbacchio(): AbbacchioContextValue {
   const context = useContext(AbbacchioContext);
   if (!context) {
@@ -130,23 +104,6 @@ export function useAbbacchio(): AbbacchioContextValue {
   return context;
 }
 
-/**
- * Hook to get just the logger instance
- *
- * @example
- * ```tsx
- * function MyComponent() {
- *   const log = useLogger()
- *
- *   useEffect(() => {
- *     log.info('Component mounted')
- *     return () => log.info('Component unmounted')
- *   }, [log])
- *
- *   return <div>Hello</div>
- * }
- * ```
- */
 export function useLogger(): Logger {
   const { logger } = useAbbacchio();
   return logger;

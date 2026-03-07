@@ -17,33 +17,6 @@ const methodToLevel: Record<ConsoleMethod, number> = {
   error: 50,
 };
 
-/**
- * Console interceptor for Abbacchio.
- * Intercepts console.log/info/warn/error/debug calls and sends them to Abbacchio.
- *
- * @example
- * ```typescript
- * import { interceptConsole, restoreConsole } from "@abbacchio/transport/transports/console";
- *
- * // Start intercepting console calls
- * interceptConsole({
- *   url: "http://localhost:4000/api/logs",
- *   channel: "my-app",
- *   namespace: "my-namespace",
- *   secretKey: "optional-encryption-key",
- *   passthrough: true, // Still log to console
- *   enabled: true, // Can be toggled at runtime
- * });
- *
- * console.log("This will be sent to Abbacchio!");
- * console.error("Errors too!");
- *
- * // Stop intercepting when done
- * restoreConsole();
- * ```
- */
-
-// Store original console methods
 const originalConsole: Record<ConsoleMethod, (...args: unknown[]) => void> = {
   log: console.log.bind(console),
   info: console.info.bind(console),
@@ -53,11 +26,7 @@ const originalConsole: Record<ConsoleMethod, (...args: unknown[]) => void> = {
 };
 
 let activeClient: AbbacchioClient | null = null;
-let activeOptions: ConsoleInterceptorOptions | null = null;
 
-/**
- * Format console arguments into a message string
- */
 function formatArgs(args: unknown[]): string {
   return args
     .map((arg) => {
@@ -72,16 +41,12 @@ function formatArgs(args: unknown[]): string {
     .join(" ");
 }
 
-/**
- * Create an intercepted console method
- */
 function createInterceptedMethod(
   method: ConsoleMethod,
   client: AbbacchioClient,
   passthrough: boolean
 ): (...args: unknown[]) => void {
   return (...args: unknown[]) => {
-    // Send to Abbacchio
     const log = {
       level: methodToLevel[method],
       msg: formatArgs(args),
@@ -90,7 +55,6 @@ function createInterceptedMethod(
     };
     client.add(log);
 
-    // Optionally pass through to original console
     if (passthrough) {
       originalConsole[method](...args);
     }
@@ -98,10 +62,24 @@ function createInterceptedMethod(
 }
 
 /**
- * Start intercepting console calls
+ * Start intercepting console calls and send them via OTLP.
+ *
+ * @example
+ * ```typescript
+ * import { interceptConsole, restoreConsole } from "@abbacchio/transport/transports/console";
+ *
+ * interceptConsole({
+ *   endpoint: "http://localhost:4002",
+ *   serviceName: "my-app",
+ *   passthrough: true,
+ * });
+ *
+ * console.log("This will be sent to Abbacchio via OTLP!");
+ *
+ * restoreConsole();
+ * ```
  */
 export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
-  // Restore any existing interception first
   if (activeClient) {
     restoreConsole();
   }
@@ -110,9 +88,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   const passthrough = opts.passthrough !== false;
 
   activeClient = new AbbacchioClient(opts);
-  activeOptions = opts;
 
-  // Replace console methods
   for (const method of methods) {
     (console as unknown as Record<string, unknown>)[method] = createInterceptedMethod(
       method,
@@ -122,26 +98,17 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   }
 }
 
-/**
- * Stop intercepting console calls and restore original behavior
- */
 export function restoreConsole(): void {
-  // Restore original console methods
   for (const method of Object.keys(originalConsole) as ConsoleMethod[]) {
     (console as unknown as Record<string, unknown>)[method] = originalConsole[method];
   }
 
-  // Flush and close client
   if (activeClient) {
     activeClient.close();
     activeClient = null;
-    activeOptions = null;
   }
 }
 
-/**
- * Get the active client (for testing/runtime control)
- */
 export function getActiveClient(): AbbacchioClient | null {
   return activeClient;
 }

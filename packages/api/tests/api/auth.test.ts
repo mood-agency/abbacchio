@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createTestApp } from '../helpers/test-app.js';
 
 const API_KEY = 'test-secret-key';
@@ -41,23 +41,7 @@ describe('Authentication', () => {
       expect(response.status).toBe(200);
     });
 
-    it('should require channel parameter for GET /api/logs/stream', async () => {
-      const app = createTestApp();
-
-      const response = await app.request('/api/logs/stream');
-
-      // Should return 400 because channel is required
-      expect(response.status).toBe(400);
-    });
-
-    it('should allow GET /api/logs/stream with channel', async () => {
-      const app = createTestApp();
-
-      const response = await app.request('/api/logs/stream?channel=test');
-
-      expect(response.status).toBe(200);
-    });
-  });
+});
 
   describe('with API key configured', () => {
     describe('valid authentication', () => {
@@ -174,35 +158,5 @@ describe('Authentication', () => {
       });
     });
 
-    describe('SSE special case', () => {
-      it('should allow GET /api/logs/stream without API key (with channel)', async () => {
-        const app = createTestApp({ apiKey: API_KEY });
-
-        const response = await app.request('/api/logs/stream?channel=test');
-
-        expect(response.status).toBe(200);
-        expect(response.headers.get('Content-Type')).toContain('text/event-stream');
-      });
-
-      it('should also allow GET /api/logs/stream with valid API key', async () => {
-        const app = createTestApp({ apiKey: API_KEY });
-
-        const response = await app.request('/api/logs/stream?channel=test', {
-          headers: { 'X-API-KEY': API_KEY },
-        });
-
-        expect(response.status).toBe(200);
-      });
-
-      it('should reject GET /api/logs/stream with invalid API key', async () => {
-        const app = createTestApp({ apiKey: API_KEY });
-
-        const response = await app.request('/api/logs/stream?channel=test', {
-          headers: { 'X-API-KEY': 'wrong-key' },
-        });
-
-        expect(response.status).toBe(401);
-      });
-    });
   });
 });
