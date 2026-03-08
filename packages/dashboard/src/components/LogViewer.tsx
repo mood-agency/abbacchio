@@ -7,6 +7,7 @@ import { usePolling } from '../hooks/usePolling';
 import { useFilterParams } from '../hooks/useFilterParams';
 import { useSavedFilters } from '../hooks/useSavedFilters';
 import type { LogEntry } from '../types';
+import { TIME_RANGE_OPTIONS } from '../types';
 import { FilterBar } from './FilterBar';
 import { LogSidebar } from './LogSidebar';
 import { SaveFilterDialog } from './SaveFilterDialog';
@@ -171,6 +172,13 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   const logs = useMemo(() => {
     let filtered = allLogs;
 
+    // Time range filter
+    const rangeMs = TIME_RANGE_OPTIONS[timeRange];
+    if (rangeMs > 0) {
+      const minTime = Date.now() - rangeMs;
+      filtered = filtered.filter(log => log.time >= minTime);
+    }
+
     // Level filter
     if (levelFilters.length > 0) {
       filtered = filtered.filter(log => levelFilters.includes(log.levelLabel));
@@ -206,7 +214,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     }
 
     return filtered;
-  }, [allLogs, levelFilters, namespaceFilters, searchQuery, useRegex, caseSensitive]);
+  }, [allLogs, levelFilters, namespaceFilters, searchQuery, useRegex, caseSensitive, timeRange]);
 
   // Compute counts from all (unfiltered) logs
   const levelCounts = useMemo(() => computeLevelCounts(allLogs), [allLogs]);
@@ -495,8 +503,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                   variant="ghost"
                   size="icon"
                   onClick={() => {
+                    const next = !isDark;
                     document.documentElement.classList.toggle('dark');
-                    setIsDark(!isDark);
+                    localStorage.setItem('theme', next ? 'dark' : 'light');
+                    setIsDark(next);
                   }}
                 >
                   {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -893,8 +903,10 @@ logger.info("Hello from Pino OTLP!");`}
             togglePause: () => setIsPaused(!isPaused),
             isPaused,
             toggleTheme: () => {
+              const next = !isDark;
               document.documentElement.classList.toggle('dark');
-              setIsDark(!isDark);
+              localStorage.setItem('theme', next ? 'dark' : 'light');
+              setIsDark(next);
             },
             isDark,
             switchLanguage: (lang) => i18n.changeLanguage(lang),

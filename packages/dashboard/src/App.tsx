@@ -7,9 +7,10 @@ type ViewType = 'logs' | 'metrics' | 'traces';
 const VALID_VIEWS: ViewType[] = ['logs', 'metrics', 'traces'];
 
 function AppContent() {
-  // Initialize dark mode from system preference
+  // Initialize dark mode from saved preference or system preference
   useEffect(() => {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     }
   }, []);

@@ -5,20 +5,20 @@
   "description": "Real-time log viewer dashboard with HTTP ingestion for Pino, Winston, Bunyan, and other loggers",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"pnpm --filter @abbacchio/api dev\" \"pnpm --filter @abbacchio/dashboard dev\"",
-    "dev:api": "pnpm --filter @abbacchio/api dev",
-    "dev:dashboard": "pnpm --filter @abbacchio/dashboard dev",
-    "dev:desktop": "pnpm --filter @abbacchio/desktop dev",
-    "dev:tui": "pnpm --filter @abbacchio/tui dev",
-    "build": "pnpm -r build",
-    "build:api": "pnpm --filter @abbacchio/api build",
-    "build:transport": "pnpm --filter @abbacchio/transport build",
-    "build:dashboard": "pnpm --filter @abbacchio/dashboard build",
-    "build:desktop": "pnpm --filter @abbacchio/desktop build",
-    "build:tui": "pnpm --filter @abbacchio/tui build",
-"tui": "pnpm --filter @abbacchio/tui dev --",
-    "start": "pnpm --filter @abbacchio/api start",
-    "test": "pnpm -r test",
+    "dev": "concurrently -n api,dash -c blue,green \"bun run --filter @abbacchio/api dev\" \"bun run --filter @abbacchio/dashboard dev\"",
+    "dev:api": "bun run --filter @abbacchio/api dev",
+    "dev:dashboard": "bun run --filter @abbacchio/dashboard dev",
+    "dev:desktop": "bun run --filter @abbacchio/desktop dev",
+    "dev:tui": "bun run --filter @abbacchio/tui dev",
+    "build": "bun run --filter '*' build",
+    "build:api": "bun run --filter @abbacchio/api build",
+    "build:transport": "bun run --filter @abbacchio/transport build",
+    "build:dashboard": "bun run --filter @abbacchio/dashboard build",
+    "build:desktop": "bun run --filter @abbacchio/desktop build",
+    "build:tui": "bun run --filter @abbacchio/tui build",
+    "tui": "bun run --filter @abbacchio/tui dev --",
+    "start": "bun run --filter @abbacchio/api start",
+    "test": "bun run --filter '*' test",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules",
     "bump": "node scripts/bump-version.js"
   },
@@ -46,5 +46,8 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

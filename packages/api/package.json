@@ -15,7 +15,7 @@
     "abbacchio": "src/server.ts"
   },
   "scripts": {
-    "dev": "bun --watch src/server.ts",
+    "dev": "bun --hot src/server.ts",
     "build": "bun build src/server.ts --outdir dist --target bun",
     "start": "bun src/server.ts",
     "test": "bun test",
