@@ -216,9 +216,45 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     return filtered;
   }, [allLogs, levelFilters, namespaceFilters, searchQuery, useRegex, caseSensitive, timeRange]);
 
-  // Compute counts from all (unfiltered) logs
-  const levelCounts = useMemo(() => computeLevelCounts(allLogs), [allLogs]);
-  const namespaceCounts = useMemo(() => computeNamespaceCounts(allLogs), [allLogs]);
+  // Base logs filtered by time range and search (but NOT by level/namespace)
+  // so sidebar counts reflect what's actually visible
+  const baseFilteredLogs = useMemo(() => {
+    let filtered = allLogs;
+
+    // Time range filter
+    const rangeMs = TIME_RANGE_OPTIONS[timeRange];
+    if (rangeMs > 0) {
+      const minTime = Date.now() - rangeMs;
+      filtered = filtered.filter(log => log.time >= minTime);
+    }
+
+    // Search filter
+    if (searchQuery) {
+      if (useRegex) {
+        try {
+          const regex = new RegExp(searchQuery, caseSensitive ? '' : 'i');
+          filtered = filtered.filter(log =>
+            regex.test(log.msg) || regex.test(JSON.stringify(log.data))
+          );
+        } catch {
+          // Invalid regex, skip filtering
+        }
+      } else {
+        const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
+        filtered = filtered.filter(log => {
+          const msg = caseSensitive ? log.msg : log.msg.toLowerCase();
+          const data = caseSensitive ? JSON.stringify(log.data) : JSON.stringify(log.data).toLowerCase();
+          return msg.includes(query) || data.includes(query);
+        });
+      }
+    }
+
+    return filtered;
+  }, [allLogs, timeRange, searchQuery, useRegex, caseSensitive]);
+
+  // Compute counts from base filtered logs (respects time range + search, but not level/namespace)
+  const levelCounts = useMemo(() => computeLevelCounts(baseFilteredLogs), [baseFilteredLogs]);
+  const namespaceCounts = useMemo(() => computeNamespaceCounts(baseFilteredLogs), [baseFilteredLogs]);
   const availableNamespaces = useMemo(() => Object.keys(namespaceCounts), [namespaceCounts]);
 
   // Theme state
