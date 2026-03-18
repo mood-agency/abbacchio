@@ -63,6 +63,14 @@
     "deleting": "Eliminando...",
     "deleteAll": "Eliminar todo"
   },
+  "deleteChannel": {
+    "title": "¿Eliminar canal \"{{channel}}\"?",
+    "description": "Esto eliminará permanentemente el canal y todos sus logs, métricas y trazas. Esta acción no se puede deshacer.",
+    "confirm": "Eliminar canal",
+    "menuItem": "Eliminar canal",
+    "toast": "Canal eliminado exitosamente",
+    "error": "Error al eliminar canal"
+  },
   "decryptionFailed": {
     "title": "Descifrado Fallido",
     "description": "No se pudo descifrar esta entrada de log. Por favor verifica que hayas ingresado la clave de cifrado correcta."

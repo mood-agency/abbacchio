@@ -62,22 +62,93 @@ export function clearLogs(c: Context) {
  * GET /api/logs - Get buffered logs
  * Query params:
  *   - channel: filter by specific channel (optional, default: all channels)
- *   - afterId: return only logs after this ID (for polling)
+ *   - afterId: return only logs after this ID (for forward polling)
+ *   - beforeId: return only logs before this ID (for backward/older pagination)
+ *   - limit: max number of logs to return (default: 1000 for initial, 500 for cursors)
  */
 export function getLogs(c: Context) {
   const buffer = getLogBuffer();
+  const db = getDatabase();
   const channel = c.req.query('channel');
   const afterId = c.req.query('afterId');
+  const beforeId = c.req.query('beforeId');
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 10_000) : undefined;
 
-  const logs = afterId
-    ? buffer.getSince(afterId, channel || undefined)
-    : buffer.getAll(channel || undefined);
+  // --- Forward pagination (polling for newer logs) ---
+  if (afterId) {
+    // Incremental polling: try in-memory buffer first for speed
+    const logs = buffer.getSince(afterId, channel || undefined);
+    if (logs !== null) {
+      return c.json({
+        logs,
+        count: logs.length,
+        channel: channel || 'all',
+      });
+    }
+    // afterId not found in memory buffer (e.g. came from SQLite initial load or was evicted).
+    // Flush buffered writes, then fall back to SQLite cursor-based query.
+    db.flush();
+    const dbLogs = db.queryAfterId(afterId, channel || undefined, limit);
+    return c.json({
+      logs: dbLogs,
+      count: dbLogs.length,
+      channel: channel || 'all',
+    });
+  }
+
+  // --- Backward pagination (loading older logs on scroll-up) ---
+  if (beforeId) {
+    db.flush();
+    const { logs, hasMore } = db.queryBeforeId(beforeId, channel || undefined, limit || 500);
+    return c.json({
+      logs,
+      count: logs.length,
+      hasMore,
+      channel: channel || 'all',
+    });
+  }
+
+  // --- Initial load: fetch NEWEST logs, return in chronological order ---
+  db.flush();
+  const result = db.query({
+    channel: channel || undefined,
+    order: 'desc',
+    limit: limit || 1000,
+  });
+
+  // Reverse to chronological order (oldest-to-newest) for display
+  result.logs.reverse();
 
   return c.json({
-    logs,
-    count: logs.length,
+    logs: result.logs,
+    count: result.count,
+    total: result.total,
     channel: channel || 'all',
   });
+}
+
+/**
+ * DELETE /api/channels - Delete a channel and all its data
+ * Query params:
+ *   - name: channel name to delete (required)
+ */
+export function deleteChannel(c: Context) {
+  const name = c.req.query('name');
+  if (!name) {
+    return c.json({ error: 'Missing "name" query parameter' }, 400);
+  }
+  if (name === DEFAULT_CHANNEL) {
+    return c.json({ error: 'Cannot delete the default channel' }, 400);
+  }
+
+  const buffer = getLogBuffer();
+  const db = getDatabase();
+
+  buffer.deleteChannel(name);
+  db.deleteChannel(name);
+
+  return c.json({ success: true, channel: name });
 }
 
 /**
@@ -85,8 +156,15 @@ export function getLogs(c: Context) {
  */
 export function getChannels(c: Context) {
   const buffer = getLogBuffer();
+  const db = getDatabase();
+
+  // Merge channels from in-memory buffer and SQLite
+  const bufferChannels = buffer.getChannels();
+  const dbChannels = db.getChannels();
+  const merged = [...new Set([...bufferChannels, ...dbChannels])].sort();
+
   return c.json({
-    channels: buffer.getChannels(),
+    channels: merged,
   });
 }
 

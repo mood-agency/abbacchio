@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { BrowserRouter, useSearchParams } from 'react-router-dom';
 import { LogViewer } from './components/LogViewer';
 import { Toaster } from './components/ui/sonner';
@@ -7,13 +7,6 @@ type ViewType = 'logs' | 'metrics' | 'traces';
 const VALID_VIEWS: ViewType[] = ['logs', 'metrics', 'traces'];
 
 function AppContent() {
-  // Initialize dark mode from saved preference or system preference
-  useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-    }
-  }, []);
 
   const [searchParams, setSearchParams] = useSearchParams();
 

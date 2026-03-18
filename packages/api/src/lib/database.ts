@@ -330,7 +330,7 @@ export class LogDatabase {
   // ──────── QUERIES ────────
 
   query(opts: QueryOpts = {}): QueryResult {
-    const limit = Math.min(Math.max(opts.limit || 100, 1), 1000);
+    const limit = Math.min(Math.max(opts.limit || 100, 1), 10_000);
     const offset = Math.max(opts.offset || 0, 0);
     const order = opts.order === 'asc' ? 'ASC' : 'DESC';
 
@@ -364,7 +364,7 @@ export class LogDatabase {
     const total = countRow.total;
 
     const rows = this.db.prepare(
-      `SELECT * FROM logs ${where} ORDER BY time ${order} LIMIT $limit OFFSET $offset`
+      `SELECT * FROM logs ${where} ORDER BY time ${order}, rowid ${order} LIMIT $limit OFFSET $offset`
     ).all({ ...params, $limit: limit, $offset: offset }) as any[];
 
     const logs: LogEntry[] = rows.map((row) => ({
@@ -436,7 +436,7 @@ export class LogDatabase {
   }
 
   queryTraces(opts: TraceQueryOpts = {}): TraceQueryResult {
-    const limit = Math.min(Math.max(opts.limit || 100, 1), 1000);
+    const limit = Math.min(Math.max(opts.limit || 100, 1), 10_000);
     const offset = Math.max(opts.offset || 0, 0);
     const order = opts.order === 'asc' ? 'ASC' : 'DESC';
 
@@ -528,6 +528,85 @@ export class LogDatabase {
     return { columns, rows, rowCount: rows.length, executionTimeMs };
   }
 
+  // ──────── LOOKUPS ────────
+
+  /**
+   * Get logs after a given ID using cursor-based pagination.
+   * Uses the rowid to efficiently find logs inserted after the given ID.
+   */
+  queryAfterId(afterId: string, channel?: string, limit = 500): LogEntry[] {
+    const conditions = ['rowid > (SELECT rowid FROM logs WHERE id = $afterId)'];
+    const params: Record<string, any> = { $afterId: afterId, $limit: limit };
+
+    if (channel) {
+      conditions.push('channel = $channel');
+      params.$channel = channel;
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
+    const rows = this.db.prepare(
+      `SELECT * FROM logs ${where} ORDER BY time ASC LIMIT $limit`
+    ).all(params) as any[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      level: row.level,
+      levelLabel: row.level_label as LogEntry['levelLabel'],
+      time: row.time,
+      msg: row.msg,
+      namespace: row.namespace || undefined,
+      channel: row.channel,
+      data: JSON.parse(row.data),
+      traceId: row.trace_id || undefined,
+      spanId: row.span_id || undefined,
+    }));
+  }
+
+  /**
+   * Get logs before a given ID using cursor-based pagination (backward/older).
+   * Returns logs in chronological (ASC) order for direct prepending.
+   */
+  queryBeforeId(beforeId: string, channel?: string, limit = 500): { logs: LogEntry[]; hasMore: boolean } {
+    const conditions = ['rowid < (SELECT rowid FROM logs WHERE id = $beforeId)'];
+    const params: Record<string, any> = { $beforeId: beforeId, $limit: limit + 1 };
+
+    if (channel) {
+      conditions.push('channel = $channel');
+      params.$channel = channel;
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
+    const rows = this.db.prepare(
+      `SELECT * FROM logs ${where} ORDER BY rowid DESC LIMIT $limit`
+    ).all(params) as any[];
+
+    const hasMore = rows.length > limit;
+    const resultRows = hasMore ? rows.slice(0, limit) : rows;
+
+    // Reverse to chronological order (oldest first)
+    resultRows.reverse();
+
+    const logs: LogEntry[] = resultRows.map((row) => ({
+      id: row.id,
+      level: row.level,
+      levelLabel: row.level_label as LogEntry['levelLabel'],
+      time: row.time,
+      msg: row.msg,
+      namespace: row.namespace || undefined,
+      channel: row.channel,
+      data: JSON.parse(row.data),
+      traceId: row.trace_id || undefined,
+      spanId: row.span_id || undefined,
+    }));
+
+    return { logs, hasMore };
+  }
+
+  queryById(id: string): { time: number; channel: string } | null {
+    const row = this.db.prepare('SELECT time, channel FROM logs WHERE id = ?').get(id) as { time: number; channel: string } | null;
+    return row || null;
+  }
+
   // ──────── COMMON ────────
 
   getChannels(): string[] {
@@ -573,6 +652,15 @@ export class LogDatabase {
       this.db.run('DELETE FROM metrics');
       this.db.run('DELETE FROM traces');
     }
+  }
+
+  deleteChannel(channel: string): void {
+    const runTransaction = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM logs WHERE channel = ?').run(channel);
+      this.db.prepare('DELETE FROM metrics WHERE channel = ?').run(channel);
+      this.db.prepare('DELETE FROM traces WHERE channel = ?').run(channel);
+    });
+    runTransaction();
   }
 
   private pruneIfNeeded(): void {

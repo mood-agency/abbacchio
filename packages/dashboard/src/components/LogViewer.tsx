@@ -65,6 +65,7 @@ import {
   Trash2,
   SearchX,
   Download,
+  ArrowDown,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -108,9 +109,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   const { t: tDialogs } = useTranslation('dialogs');
   const { t: tFilters } = useTranslation('filters');
 
-  // Read initial channel from URL
+  // Read initial channel and paused state from URL
   const [searchParams, setSearchParams] = useSearchParams();
   const initialChannel = searchParams.get('channel');
+  const initialPaused = searchParams.get('paused') === '1';
 
   // Simple polling-based data
   const {
@@ -118,14 +120,32 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     activeChannel,
     setActiveChannel: setActiveChannelRaw,
     addChannel,
+    deleteChannel,
     logs: allLogs,
     metrics,
     traces,
     isLoading,
     isPaused,
-    setIsPaused,
+    setIsPaused: setIsPausedRaw,
     clearLogs,
-  } = usePolling(initialChannel);
+    loadOlderLogs,
+    hasMoreOlderLogs,
+    isLoadingOlder,
+  } = usePolling(initialChannel, initialPaused);
+
+  // Sync isPaused to URL
+  const setIsPaused = useCallback((paused: boolean) => {
+    setIsPausedRaw(paused);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (paused) {
+        next.set('paused', '1');
+      } else {
+        next.delete('paused');
+      }
+      return next;
+    }, { replace: true });
+  }, [setIsPausedRaw, setSearchParams]);
 
   // Sync activeChannel to URL
   const setActiveChannel = useCallback((name: string) => {
@@ -258,10 +278,18 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   const availableNamespaces = useMemo(() => Object.keys(namespaceCounts), [namespaceCounts]);
 
   // Theme state
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
 
-  // Delete confirmation dialog
+  // Delete confirmation dialog (clear logs)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Delete channel confirmation dialog
+  const [showDeleteChannelDialog, setShowDeleteChannelDialog] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState<string | null>(null);
 
   // Add channel dialog
   const [showAddChannelDialog, setShowAddChannelDialog] = useState(false);
@@ -406,6 +434,38 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll: sticky to bottom until user scrolls up
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const prevLogCountRef = useRef(logs.length);
+
+  // Track new log IDs for highlight animation (only for appended logs, not prepended)
+  const [newLogIds, setNewLogIds] = useState<Set<string>>(new Set());
+  const prevAllLogsLastIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (allLogs.length === 0) {
+      prevAllLogsLastIdRef.current = null;
+      return;
+    }
+    const lastId = allLogs[allLogs.length - 1].id;
+    const prevLastId = prevAllLogsLastIdRef.current;
+    // Only highlight if the last log changed (i.e., new logs appended at the end)
+    if (prevLastId && lastId !== prevLastId) {
+      const prevIdx = allLogs.findIndex(l => l.id === prevLastId);
+      if (prevIdx !== -1 && prevIdx < allLogs.length - 1) {
+        const newIds = new Set<string>();
+        for (let i = prevIdx + 1; i < allLogs.length; i++) {
+          newIds.add(allLogs[i].id);
+        }
+        setNewLogIds(newIds);
+        const timer = setTimeout(() => setNewLogIds(new Set()), 2000);
+        prevAllLogsLastIdRef.current = lastId;
+        return () => clearTimeout(timer);
+      }
+    }
+    prevAllLogsLastIdRef.current = lastId;
+  }, [allLogs]);
+
   // Search input ref for Ctrl+F focus
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -431,12 +491,119 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     measureElement: (element) => element.getBoundingClientRect().height,
   });
 
+  // Track scroll position to detect if user is at bottom
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const threshold = 50;
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+      setIsAtBottom(atBottom);
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Scroll position preservation when older logs are prepended
+  const prevFirstLogIdRef = useRef<string | null>(null);
+  const prevLogLengthRef = useRef(0);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el || logs.length === 0) {
+      prevFirstLogIdRef.current = logs[0]?.id ?? null;
+      prevLogLengthRef.current = logs.length;
+      return;
+    }
+
+    const prevFirstId = prevFirstLogIdRef.current;
+    const currentFirstId = logs[0]?.id;
+    const prevLen = prevLogLengthRef.current;
+
+    // Detect prepend: first log ID changed and array got longer
+    if (prevFirstId && currentFirstId && prevFirstId !== currentFirstId && logs.length > prevLen) {
+      const prependedCount = logs.length - prevLen;
+      // Adjust scrollTop so the user stays looking at the same row
+      requestAnimationFrame(() => {
+        el.scrollTop += prependedCount * 28; // estimateSize
+      });
+    }
+
+    prevFirstLogIdRef.current = currentFirstId;
+    prevLogLengthRef.current = logs.length;
+  }, [logs]);
+
+  // Auto-scroll to bottom when new logs arrive (appended) and user is at bottom
+  useEffect(() => {
+    if (logs.length > prevLogCountRef.current && isAtBottom) {
+      // Use requestAnimationFrame to ensure virtualizer has updated
+      requestAnimationFrame(() => {
+        rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'end' });
+      });
+    }
+    prevLogCountRef.current = logs.length;
+  }, [logs.length, isAtBottom, rowVirtualizer]);
+
+  // Scroll to bottom when initial load completes
+  useEffect(() => {
+    if (!isLoading && logs.length > 0) {
+      requestAnimationFrame(() => {
+        rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'end' });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
+  // Scroll-to-top detection for loading older logs
+  const loadOlderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const handleScrollForOlder = () => {
+      const nearTop = el.scrollTop < 200;
+      if (nearTop && hasMoreOlderLogs && !isLoadingOlder) {
+        if (!loadOlderTimeoutRef.current) {
+          loadOlderTimeoutRef.current = setTimeout(() => {
+            loadOlderLogs();
+            loadOlderTimeoutRef.current = null;
+          }, 150);
+        }
+      } else if (loadOlderTimeoutRef.current) {
+        clearTimeout(loadOlderTimeoutRef.current);
+        loadOlderTimeoutRef.current = null;
+      }
+    };
+
+    el.addEventListener('scroll', handleScrollForOlder, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', handleScrollForOlder);
+      if (loadOlderTimeoutRef.current) {
+        clearTimeout(loadOlderTimeoutRef.current);
+      }
+    };
+  }, [hasMoreOlderLogs, isLoadingOlder, loadOlderLogs]);
+
   // Handle delete confirmation
   const handleConfirmDelete = useCallback(async () => {
     await clearLogs(activeChannel || undefined);
     setShowDeleteDialog(false);
     toast.success(tLogs('toast.logsDeleted'));
   }, [activeChannel, clearLogs, tLogs]);
+
+  // Handle delete channel confirmation
+  const handleConfirmDeleteChannel = useCallback(async () => {
+    if (!channelToDelete) return;
+    try {
+      await deleteChannel(channelToDelete);
+      setShowDeleteChannelDialog(false);
+      setChannelToDelete(null);
+      toast.success(tDialogs('deleteChannel.toast'));
+    } catch {
+      toast.error(tDialogs('deleteChannel.error'));
+    }
+  }, [channelToDelete, deleteChannel, tDialogs]);
 
   // Handle saving a filter
   const handleSaveFilter = useCallback((name: string) => {
@@ -506,12 +673,30 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                           <DropdownMenuItem
                             key={channel.name}
                             onClick={() => setActiveChannel(channel.name)}
-                            className={channel.name === activeChannel ? 'bg-accent' : ''}
+                            className={`${channel.name === activeChannel ? 'bg-accent' : ''} group`}
                           >
                             <span className="truncate max-w-[200px]">{channel.name}</span>
-                            {channel.name === activeChannel && (
-                              <Check className="w-3.5 h-3.5 ml-auto" />
-                            )}
+                            <span className="ml-auto flex items-center gap-1">
+                              {channel.name === activeChannel ? (
+                                <Check className="w-3.5 h-3.5" />
+                              ) : (
+                                <span className="w-3.5 h-3.5" />
+                              )}
+                              {channel.name !== 'default' ? (
+                                <button
+                                  className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setChannelToDelete(channel.name);
+                                    setShowDeleteChannelDialog(true);
+                                  }}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <span className="w-4.5" />
+                              )}
+                            </span>
                           </DropdownMenuItem>
                         ))}
                         <DropdownMenuSeparator />
@@ -592,6 +777,21 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                     <Trash2 className="w-4 h-4 mr-2" />
                     {tFilters('tooltips.clearLogs')}
                   </DropdownMenuItem>
+                  {activeChannel !== 'default' && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => {
+                          setChannelToDelete(activeChannel);
+                          setShowDeleteChannelDialog(true);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        {tDialogs('deleteChannel.menuItem')}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -727,6 +927,19 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                         className="h-full"
                         viewPortRef={scrollContainerRef}
                       >
+                        {/* Loading older logs indicator */}
+                        {hasMoreOlderLogs && (
+                          <div className="flex items-center justify-center py-2 text-xs text-muted-foreground">
+                            {isLoadingOlder ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                Loading older logs...
+                              </>
+                            ) : (
+                              <span className="opacity-50">Scroll up to load more</span>
+                            )}
+                          </div>
+                        )}
                         <div
                           style={{
                             height: `${rowVirtualizer.getTotalSize()}px`,
@@ -756,7 +969,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                                   searchQuery={searchQuery}
                                   caseSensitive={caseSensitive}
                                   useRegex={useRegex}
-                                  isNew={false}
+                                  isNew={newLogIds.has(log.id)}
                                   isSelected={selectedIds.has(log.id)}
                                   onSelect={handleRowSelect}
                                   onDataClick={setDrawerLog}
@@ -766,6 +979,16 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                           })}
                         </div>
                       </ScrollArea>
+                      {/* Scroll to bottom button */}
+                      {!isAtBottom && (
+                        <button
+                          onClick={() => rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'end' })}
+                          className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                          New logs
+                        </button>
+                      )}
                     </div>
                   </div>
                 </>
@@ -860,6 +1083,26 @@ logger.info("Hello from Pino OTLP!");`}
               </Button>
               <Button variant="destructive" onClick={handleConfirmDelete}>
                 {tDialogs('deleteConfirmation.deleteAll')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Channel Confirmation Dialog */}
+        <Dialog open={showDeleteChannelDialog} onOpenChange={setShowDeleteChannelDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{tDialogs('deleteChannel.title', { channel: channelToDelete })}</DialogTitle>
+              <DialogDescription>
+                {tDialogs('deleteChannel.description')}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setShowDeleteChannelDialog(false)}>
+                {t('actions.cancel')}
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmDeleteChannel}>
+                {tDialogs('deleteChannel.confirm')}
               </Button>
             </DialogFooter>
           </DialogContent>

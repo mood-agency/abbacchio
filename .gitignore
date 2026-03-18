@@ -39,3 +39,4 @@ build/
 *.whl
 .venv/
 venv/
+/packages/api/data

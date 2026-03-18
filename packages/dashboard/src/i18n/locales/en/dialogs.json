@@ -63,6 +63,14 @@
     "deleting": "Deleting...",
     "deleteAll": "Delete all"
   },
+  "deleteChannel": {
+    "title": "Delete channel \"{{channel}}\"?",
+    "description": "This will permanently delete the channel and all its logs, metrics, and traces. This action cannot be undone.",
+    "confirm": "Delete channel",
+    "menuItem": "Delete channel",
+    "toast": "Channel deleted successfully",
+    "error": "Failed to delete channel"
+  },
   "decryptionFailed": {
     "title": "Decryption Failed",
     "description": "Could not decrypt this log entry. Please check that you've entered the correct encryption key."

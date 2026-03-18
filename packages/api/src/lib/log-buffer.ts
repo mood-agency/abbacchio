@@ -297,11 +297,13 @@ export class LogBuffer extends EventEmitter {
 
   /**
    * Get logs newer than a given ID (for polling)
+   * Returns null if the afterId is not found (e.g. evicted or came from SQLite),
+   * signaling the caller to fall back to a database query.
    */
-  getSince(afterId: string, channel?: string): LogEntry[] {
+  getSince(afterId: string, channel?: string): LogEntry[] | null {
     const allLogs = this.getAll(channel);
     const idx = allLogs.findIndex(l => l.id === afterId);
-    if (idx === -1) return allLogs; // ID not found, return all
+    if (idx === -1) return null; // ID not found — caller should fall back to DB
     return allLogs.slice(idx + 1);
   }
 
@@ -324,6 +326,19 @@ export class LogBuffer extends EventEmitter {
    */
   getAllChannelInfo(): ChannelInfo[] {
     return Array.from(this.channels.values());
+  }
+
+  /**
+   * Delete a channel and all its logs
+   */
+  deleteChannel(channel: string): boolean {
+    if (channel === DEFAULT_CHANNEL) return false;
+    if (!this.channels.has(channel)) return false;
+
+    this.channels.delete(channel);
+    this.logs.delete(channel);
+    this.emit('channel:deleted', channel);
+    return true;
   }
 
   /**
