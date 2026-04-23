@@ -258,7 +258,7 @@ export const LogRow = memo(function LogRow({
   const showData = hasData(log.data);
   const isEncrypted = log.encrypted && !log.decryptionFailed;
   const decryptionFailed = log.decryptionFailed;
-  // Cache the JSON stringified data to avoid recalculating on each render
+  const formattedTime = formatDateTime(log.time);
   const dataString = useMemo(() => JSON.stringify(log.data), [log.data]);
 
   // Memoize highlighting results to avoid regex operations on every render
@@ -336,9 +336,9 @@ export const LogRow = memo(function LogRow({
           onClick={handleRowClick}
         >
           {/* Date/Time */}
-          <CopyableCell value={formatDateTime(log.time)} className="w-40 flex-shrink-0">
+          <CopyableCell value={formattedTime} className="w-40 flex-shrink-0">
             <span className="text-muted-foreground font-mono text-xs tabular-nums">
-              {formatDateTime(log.time)}
+              {formattedTime}
             </span>
           </CopyableCell>
 

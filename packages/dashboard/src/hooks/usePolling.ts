@@ -105,13 +105,14 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Fetch channels list
   const fetchChannels = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/channels`);
+      const [res, statsRes] = await Promise.all([
+        fetch(`${API_BASE}/channels`),
+        fetch(`${API_BASE}/stats`),
+      ]);
       if (!res.ok) return;
       const data = await res.json();
       const channelNames: string[] = data.channels || [];
 
-      // Also get stats for log counts
-      const statsRes = await fetch(`${API_BASE}/stats`);
       const statsData = statsRes.ok ? await statsRes.json() : { channels: { channels: [] } };
       const channelInfos = statsData.channels?.channels || [];
 

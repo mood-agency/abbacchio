@@ -197,24 +197,34 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     }
   }, [activeChannel, searchParams, setSearchParams]);
 
-  // Apply client-side filters (level/namespace are now server-side)
+  // Cache JSON.stringify results across re-renders (same log.data object → same string)
+  const dataStringCache = useRef(new WeakMap<Record<string, unknown>, string>());
+  const getDataString = useCallback((data: Record<string, unknown>) => {
+    let cached = dataStringCache.current.get(data);
+    if (cached === undefined) {
+      cached = JSON.stringify(data);
+      dataStringCache.current.set(data, cached);
+    }
+    return cached;
+  }, []);
+
+  // Apply client-side filters (level/namespace are server-side, this handles time range + search)
+  // Also used as baseFilteredLogs for sidebar counts since the computation is identical
   const logs = useMemo(() => {
     let filtered = allLogs;
 
-    // Time range filter
     const rangeMs = TIME_RANGE_OPTIONS[timeRange];
     if (rangeMs > 0) {
       const minTime = Date.now() - rangeMs;
       filtered = filtered.filter(log => log.time >= minTime);
     }
 
-    // Search filter
     if (searchQuery) {
       if (useRegex) {
         try {
           const regex = new RegExp(searchQuery, caseSensitive ? '' : 'i');
           filtered = filtered.filter(log =>
-            regex.test(log.msg) || regex.test(JSON.stringify(log.data))
+            regex.test(log.msg) || regex.test(getDataString(log.data))
           );
         } catch {
           // Invalid regex, skip filtering
@@ -223,50 +233,16 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
         const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
         filtered = filtered.filter(log => {
           const msg = caseSensitive ? log.msg : log.msg.toLowerCase();
-          const data = caseSensitive ? JSON.stringify(log.data) : JSON.stringify(log.data).toLowerCase();
+          const data = caseSensitive ? getDataString(log.data) : getDataString(log.data).toLowerCase();
           return msg.includes(query) || data.includes(query);
         });
       }
     }
 
     return filtered;
-  }, [allLogs, searchQuery, useRegex, caseSensitive, timeRange]);
+  }, [allLogs, searchQuery, useRegex, caseSensitive, timeRange, getDataString]);
 
-  // Base logs filtered by time range and search (but NOT by level/namespace)
-  // so sidebar counts reflect what's actually visible
-  const baseFilteredLogs = useMemo(() => {
-    let filtered = allLogs;
-
-    // Time range filter
-    const rangeMs = TIME_RANGE_OPTIONS[timeRange];
-    if (rangeMs > 0) {
-      const minTime = Date.now() - rangeMs;
-      filtered = filtered.filter(log => log.time >= minTime);
-    }
-
-    // Search filter
-    if (searchQuery) {
-      if (useRegex) {
-        try {
-          const regex = new RegExp(searchQuery, caseSensitive ? '' : 'i');
-          filtered = filtered.filter(log =>
-            regex.test(log.msg) || regex.test(JSON.stringify(log.data))
-          );
-        } catch {
-          // Invalid regex, skip filtering
-        }
-      } else {
-        const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
-        filtered = filtered.filter(log => {
-          const msg = caseSensitive ? log.msg : log.msg.toLowerCase();
-          const data = caseSensitive ? JSON.stringify(log.data) : JSON.stringify(log.data).toLowerCase();
-          return msg.includes(query) || data.includes(query);
-        });
-      }
-    }
-
-    return filtered;
-  }, [allLogs, timeRange, searchQuery, useRegex, caseSensitive]);
+  const baseFilteredLogs = logs;
 
   // Compute counts from base filtered logs (respects time range + search, but not level/namespace)
   const levelCounts = useMemo(() => computeLevelCounts(baseFilteredLogs), [baseFilteredLogs]);
@@ -303,6 +279,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Row selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const selectedIdsRef = useRef(selectedIds);
+  const lastSelectedIdRef = useRef(lastSelectedId);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  useEffect(() => { lastSelectedIdRef.current = lastSelectedId; }, [lastSelectedId]);
 
   // Data drawer state
   const [drawerLog, setDrawerLog] = useState<LogEntry | null>(null);
@@ -313,15 +293,11 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // SQL mode state
   const [sqlMode, setSqlMode] = useState(false);
 
-  // Check if any filters are active
-  const hasActiveFilters = useMemo(() => {
-    return (
-      searchQuery.length > 0 ||
-      levelFilters.length > 0 ||
-      namespaceFilters.length > 0 ||
-      timeRange !== 'all'
-    );
-  }, [searchQuery, levelFilters, namespaceFilters, timeRange]);
+  const hasActiveFilters =
+    searchQuery.length > 0 ||
+    levelFilters.length > 0 ||
+    namespaceFilters.length > 0 ||
+    timeRange !== 'all';
 
   // Validate regex
   const regexError = useMemo(() => {
@@ -334,43 +310,48 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     }
   }, [useRegex, searchQuery]);
 
-  // Handle row selection
+  // Handle row selection — uses refs to avoid recreating on every selection change
   const handleRowSelect = useCallback((logId: string, shiftKey: boolean) => {
-    if (shiftKey && lastSelectedId !== null) {
-      const lastIndex = logs.findIndex(log => log.id === lastSelectedId);
+    if (shiftKey && lastSelectedIdRef.current !== null) {
+      const lastIndex = logs.findIndex(log => log.id === lastSelectedIdRef.current);
       const currentIndex = logs.findIndex(log => log.id === logId);
       if (lastIndex !== -1 && currentIndex !== -1) {
         const start = Math.min(lastIndex, currentIndex);
         const end = Math.max(lastIndex, currentIndex);
-        const newSelection = new Set(selectedIds);
-        for (let i = start; i <= end; i++) {
-          newSelection.add(logs[i].id);
-        }
-        setSelectedIds(newSelection);
+        setSelectedIds(prev => {
+          const newSelection = new Set(prev);
+          for (let i = start; i <= end; i++) {
+            newSelection.add(logs[i].id);
+          }
+          return newSelection;
+        });
       }
     } else {
-      const newSelection = new Set(selectedIds);
-      if (newSelection.has(logId)) {
-        newSelection.delete(logId);
-      } else {
-        newSelection.add(logId);
-      }
-      setSelectedIds(newSelection);
-      setLastSelectedId(newSelection.has(logId) ? logId : null);
+      setSelectedIds(prev => {
+        const newSelection = new Set(prev);
+        if (newSelection.has(logId)) {
+          newSelection.delete(logId);
+        } else {
+          newSelection.add(logId);
+        }
+        setLastSelectedId(newSelection.has(logId) ? logId : null);
+        return newSelection;
+      });
     }
-  }, [selectedIds, lastSelectedId, logs]);
+  }, [logs]);
 
   // Handle select all
   const handleSelectAll = useCallback(() => {
     if (logs.length === 0) return;
-    if (selectedIds.size > 0) {
-      setSelectedIds(new Set());
-      setLastSelectedId(null);
-    } else {
-      setSelectedIds(new Set(logs.map(log => log.id)));
+    setSelectedIds(prev => {
+      if (prev.size > 0) {
+        setLastSelectedId(null);
+        return new Set();
+      }
       setLastSelectedId(logs[logs.length - 1]?.id ?? null);
-    }
-  }, [logs, selectedIds.size]);
+      return new Set(logs.map(log => log.id));
+    });
+  }, [logs]);
 
   const selectAllState = useMemo(() => {
     if (logs.length === 0 || selectedIds.size === 0) return 'none';
@@ -378,10 +359,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     return 'some';
   }, [logs.length, selectedIds.size]);
 
-  // Copy selected logs
+  // Copy selected logs — uses refs to avoid recreating on every selection change
   const copySelectedLogs = useCallback(async () => {
-    if (selectedIds.size === 0) return;
-    const selectedLogs = logs.filter(log => selectedIds.has(log.id));
+    if (selectedIdsRef.current.size === 0) return;
+    const selectedLogs = logs.filter(log => selectedIdsRef.current.has(log.id));
     const formatted = formatLogsForClipboard(selectedLogs);
     try {
       await navigator.clipboard.writeText(formatted);
@@ -390,24 +371,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
       console.error('Failed to copy logs:', err);
       toast.error(tLogs('toast.copyFailed'));
     }
-  }, [selectedIds, logs, tLogs]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (selectedIds.size > 0) {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-          e.preventDefault();
-          copySelectedLogs();
-        } else if (e.key === 'Escape') {
-          setSelectedIds(new Set());
-          setLastSelectedId(null);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, copySelectedLogs]);
+  }, [logs, tLogs]);
 
   // Clear selection when filters change
   useEffect(() => {
@@ -465,13 +429,25 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Search input ref for Ctrl+F focus
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle Ctrl+F
+  // Combined keyboard shortcuts (Ctrl+C copy, Escape deselect, Ctrl+F search)
+  const copySelectedLogsRef = useRef(copySelectedLogs);
+  useEffect(() => { copySelectedLogsRef.current = copySelectedLogs; }, [copySelectedLogs]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
+      }
+      if (selectedIdsRef.current.size > 0) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+          e.preventDefault();
+          copySelectedLogsRef.current();
+        } else if (e.key === 'Escape') {
+          setSelectedIds(new Set());
+          setLastSelectedId(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
