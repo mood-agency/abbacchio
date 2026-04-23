@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
-import { getLogs, ingestLogs, clearLogs, deleteChannel, getChannels, getStats, getMetrics, getTraces, executeSql } from './logs.handlers.js';
+import { getLogs, ingestLogs, clearLogs, deleteChannel, getChannels, getStats, getMetrics, getTraces, executeSql, getLogCounts } from './logs.handlers.js';
 import { ingestOtlpLogs, ingestOtlpMetrics, ingestOtlpTraces } from './otlp.handlers.js';
 
 const router = new Hono();
 
 // Standard API routes (under /api)
 router.post('/api/logs', ingestLogs);
+router.get('/api/logs/counts', getLogCounts);
 router.get('/api/logs', getLogs);
 router.delete('/api/logs', clearLogs);
 router.get('/api/channels', getChannels);

@@ -34,7 +34,7 @@ export function validateLogEntry(log: unknown, maxSize: number): ValidationResul
   if (serialized.length > maxSize) {
     return {
       valid: false,
-      error: `Log entry exceeds maximum size of ${maxSize} bytes (got ${serialized.length})`,
+      error: 'Log entry exceeds maximum allowed size',
       statusCode: 413,
     };
   }
@@ -59,7 +59,7 @@ export function validateBatch(
   if (logs.length > config.maxBatchSize) {
     return {
       valid: false,
-      error: `Batch size exceeds maximum of ${config.maxBatchSize} (got ${logs.length})`,
+      error: 'Batch size exceeds maximum allowed',
       statusCode: 413,
     };
   }
@@ -99,10 +99,7 @@ export function createValidatorMiddleware(
       const length = parseInt(contentLength, 10);
       if (length > cfg.maxPayloadSize) {
         return c.json(
-          {
-            error: 'Payload Too Large',
-            message: `Payload size ${length} exceeds maximum of ${cfg.maxPayloadSize} bytes`,
-          },
+          { error: 'Payload Too Large' },
           413
         );
       }
@@ -124,10 +121,7 @@ export function createValidatorMiddleware(
     const bodyStr = JSON.stringify(body);
     if (bodyStr.length > cfg.maxPayloadSize) {
       return c.json(
-        {
-          error: 'Payload Too Large',
-          message: `Payload size ${bodyStr.length} exceeds maximum of ${cfg.maxPayloadSize} bytes`,
-        },
+        { error: 'Payload Too Large' },
         413
       );
     }

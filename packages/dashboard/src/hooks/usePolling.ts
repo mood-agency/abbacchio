@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { LogEntry, MetricDataPoint, TraceSpan } from '../types';
 
 const API_BASE = '/api';
 const POLL_INTERVAL = 1000; // 1 second
+
+export interface ServerFilters {
+  levels?: string[];
+  namespaces?: string[];
+}
 
 interface Channel {
   name: string;
@@ -40,9 +45,15 @@ interface UsePollingResult {
   hasMoreOlderLogs: boolean;
   /** Whether older logs are currently being loaded */
   isLoadingOlder: boolean;
+  /** Total number of logs on the server for the active channel */
+  serverTotal: number | null;
+  /** Server-side level counts */
+  serverLevelCounts: Record<string, number> | null;
+  /** Server-side namespace counts */
+  serverNamespaceCounts: Record<string, number> | null;
 }
 
-export function usePolling(initialChannel?: string | null, initialPaused?: boolean): UsePollingResult {
+export function usePolling(initialChannel?: string | null, initialPaused?: boolean, serverFilters?: ServerFilters): UsePollingResult {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<string | null>(initialChannel ?? null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -52,6 +63,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   const [isPaused, setIsPaused] = useState(initialPaused ?? false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasMoreOlderLogs, setHasMoreOlderLogs] = useState(false);
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
+  const [serverLevelCounts, setServerLevelCounts] = useState<Record<string, number> | null>(null);
+  const [serverNamespaceCounts, setServerNamespaceCounts] = useState<Record<string, number> | null>(null);
 
   // Track the last log ID we've seen for incremental polling
   const lastLogIdRef = useRef<string | null>(null);
@@ -69,6 +83,12 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   const manualChannelsRef = useRef<Set<string>>(new Set());
   // Track hasMoreOlderLogs in a ref for the stable loadOlderLogs callback
   const hasMoreOlderLogsRef = useRef(false);
+  // Server-side filters ref for use in stable callbacks
+  const serverFiltersRef = useRef(serverFilters);
+
+  useEffect(() => {
+    serverFiltersRef.current = serverFilters;
+  }, [serverFilters]);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -148,6 +168,13 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       if (isIncremental) {
         params.set('afterId', lastLogIdRef.current!);
       }
+      const filters = serverFiltersRef.current;
+      if (filters?.levels && filters.levels.length > 0) {
+        params.set('levels', filters.levels.join(','));
+      }
+      if (filters?.namespaces && filters.namespaces.length > 0) {
+        params.set('namespaces', filters.namespaces.join(','));
+      }
 
       const res = await fetch(`${API_BASE}/logs?${params}`);
       if (!res.ok) return;
@@ -168,6 +195,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
           // Determine if there are older logs to load
           const total = data.total;
           if (total !== undefined) {
+            setServerTotal(total);
             const hasMore = newLogs.length < total;
             setHasMoreOlderLogs(hasMore);
             hasMoreOlderLogsRef.current = hasMore;
@@ -178,6 +206,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
             const existingIds = new Set(prev.map(l => l.id));
             const unique = newLogs.filter(l => !existingIds.has(l.id));
             if (unique.length === 0) return prev;
+            setServerTotal(st => st !== null ? st + unique.length : null);
             return [...prev, ...unique];
           });
         }
@@ -190,6 +219,23 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       console.error('Failed to fetch logs:', err);
     } finally {
       fetchInFlightRef.current = false;
+    }
+  }, []);
+
+  // Fetch server-side counts for active channel
+  const fetchCounts = useCallback(async () => {
+    const channel = activeChannelRef.current;
+    if (!channel) return;
+    try {
+      const res = await fetch(`${API_BASE}/logs/counts?channel=${encodeURIComponent(channel)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (channel !== activeChannelRef.current) return;
+      setServerTotal(data.total ?? null);
+      setServerLevelCounts(data.levels ?? null);
+      setServerNamespaceCounts(data.namespaces ?? null);
+    } catch (err) {
+      console.error('Failed to fetch counts:', err);
     }
   }, []);
 
@@ -247,6 +293,13 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         beforeId: oldestLogIdRef.current,
         limit: '500',
       });
+      const filters = serverFiltersRef.current;
+      if (filters?.levels && filters.levels.length > 0) {
+        params.set('levels', filters.levels.join(','));
+      }
+      if (filters?.namespaces && filters.namespaces.length > 0) {
+        params.set('namespaces', filters.namespaces.join(','));
+      }
 
       const res = await fetch(`${API_BASE}/logs?${params}`);
       if (!res.ok) return;
@@ -294,7 +347,39 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     setHasMoreOlderLogs(false);
     hasMoreOlderLogsRef.current = false;
     setIsLoadingOlder(false);
+    setServerTotal(null);
+    setServerLevelCounts(null);
+    setServerNamespaceCounts(null);
   }, [activeChannel]);
+
+  // Stable key to detect filter changes
+  const filtersKey = useMemo(() => {
+    if (!serverFilters) return '';
+    return [
+      (serverFilters.levels || []).sort().join(','),
+      (serverFilters.namespaces || []).sort().join(','),
+    ].join('|');
+  }, [serverFilters]);
+
+  // Re-fetch when server filters change
+  const prevFiltersKeyRef = useRef(filtersKey);
+  useEffect(() => {
+    if (filtersKey === prevFiltersKeyRef.current) return;
+    prevFiltersKeyRef.current = filtersKey;
+
+    setLogs([]);
+    lastLogIdRef.current = null;
+    oldestLogIdRef.current = null;
+    initialLoadDoneRef.current = false;
+    setHasMoreOlderLogs(false);
+    hasMoreOlderLogsRef.current = false;
+    setServerTotal(null);
+
+    if (activeChannelRef.current) {
+      setIsLoading(true);
+      Promise.all([fetchLogs(true), fetchCounts()]).then(() => setIsLoading(false));
+    }
+  }, [filtersKey, fetchLogs, fetchCounts]);
 
   // Initial load when channel changes
   useEffect(() => {
@@ -304,11 +389,11 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     }
 
     const loadInitial = async () => {
-      await Promise.all([fetchLogs(true), fetchMetrics(), fetchTraces()]);
+      await Promise.all([fetchLogs(true), fetchMetrics(), fetchTraces(), fetchCounts()]);
       setIsLoading(false);
     };
     loadInitial();
-  }, [activeChannel]); // fetchLogs/fetchMetrics/fetchTraces are stable (no deps)
+  }, [activeChannel]); // fetchLogs/fetchMetrics/fetchTraces/fetchCounts are stable (no deps)
 
   // Poll for new data — runs once since all fetch callbacks are stable
   useEffect(() => {
@@ -316,10 +401,11 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     const channelInterval = setInterval(fetchChannels, POLL_INTERVAL * 5);
     // Poll logs more frequently
     const logInterval = setInterval(fetchLogs, POLL_INTERVAL);
-    // Poll metrics/traces less frequently
+    // Poll metrics/traces/counts less frequently
     const dataInterval = setInterval(() => {
       fetchMetrics();
       fetchTraces();
+      fetchCounts();
     }, POLL_INTERVAL * 3);
 
     // Initial channel fetch
@@ -330,7 +416,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       clearInterval(logInterval);
       clearInterval(dataInterval);
     };
-  }, [fetchChannels, fetchLogs, fetchMetrics, fetchTraces]);
+  }, [fetchChannels, fetchLogs, fetchMetrics, fetchTraces, fetchCounts]);
 
   // Clear logs
   const clearLogs = useCallback(async (channel?: string) => {
@@ -399,5 +485,8 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     loadOlderLogs,
     hasMoreOlderLogs,
     isLoadingOlder,
+    serverTotal,
+    serverLevelCounts,
+    serverNamespaceCounts,
   };
 }

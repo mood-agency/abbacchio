@@ -60,7 +60,7 @@ describe('Authentication', () => {
         expect(response.status).toBe(201);
       });
 
-      it('should allow requests with valid apiKey query parameter', async () => {
+      it('should reject apiKey query parameter (header-only auth)', async () => {
         const app = createTestApp({ apiKey: API_KEY });
 
         const response = await app.request(`/api/logs?apiKey=${API_KEY}`, {
@@ -69,7 +69,7 @@ describe('Authentication', () => {
           body: JSON.stringify({ level: 30, msg: 'Test' }),
         });
 
-        expect(response.status).toBe(201);
+        expect(response.status).toBe(401);
       });
 
       it('should work with header for GET /api/logs', async () => {
@@ -82,11 +82,12 @@ describe('Authentication', () => {
         expect(response.status).toBe(200);
       });
 
-      it('should work with query param for DELETE /api/logs', async () => {
+      it('should work with header for DELETE /api/logs', async () => {
         const app = createTestApp({ apiKey: API_KEY });
 
-        const response = await app.request(`/api/logs?apiKey=${API_KEY}`, {
+        const response = await app.request('/api/logs', {
           method: 'DELETE',
+          headers: { 'X-API-KEY': API_KEY },
         });
 
         expect(response.status).toBe(200);

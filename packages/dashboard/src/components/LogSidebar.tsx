@@ -43,10 +43,30 @@ interface LogSidebarProps {
   namespaceCounts: NamespaceCounts;
   timeRange: TimeRange;
   setTimeRange: (range: TimeRange) => void;
+  loadedCount: number;
+  serverTotal: number | null;
+  serverLevelCounts: Record<string, number> | null;
+  serverNamespaceCounts: Record<string, number> | null;
 }
 
 const LEVELS: LogLevelLabel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 const TIME_RANGE_OPTIONS: TimeRange[] = ['5m', '10m', '15m', '30m', '1h', '12h', '1d', '3d', '1w', '2w', 'all'];
+
+function CountDisplay({ loaded, server }: { loaded: number; server?: number }) {
+  if (server !== undefined && server > loaded) {
+    return (
+      <span className="tabular-nums text-xs text-muted-foreground">
+        {loaded.toLocaleString()}
+        <span className="text-muted-foreground/60"> / {server.toLocaleString()}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="tabular-nums text-xs text-muted-foreground">
+      {loaded.toLocaleString()}
+    </span>
+  );
+}
 
 export function LogSidebar({
   levelFilters,
@@ -60,13 +80,26 @@ export function LogSidebar({
   namespaceCounts,
   timeRange,
   setTimeRange,
+  loadedCount,
+  serverTotal,
+  serverLevelCounts,
+  serverNamespaceCounts,
 }: LogSidebarProps) {
   const { t } = useTranslation('filters');
+
+  const isPartial = serverTotal !== null && serverTotal > loadedCount;
 
   return (
     <Sidebar>
       <SidebarHeader>
-        <span className="font-semibold text-sm">{t('sidebar.title')}</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="font-semibold text-sm">{t('sidebar.title')}</span>
+          {isPartial && (
+            <span className="text-xs text-muted-foreground">
+              {t('sidebar.showing', { loaded: loadedCount.toLocaleString(), total: serverTotal.toLocaleString() })}
+            </span>
+          )}
+        </div>
       </SidebarHeader>
       <SidebarContent>
         {/* Timeline filter */}
@@ -109,6 +142,7 @@ export function LogSidebar({
           </div>
           {LEVELS.map((level) => {
             const count = levelCounts[level];
+            const serverCount = isPartial ? serverLevelCounts?.[level] : undefined;
             const isChecked = levelFilters.includes(level);
             return (
               <label
@@ -122,9 +156,7 @@ export function LogSidebar({
                   />
                   <LevelBadge level={level} />
                 </span>
-                <span className="tabular-nums text-xs text-muted-foreground">
-                  {count.toLocaleString()}
-                </span>
+                <CountDisplay loaded={count} server={serverCount} />
               </label>
             );
           })}
@@ -150,6 +182,7 @@ export function LogSidebar({
             {availableNamespaces.map((namespace) => {
               const isChecked = namespaceFilters.includes(namespace);
               const count = namespaceCounts[namespace] ?? 0;
+              const serverCount = isPartial ? serverNamespaceCounts?.[namespace] : undefined;
               return (
                 <label
                   key={namespace}
@@ -162,9 +195,7 @@ export function LogSidebar({
                     />
                     <span className="text-sm truncate">{namespace}</span>
                   </span>
-                  <span className="tabular-nums text-xs text-muted-foreground">
-                    {count.toLocaleString()}
-                  </span>
+                  <CountDisplay loaded={count} server={serverCount} />
                 </label>
               );
             })}

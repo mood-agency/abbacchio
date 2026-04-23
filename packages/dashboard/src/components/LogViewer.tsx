@@ -114,6 +114,32 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   const initialChannel = searchParams.get('channel');
   const initialPaused = searchParams.get('paused') === '1';
 
+  // URL params for filters (must be before usePolling so filters are available)
+  const {
+    levels: levelFilters,
+    namespaces: namespaceFilters,
+    search: searchQuery,
+    caseSensitive,
+    useRegex,
+    setLevels,
+    toggleLevel,
+    setNamespaces,
+    toggleNamespace,
+    setTimeRange,
+    setSearch: setSearchQuery,
+    setCaseSensitive,
+    setUseRegex,
+    setAllFilters,
+    clearFilters,
+    timeRange,
+  } = useFilterParams();
+
+  // Server-side filters derived from URL params
+  const serverFilters = useMemo(() => ({
+    levels: levelFilters.length > 0 ? levelFilters : undefined,
+    namespaces: namespaceFilters.length > 0 ? namespaceFilters : undefined,
+  }), [levelFilters, namespaceFilters]);
+
   // Simple polling-based data
   const {
     channels,
@@ -131,7 +157,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     loadOlderLogs,
     hasMoreOlderLogs,
     isLoadingOlder,
-  } = usePolling(initialChannel, initialPaused);
+    serverTotal,
+    serverLevelCounts,
+    serverNamespaceCounts,
+  } = usePolling(initialChannel, initialPaused, serverFilters);
 
   // Sync isPaused to URL
   const setIsPaused = useCallback((paused: boolean) => {
@@ -168,27 +197,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     }
   }, [activeChannel, searchParams, setSearchParams]);
 
-  // URL params for filters
-  const {
-    levels: levelFilters,
-    namespaces: namespaceFilters,
-    search: searchQuery,
-    caseSensitive,
-    useRegex,
-    setLevels,
-    toggleLevel,
-    setNamespaces,
-    toggleNamespace,
-    setTimeRange,
-    setSearch: setSearchQuery,
-    setCaseSensitive,
-    setUseRegex,
-    setAllFilters,
-    clearFilters,
-    timeRange,
-  } = useFilterParams();
-
-  // Apply client-side filters
+  // Apply client-side filters (level/namespace are now server-side)
   const logs = useMemo(() => {
     let filtered = allLogs;
 
@@ -197,19 +206,6 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     if (rangeMs > 0) {
       const minTime = Date.now() - rangeMs;
       filtered = filtered.filter(log => log.time >= minTime);
-    }
-
-    // Level filter
-    if (levelFilters.length > 0) {
-      filtered = filtered.filter(log => levelFilters.includes(log.levelLabel));
-    }
-
-    // Namespace filter
-    if (namespaceFilters.length > 0) {
-      filtered = filtered.filter(log => {
-        const ns = log.namespace || '(none)';
-        return namespaceFilters.includes(ns);
-      });
     }
 
     // Search filter
@@ -234,7 +230,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     }
 
     return filtered;
-  }, [allLogs, levelFilters, namespaceFilters, searchQuery, useRegex, caseSensitive, timeRange]);
+  }, [allLogs, searchQuery, useRegex, caseSensitive, timeRange]);
 
   // Base logs filtered by time range and search (but NOT by level/namespace)
   // so sidebar counts reflect what's actually visible
@@ -855,6 +851,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                 namespaceCounts={namespaceCounts}
                 timeRange={timeRange}
                 setTimeRange={setTimeRange}
+                loadedCount={allLogs.length}
+                serverTotal={serverTotal}
+                serverLevelCounts={serverLevelCounts}
+                serverNamespaceCounts={serverNamespaceCounts}
               />
             )}
 

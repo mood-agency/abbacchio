@@ -26,6 +26,10 @@ const DEFAULT_CONFIG: RateLimiterConfig = {
   maxRequests: parseInt(process.env.RATE_LIMIT_MAX || '1000', 10),
 };
 
+// Hard cap on distinct client buckets to bound memory under abuse
+// (e.g., attacker varying User-Agent when TRUST_PROXY=false).
+const MAX_BUCKETS = parseInt(process.env.RATE_LIMIT_MAX_BUCKETS || '10000', 10);
+
 /**
  * Get client IP from request
  * SECURITY: Only trusts proxy headers when TRUST_PROXY is enabled
@@ -119,7 +123,12 @@ export class RateLimiter {
     let bucket = this.buckets.get(key);
 
     if (!bucket) {
-      // New bucket with full tokens
+      // Evict the oldest bucket when at capacity to prevent unbounded memory
+      // growth from attackers varying their client identity.
+      if (this.buckets.size >= MAX_BUCKETS) {
+        const oldestKey = this.buckets.keys().next().value;
+        if (oldestKey !== undefined) this.buckets.delete(oldestKey);
+      }
       bucket = {
         tokens: this.config.maxRequests - 1,
         lastRefill: now,

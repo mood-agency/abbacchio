@@ -11,7 +11,8 @@
     "timeline": "Cronología",
     "levels": "Niveles",
     "namespaces": "Namespaces",
-    "clear": "Limpiar"
+    "clear": "Limpiar",
+    "showing": "Mostrando {{loaded}} de {{total}}"
   },
   "selection": {
     "count": "{{count}} seleccionados",

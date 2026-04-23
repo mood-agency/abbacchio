@@ -40,3 +40,4 @@ build/
 .venv/
 venv/
 /packages/api/data
+.claude/skills

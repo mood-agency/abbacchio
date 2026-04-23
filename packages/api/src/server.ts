@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 import routes from './routes/index.js';
@@ -18,14 +18,13 @@ import { getDatabase, resetDatabase } from './lib/database.js';
 // Configuration from environment
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const API_KEY = process.env.API_KEY;
-// SECURITY: Default CORS to localhost only in production, allow all in dev
 const IS_DEV = process.env.NODE_ENV !== 'production';
-const CORS_ORIGIN = process.env.CORS_ORIGIN || (IS_DEV ? '*' : 'http://localhost:4001');
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:4001';
 const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT !== 'false';
 // SECURITY: Trust proxy headers only when explicitly enabled
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
-// Authentication is disabled by default. Set API_KEY to enable it.
-const REQUIRE_API_KEY = process.env.REQUIRE_API_KEY === 'true';
+// In production, API_KEY is required unless ALLOW_ANON=true is set explicitly.
+const ALLOW_ANON = process.env.ALLOW_ANON === 'true';
 
 // Graceful shutdown configuration
 const SHUTDOWN_TIMEOUT = parseInt(process.env.SHUTDOWN_TIMEOUT || '30000', 10);
@@ -41,24 +40,43 @@ app.use('*', logger());
 if (ENABLE_RATE_LIMIT) {
   app.use('/api/*', createRateLimiterMiddleware());
   app.use('/v1/*', createRateLimiterMiddleware());
+  if (!TRUST_PROXY && !IS_DEV) {
+    console.warn('⚠️  Rate limiting active without TRUST_PROXY=true. Clients identified by User-Agent hash (less precise). Set TRUST_PROXY=true behind a reverse proxy.');
+  }
 }
 
 // Input validation middleware for standard log ingestion (not OTLP)
 app.use('/api/logs', createValidatorMiddleware());
 
+// Payload size limit for OTLP endpoints
+const MAX_OTLP_PAYLOAD = parseInt(process.env.MAX_PAYLOAD_SIZE || '1048576', 10);
+app.use('/v1/*', async (c, next) => {
+  if (c.req.method !== 'POST') return next();
+  const contentLength = c.req.header('content-length');
+  if (contentLength && parseInt(contentLength, 10) > MAX_OTLP_PAYLOAD) {
+    return c.json({ error: 'Payload Too Large' }, 413);
+  }
+  return next();
+});
+
 // API key authentication (opt-in: set API_KEY env var to enable)
 if (API_KEY) {
+  const apiKeyBuffer = Buffer.from(API_KEY);
   const authMiddleware = async (c: any, next: any) => {
-    const key = c.req.header('X-API-KEY') || c.req.query('apiKey');
-    if (key !== API_KEY) {
+    const key = c.req.header('X-API-KEY');
+    if (!key || key.length !== API_KEY.length || !crypto.timingSafeEqual(Buffer.from(key), apiKeyBuffer)) {
       return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
     }
     return next();
   };
   app.use('/api/*', authMiddleware);
   app.use('/v1/*', authMiddleware);
-} else if (REQUIRE_API_KEY) {
-  console.warn('\n⚠️  WARNING: REQUIRE_API_KEY is set but API_KEY is not configured.\n');
+} else if (!IS_DEV) {
+  if (!ALLOW_ANON) {
+    console.error('FATAL: API_KEY is required in production. Set API_KEY (openssl rand -base64 32) or ALLOW_ANON=true to opt into anonymous access. Exiting.');
+    process.exit(1);
+  }
+  console.warn('\n⚠️  WARNING: Running in production with ALLOW_ANON=true. All endpoints are unauthenticated.\n');
 }
 
 // SECURITY: Add security headers to all responses
@@ -110,9 +128,14 @@ const shouldServeDashboard = !IS_DEV && existsSync(dashboardPath);
 
 if (shouldServeDashboard) {
   // Serve static files with absolute path
+  const resolvedDashboardPath = resolve(dashboardPath);
   app.get('/*', async (c, next) => {
     const path = c.req.path === '/' ? '/index.html' : c.req.path;
-    const filePath = join(dashboardPath, path);
+    const filePath = resolve(join(dashboardPath, path));
+
+    if (!filePath.startsWith(resolvedDashboardPath)) {
+      return next();
+    }
 
     if (existsSync(filePath)) {
       const file = Bun.file(filePath);
@@ -219,12 +242,14 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
+  console.error('Uncaught exception:', IS_DEV ? error : error?.message || 'Unknown error');
   gracefulShutdown('uncaughtException');
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('Unhandled rejection:', IS_DEV ? reason : msg);
+  gracefulShutdown('unhandledRejection');
 });
 
 // Start server

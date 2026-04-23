@@ -17,7 +17,7 @@ export function createTestApp(options: CreateTestAppOptions = {}) {
   // Optional API key authentication (mirrors server.ts logic)
   if (apiKey) {
     app.use('/api/*', async (c, next) => {
-      const key = c.req.header('X-API-KEY') || c.req.query('apiKey');
+      const key = c.req.header('X-API-KEY');
 
       if (key !== apiKey) {
         return c.json({ error: 'Unauthorized' }, 401);

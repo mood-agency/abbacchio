@@ -11,7 +11,8 @@
     "timeline": "Timeline",
     "levels": "Levels",
     "namespaces": "Namespaces",
-    "clear": "Clear"
+    "clear": "Clear",
+    "showing": "Showing {{loaded}} of {{total}}"
   },
   "selection": {
     "count": "{{count}} selected",

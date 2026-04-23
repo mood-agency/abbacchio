@@ -21,6 +21,8 @@ export interface QueryOpts {
   offset?: number;
   channel?: string;
   level?: number;
+  levels?: string[];
+  namespaces?: string[];
   search?: string;
   since?: number;
   until?: number;
@@ -85,6 +87,31 @@ export interface DbStats {
   channels: ChannelStats[];
 }
 
+function addLevelAndNamespaceConditions(
+  conditions: string[],
+  params: Record<string, any>,
+  levels?: string[],
+  namespaces?: string[],
+) {
+  if (levels && levels.length > 0) {
+    const placeholders = levels.map((_, i) => `$lvl${i}`);
+    conditions.push(`level_label IN (${placeholders.join(', ')})`);
+    levels.forEach((lbl, i) => { params[`$lvl${i}`] = lbl; });
+  }
+  if (namespaces && namespaces.length > 0) {
+    const hasNone = namespaces.includes('(none)');
+    const named = namespaces.filter(n => n !== '(none)');
+    const parts: string[] = [];
+    if (hasNone) parts.push('namespace IS NULL');
+    if (named.length > 0) {
+      const placeholders = named.map((_, i) => `$ns${i}`);
+      parts.push(`namespace IN (${placeholders.join(', ')})`);
+      named.forEach((ns, i) => { params[`$ns${i}`] = ns; });
+    }
+    conditions.push(`(${parts.join(' OR ')})`);
+  }
+}
+
 function getDefaultConfig(): DatabaseConfig {
   return {
     path: process.env.SQLITE_PATH || './data/logs.db',
@@ -96,6 +123,7 @@ function getDefaultConfig(): DatabaseConfig {
 
 export class LogDatabase {
   private db: Database;
+  private readonlyDb: Database;
   private config: DatabaseConfig;
 
   // Prepared statements
@@ -132,6 +160,7 @@ export class LogDatabase {
     }
 
     this.db = new Database(this.config.path);
+    this.readonlyDb = new Database(this.config.path, { readonly: true });
 
     // Performance pragmas
     if (this.config.walMode) {
@@ -345,6 +374,7 @@ export class LogDatabase {
       conditions.push('level >= $level');
       params.$level = opts.level;
     }
+    addLevelAndNamespaceConditions(conditions, params, opts.levels, opts.namespaces);
     if (opts.search) {
       conditions.push('(msg LIKE $search OR trace_id LIKE $search OR span_id LIKE $search)');
       params.$search = `%${opts.search}%`;
@@ -493,8 +523,7 @@ export class LogDatabase {
 
   // ──────── SQL EXECUTION ────────
 
-  executeSql(sql: string): { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; executionTimeMs: number } {
-    // Strip comments and normalize
+  executeSql(sql: string): { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; executionTimeMs: number; truncated: boolean } {
     const stripped = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
     const firstWord = stripped.split(/\s+/)[0]?.toUpperCase();
 
@@ -502,30 +531,75 @@ export class LogDatabase {
       throw new Error('Only SELECT queries are allowed');
     }
 
-    const upperSql = stripped.toUpperCase();
-    for (const keyword of ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'ATTACH', 'DETACH', 'PRAGMA', 'VACUUM', 'REINDEX']) {
-      const regex = new RegExp(`\\b${keyword}\\b`);
-      if (regex.test(upperSql)) {
-        const beforeKeyword = upperSql.indexOf(keyword);
-        const prefix = upperSql.slice(0, beforeKeyword).trim();
-        if (!prefix.endsWith('(') && !prefix.endsWith(',') && !prefix.endsWith('AS')) {
-          throw new Error(`${keyword} statements are not allowed`);
-        }
-      }
+    // Reject multi-statement payloads (single trailing semicolon is OK).
+    const withoutTrailing = stripped.replace(/;\s*$/, '');
+    if (withoutTrailing.includes(';')) {
+      throw new Error('Only a single statement is allowed');
     }
 
-    let finalSql = sql;
-    if (!/\bLIMIT\b/i.test(stripped)) {
-      finalSql = `${sql.replace(/;\s*$/, '')} LIMIT 10000`;
+    // Deny-list of dangerous constructs reachable through SELECT/WITH
+    // (ATTACH, PRAGMA, load_extension, and pragma_* table-valued functions
+    // can read sqlite_master paths or attach arbitrary DB files on disk).
+    if (/\b(ATTACH|DETACH|PRAGMA|LOAD_EXTENSION|SQLITE_MASTER|pragma_[a-z_]+)\b/i.test(withoutTrailing)) {
+      throw new Error('Query contains disallowed keyword');
     }
+
+    const finalSql = /\bLIMIT\b/i.test(withoutTrailing)
+      ? withoutTrailing
+      : `${withoutTrailing} LIMIT 10000`;
 
     const start = performance.now();
-    const rows = this.db.prepare(finalSql).all() as Record<string, unknown>[];
+    const rows = this.readonlyDb.prepare(finalSql).all() as Record<string, unknown>[];
     const executionTimeMs = Math.round((performance.now() - start) * 100) / 100;
 
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-    return { columns, rows, rowCount: rows.length, executionTimeMs };
+    // Cap response size to ~10MB to protect memory / event loop.
+    const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+    let truncated = false;
+    let totalBytes = 0;
+    const capped: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      totalBytes += JSON.stringify(row).length;
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        truncated = true;
+        break;
+      }
+      capped.push(row);
+    }
+
+    return { columns, rows: capped, rowCount: capped.length, executionTimeMs, truncated };
+  }
+
+  getCounts(channel?: string): {
+    levels: Record<string, number>;
+    namespaces: Record<string, number>;
+    total: number;
+  } {
+    const where = channel ? 'WHERE channel = $channel' : '';
+    const params = channel ? { $channel: channel } : {};
+
+    const levelRows = this.db.prepare(
+      `SELECT level_label, COUNT(*) as count FROM logs ${where} GROUP BY level_label`
+    ).all(params) as { level_label: string; count: number }[];
+
+    const nsRows = this.db.prepare(
+      `SELECT COALESCE(namespace, '(none)') as ns, COUNT(*) as count FROM logs ${where} GROUP BY ns`
+    ).all(params) as { ns: string; count: number }[];
+
+    const levels: Record<string, number> = {};
+    let total = 0;
+    for (const row of levelRows) {
+      levels[row.level_label] = row.count;
+      total += row.count;
+    }
+
+    const namespaces: Record<string, number> = {};
+    for (const row of nsRows) {
+      namespaces[row.ns] = row.count;
+    }
+
+    return { levels, namespaces, total };
   }
 
   // ──────── LOOKUPS ────────
@@ -534,7 +608,7 @@ export class LogDatabase {
    * Get logs after a given ID using cursor-based pagination.
    * Uses the rowid to efficiently find logs inserted after the given ID.
    */
-  queryAfterId(afterId: string, channel?: string, limit = 500): LogEntry[] {
+  queryAfterId(afterId: string, channel?: string, limit = 500, levels?: string[], namespaces?: string[]): LogEntry[] {
     const conditions = ['rowid > (SELECT rowid FROM logs WHERE id = $afterId)'];
     const params: Record<string, any> = { $afterId: afterId, $limit: limit };
 
@@ -542,6 +616,7 @@ export class LogDatabase {
       conditions.push('channel = $channel');
       params.$channel = channel;
     }
+    addLevelAndNamespaceConditions(conditions, params, levels, namespaces);
 
     const where = `WHERE ${conditions.join(' AND ')}`;
     const rows = this.db.prepare(
@@ -566,7 +641,7 @@ export class LogDatabase {
    * Get logs before a given ID using cursor-based pagination (backward/older).
    * Returns logs in chronological (ASC) order for direct prepending.
    */
-  queryBeforeId(beforeId: string, channel?: string, limit = 500): { logs: LogEntry[]; hasMore: boolean } {
+  queryBeforeId(beforeId: string, channel?: string, limit = 500, levels?: string[], namespaces?: string[]): { logs: LogEntry[]; hasMore: boolean } {
     const conditions = ['rowid < (SELECT rowid FROM logs WHERE id = $beforeId)'];
     const params: Record<string, any> = { $beforeId: beforeId, $limit: limit + 1 };
 
@@ -574,6 +649,7 @@ export class LogDatabase {
       conditions.push('channel = $channel');
       params.$channel = channel;
     }
+    addLevelAndNamespaceConditions(conditions, params, levels, namespaces);
 
     const where = `WHERE ${conditions.join(' AND ')}`;
     const rows = this.db.prepare(
@@ -683,6 +759,7 @@ export class LogDatabase {
     clearInterval(this.pruneTimer);
     clearInterval(this.flushTimer);
     this.flush(); // Final flush
+    this.readonlyDb.close();
     this.db.close();
     console.log('[Database] Connection closed successfully');
   }

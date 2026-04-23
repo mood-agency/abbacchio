@@ -75,21 +75,27 @@ export function getLogs(c: Context) {
   const limitParam = c.req.query('limit');
   const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10), 1), 10_000) : undefined;
 
+  const levelsParam = c.req.query('levels');
+  const namespacesParam = c.req.query('namespaces');
+  const levels = levelsParam ? levelsParam.split(',').filter(Boolean) : undefined;
+  const namespaces = namespacesParam ? namespacesParam.split(',').filter(Boolean) : undefined;
+  const hasServerFilters = !!(levels || namespaces);
+
   // --- Forward pagination (polling for newer logs) ---
   if (afterId) {
-    // Incremental polling: try in-memory buffer first for speed
-    const logs = buffer.getSince(afterId, channel || undefined);
-    if (logs !== null) {
-      return c.json({
-        logs,
-        count: logs.length,
-        channel: channel || 'all',
-      });
+    // Skip in-memory buffer when server-side filters are active (buffer can't filter)
+    if (!hasServerFilters) {
+      const logs = buffer.getSince(afterId, channel || undefined);
+      if (logs !== null) {
+        return c.json({
+          logs,
+          count: logs.length,
+          channel: channel || 'all',
+        });
+      }
     }
-    // afterId not found in memory buffer (e.g. came from SQLite initial load or was evicted).
-    // Flush buffered writes, then fall back to SQLite cursor-based query.
     db.flush();
-    const dbLogs = db.queryAfterId(afterId, channel || undefined, limit);
+    const dbLogs = db.queryAfterId(afterId, channel || undefined, limit, levels, namespaces);
     return c.json({
       logs: dbLogs,
       count: dbLogs.length,
@@ -100,7 +106,7 @@ export function getLogs(c: Context) {
   // --- Backward pagination (loading older logs on scroll-up) ---
   if (beforeId) {
     db.flush();
-    const { logs, hasMore } = db.queryBeforeId(beforeId, channel || undefined, limit || 500);
+    const { logs, hasMore } = db.queryBeforeId(beforeId, channel || undefined, limit || 500, levels, namespaces);
     return c.json({
       logs,
       count: logs.length,
@@ -115,6 +121,8 @@ export function getLogs(c: Context) {
     channel: channel || undefined,
     order: 'desc',
     limit: limit || 1000,
+    levels,
+    namespaces,
   });
 
   // Reverse to chronological order (oldest-to-newest) for display
@@ -126,6 +134,19 @@ export function getLogs(c: Context) {
     total: result.total,
     channel: channel || 'all',
   });
+}
+
+/**
+ * GET /api/logs/counts - Get level and namespace counts from the server
+ * Query params:
+ *   - channel: filter by channel (optional)
+ */
+export function getLogCounts(c: Context) {
+  const db = getDatabase();
+  const channel = c.req.query('channel');
+  db.flush();
+  const counts = db.getCounts(channel || undefined);
+  return c.json(counts);
 }
 
 /**
@@ -229,6 +250,15 @@ export async function executeSql(c: Context) {
     return c.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (process.env.NODE_ENV === 'production') {
+      const safeMessages = new Set([
+        'Only SELECT queries are allowed',
+        'Only a single statement is allowed',
+        'Query contains disallowed keyword',
+      ]);
+      const safe = safeMessages.has(message);
+      return c.json({ error: safe ? message : 'Query execution failed' }, 400);
+    }
     return c.json({ error: message }, 400);
   }
 }
