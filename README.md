@@ -119,6 +119,18 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otel-collector:4318
 
 No code changes required.
 
+## High-Throughput & Agent Sandboxes
+
+Abbacchio is optimized to handle massive amounts of logs quickly. For ephemeral environments like AI Agent Sandboxes where you don't need persistent disk storage, you can run Abbacchio entirely in-memory with strict memory bounding.
+
+Set the following environment variables:
+```bash
+SQLITE_PATH=":memory:"       # Run completely in RAM (lightning fast, no disk I/O)
+SQLITE_MAX_LOGS="50000"      # Strictly bounds memory size (~50MB) via O(1) rowid pruning
+SQLITE_TTL_MS="1800000"      # Optional: Automatically prune logs older than 30 minutes
+```
+This configuration guarantees your sandbox will not hit an Out-Of-Memory (OOM) error, even if an agent spams millions of logs, while keeping ingestion speed at its absolute maximum.
+
 ## Documentation
 
 - [OpenTelemetry](docs/opentelemetry.md) - OTLP integration and pino-opentelemetry-transport
