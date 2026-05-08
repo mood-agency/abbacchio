@@ -13,6 +13,7 @@ export interface DatabaseConfig {
   path: string;
   walMode: boolean;
   maxLogs: number; // 0 = unlimited
+  ttlMs: number; // 0 = unlimited (time to live in milliseconds)
   ephemeral: boolean;
 }
 
@@ -117,6 +118,7 @@ function getDefaultConfig(): DatabaseConfig {
     path: process.env.SQLITE_PATH || './data/logs.db',
     walMode: process.env.SQLITE_WAL !== 'false',
     maxLogs: parseInt(process.env.SQLITE_MAX_LOGS || '100000', 10),
+    ttlMs: parseInt(process.env.SQLITE_TTL_MS || '0', 10),
     ephemeral: process.env.SQLITE_EPHEMERAL === 'true',
   };
 }
@@ -740,17 +742,36 @@ export class LogDatabase {
   }
 
   private pruneIfNeeded(): void {
-    if (this.config.maxLogs <= 0) return;
+    // 1. Time-based Pruning (TTL) - extremely fast index-based deletion
+    if (this.config.ttlMs > 0) {
+      const cutoff = Date.now() - this.config.ttlMs;
+      
+      this.db.prepare('DELETE FROM logs WHERE time < ?').run(cutoff);
+      // metrics use unix nano
+      this.db.prepare('DELETE FROM metrics WHERE time_unix_nano < ?').run(cutoff * 1_000_000);
+      this.db.prepare('DELETE FROM traces WHERE start_time_ms < ?').run(cutoff);
+    }
 
-    const countRow = this.db.prepare('SELECT COUNT(*) as total FROM logs').get() as { total: number };
-    const excess = countRow.total - this.config.maxLogs;
+    // 2. Optimized Count-based Pruning (Memory limit)
+    // Avoids SELECT COUNT(*) entirely by using rowid offset
+    if (this.config.maxLogs > 0) {
+      // Find the rowid of the oldest allowed log
+      const logLimitResult = this.db.prepare(
+        'SELECT rowid FROM logs ORDER BY rowid DESC LIMIT 1 OFFSET ?'
+      ).get(this.config.maxLogs) as { rowid: number } | undefined;
 
-    if (excess > 0) {
-      this.db.prepare(`
-        DELETE FROM logs WHERE id IN (
-          SELECT id FROM logs ORDER BY time ASC LIMIT ?
-        )
-      `).run(excess);
+      if (logLimitResult && logLimitResult.rowid) {
+        this.db.prepare('DELETE FROM logs WHERE rowid <= ?').run(logLimitResult.rowid);
+      }
+
+      // Do the same for metrics and traces (assuming maxLogs applies roughly to them too)
+      const metricLimitResult = this.db.prepare(
+        'SELECT id FROM metrics ORDER BY id DESC LIMIT 1 OFFSET ?'
+      ).get(this.config.maxLogs) as { id: number } | undefined;
+
+      if (metricLimitResult && metricLimitResult.id) {
+        this.db.prepare('DELETE FROM metrics WHERE id <= ?').run(metricLimitResult.id);
+      }
     }
   }
 
