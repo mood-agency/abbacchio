@@ -113,6 +113,18 @@ The following headers are automatically added in production:
 - `Content-Security-Policy: default-src 'self'; ...`
 - `Strict-Transport-Security: max-age=31536000` (when HTTPS)
 
+### SQL Endpoint Security
+
+The `/api/sql` endpoint allows executing raw SQLite queries against the server database. Because this presents a significant risk for remote code execution or data leakage if abused, it is **disabled by default in production** (`NODE_ENV=production`).
+
+If your use case strictly requires analytical querying via the API in production, you can explicitly opt-in by setting:
+
+```bash
+ENABLE_SQL_ENDPOINT=true
+```
+
+*Note: Even when enabled, the endpoint restricts queries to `SELECT` and `WITH` statements and attempts to block destructive keywords, but you should still ensure this endpoint is well-protected by authentication.*
+
 ## Encryption
 
 ### Log Encryption
@@ -177,6 +189,9 @@ CONNECTION_TIMEOUT=1800000
 
 # Server
 PORT=4000
+
+# SQL Endpoint (Disabled by default in production)
+# ENABLE_SQL_ENDPOINT=true
 ```
 
 ## Reporting Security Issues

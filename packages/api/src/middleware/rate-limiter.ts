@@ -6,6 +6,7 @@
  * when TRUST_PROXY=true is set. Otherwise, we use a fallback IP.
  */
 import type { Context, Next, MiddlewareHandler } from 'hono';
+import { getConnInfo } from 'hono/bun';
 
 // SECURITY: Only trust proxy headers when explicitly enabled
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
@@ -50,13 +51,20 @@ function getClientIp(c: Context): string {
     }
   }
 
+  // Get true remote address using Bun's connection info
+  try {
+    const info = getConnInfo(c);
+    if (info?.remote?.address) {
+      return info.remote.address;
+    }
+  } catch (e) {
+    // Ignore if not running in Bun or conn info unavailable
+  }
+
   // Fallback: use a hash of available identifying info
-  // In most deployments without proxy, this will be a consistent identifier
   const userAgent = c.req.header('user-agent') || '';
   const acceptLanguage = c.req.header('accept-language') || '';
 
-  // Create a simple hash for rate limiting purposes
-  // This isn't perfect but provides some differentiation
   if (userAgent || acceptLanguage) {
     return `client_${simpleHash(userAgent + acceptLanguage)}`;
   }

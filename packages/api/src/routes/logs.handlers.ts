@@ -236,6 +236,13 @@ export function getStats(c: Context) {
  * POST /api/sql - Execute SQL query against the database
  */
 export async function executeSql(c: Context) {
+  // SECURITY: Disable direct SQL execution in production unless explicitly enabled
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_SQL_ENDPOINT !== 'true') {
+    return c.json({ 
+      error: 'SQL endpoint is disabled in production by default. Set ENABLE_SQL_ENDPOINT=true to override.' 
+    }, 403);
+  }
+
   const db = getDatabase();
 
   try {

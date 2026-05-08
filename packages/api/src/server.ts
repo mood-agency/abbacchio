@@ -19,7 +19,10 @@ import { getDatabase, resetDatabase } from './lib/database.js';
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const API_KEY = process.env.API_KEY;
 const IS_DEV = process.env.NODE_ENV !== 'production';
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:4001';
+const envCors = process.env.CORS_ORIGIN || 'http://localhost:4001,http://localhost:5173';
+const CORS_ORIGIN = envCors === '*'
+  ? '*'
+  : envCors.split(',').map((o) => o.trim()).filter(Boolean);
 const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT !== 'false';
 // SECURITY: Trust proxy headers only when explicitly enabled
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
@@ -64,7 +67,11 @@ if (API_KEY) {
   const apiKeyBuffer = Buffer.from(API_KEY);
   const authMiddleware = async (c: any, next: any) => {
     const key = c.req.header('X-API-KEY');
-    if (!key || key.length !== API_KEY.length || !crypto.timingSafeEqual(Buffer.from(key), apiKeyBuffer)) {
+    if (!key) {
+      return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
+    }
+    const keyBuffer = Buffer.from(key);
+    if (keyBuffer.length !== apiKeyBuffer.length || !crypto.timingSafeEqual(keyBuffer, apiKeyBuffer)) {
       return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
     }
     return next();
