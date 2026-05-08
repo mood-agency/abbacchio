@@ -5,8 +5,10 @@
 
 import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry } from './client.js';
 import { startErrorCapture, stopErrorCapture } from './errors.js';
+import { startPerfCapture, stopPerfCapture } from './perf.js';
+import { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
 
-export interface ConsoleInterceptorOptions extends AbbacchioClientOptions {
+export interface ConsoleInterceptorOptions extends AbbacchioClientOptions, NetworkCaptureOptions {
   /** App name to use as the logger name. Defaults to 'browser' */
   appName?: string;
   /** Whether to still output to the original console. Defaults to true */
@@ -21,6 +23,12 @@ export interface ConsoleInterceptorOptions extends AbbacchioClientOptions {
   captureErrors?: boolean;
   /** Capture unhandled promise rejections. Defaults to false */
   captureUnhandledRejections?: boolean;
+  /** Capture main-thread long tasks (>50ms) via PerformanceObserver. Defaults to false */
+  captureLongTasks?: boolean;
+  /** Capture slow input/message handlers via Event Timing API. Defaults to false */
+  captureSlowEvents?: boolean;
+  /** Duration threshold (ms) for slow events. Defaults to 50 */
+  slowEventThresholdMs?: number;
 }
 
 const LEVEL_MAP: Record<string, number> = {
@@ -190,6 +198,26 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
         startErrorCapture(options, (entry) => { if (client) client.add(entry); });
       }
     }
+    if (
+      opts.captureLongTasks !== undefined ||
+      opts.captureSlowEvents !== undefined ||
+      opts.slowEventThresholdMs !== undefined
+    ) {
+      stopPerfCapture();
+      if (options.captureLongTasks || options.captureSlowEvents) {
+        startPerfCapture(options, (entry) => { if (client) client.add(entry); });
+      }
+    }
+    if (
+      opts.captureFetch !== undefined ||
+      opts.captureXhr !== undefined ||
+      opts.captureWebSockets !== undefined
+    ) {
+      stopNetworkCapture();
+      if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
+        startNetworkCapture(options, (entry) => { if (client) client.add(entry); });
+      }
+    }
     return;
   }
 
@@ -206,12 +234,25 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   if (options.captureErrors || options.captureUnhandledRejections) {
     startErrorCapture(options, (entry) => { if (client) client.add(entry); });
   }
+
+  if (options.captureLongTasks || options.captureSlowEvents) {
+    startPerfCapture(options, (entry) => { if (client) client.add(entry); });
+  }
+
+  if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
+    if (!options.ignoreNetworkUrls && options.endpoint) {
+      options.ignoreNetworkUrls = [options.endpoint];
+    }
+    startNetworkCapture({ ...options, name: options.appName }, (entry) => { if (client) client.add(entry); });
+  }
 }
 
 export function stopInterceptConsole(): void {
   if (!isIntercepting) return;
   isIntercepting = false;
   stopErrorCapture();
+  stopPerfCapture();
+  stopNetworkCapture();
 
   console.log = originalConsole.log;
   console.info = originalConsole.info;

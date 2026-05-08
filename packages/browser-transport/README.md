@@ -129,6 +129,14 @@ interface ConsoleInterceptorOptions {
   flushInterval?: number // Ms between flushes (default: 1000)
   passthrough?: boolean  // Still log to console (default: true)
   includeUrl?: boolean   // Include page URL (default: true)
+  
+  // Network Capture Options
+  captureFetch?: boolean      // Capture window.fetch requests
+  captureXhr?: boolean        // Capture XMLHttpRequest
+  captureWebSockets?: boolean // Capture WebSocket messages
+  includeBody?: boolean       // Include request/response body payload
+  includeHeaders?: boolean    // Include request headers
+  ignoreNetworkUrls?: (string | RegExp)[] // URLs to ignore
 }
 ```
 
@@ -147,6 +155,14 @@ interface LoggerOptions {
   secretKey?: string
   batchSize?: number
   flushInterval?: number
+  
+  // Network Capture Options
+  captureFetch?: boolean      // Capture window.fetch requests
+  captureXhr?: boolean        // Capture XMLHttpRequest
+  captureWebSockets?: boolean // Capture WebSocket messages
+  includeBody?: boolean       // Include request/response body payload
+  includeHeaders?: boolean    // Include request headers
+  ignoreNetworkUrls?: (string | RegExp)[] // URLs to ignore
 }
 
 const log = createLogger(options)
@@ -182,6 +198,42 @@ React context provider for logging.
 ```tsx
 const log = useLogger()              // Get logger instance
 const { info, warn, error } = useAbbacchio()  // Get logging methods
+```
+
+## Network Capture
+
+You can automatically capture HTTP requests and WebSockets either globally through the `ConsoleInterceptor` or on a specific `Logger` instance.
+
+### Enabling at Creation
+
+```javascript
+import { createLogger } from '@abbacchio/browser-transport'
+
+const log = createLogger({
+  url: 'http://localhost:4000/api/logs',
+  channel: 'my-app',
+  captureFetch: true,
+  captureXhr: true,
+  captureWebSockets: true,
+  includeBody: false, // Set to true to capture payloads
+  ignoreNetworkUrls: ['/analytics', /\.png$/], // Ignore specific URLs
+})
+```
+
+### Enabling at Runtime
+
+If you want to delay tracking until after login, or toggle it dynamically:
+
+```javascript
+// Enable specific network captures dynamically
+log.enableNetworkCapture({
+  captureFetch: true,
+  captureXhr: true,
+  captureWebSockets: true,
+})
+
+// Stop tracking network traffic
+log.disableNetworkCapture()
 ```
 
 ## Disabling in Production

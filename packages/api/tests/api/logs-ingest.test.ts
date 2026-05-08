@@ -75,6 +75,42 @@ describe('POST /api/logs', () => {
       expect(response.status).toBe(201);
     });
 
+    it('should accept network telemetry logs', async () => {
+      const app = createTestApp();
+      const networkLog = {
+        level: 30,
+        msg: 'browser network request',
+        req: {
+          method: 'POST',
+          url: 'https://api.example.com/data',
+          headers: { 'content-type': 'application/json' },
+          body: { query: 'test' },
+        },
+        res: {
+          status: 200,
+          duration: 150,
+          headers: { 'content-type': 'application/json' },
+        },
+      };
+
+      const response = await app.request('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(networkLog),
+      });
+
+      expect(response.status).toBe(201);
+      
+      // Verify it was buffered correctly
+      const buffer = getLogBuffer();
+      const logs = buffer.getAll('default');
+      const storedLog = logs.find(l => l.msg === 'browser network request');
+      expect(storedLog).toBeDefined();
+      expect(storedLog?.data).toHaveProperty('req');
+      expect(storedLog?.data).toHaveProperty('res');
+      expect((storedLog?.data as any).req.method).toBe('POST');
+    });
+
     it('should default level to 30 if not provided', async () => {
       const app = createTestApp();
 

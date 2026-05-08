@@ -4,8 +4,9 @@
  */
 
 import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry, type MetricRecord } from './client.js';
+import { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
 
-export interface LoggerOptions extends AbbacchioClientOptions {
+export interface LoggerOptions extends AbbacchioClientOptions, NetworkCaptureOptions {
   /** Logger name (used as namespace attribute). Defaults to 'app' */
   name?: string;
   /** Minimum log level. Defaults to 'debug' (20) */
@@ -40,6 +41,27 @@ export class Logger {
     this.loggerName = options.name || 'app';
     this.minLevel = this.parseLevel(options.level || 'debug');
     this.includeUrl = options.includeUrl ?? false;
+
+    if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
+      this.enableNetworkCapture(options);
+    }
+  }
+
+  /** Dynamically enable network capture with options */
+  enableNetworkCapture(options: NetworkCaptureOptions): void {
+    const opts = { ...options };
+    if (!opts.ignoreNetworkUrls && this.client['endpoint']) {
+      opts.ignoreNetworkUrls = [this.client['endpoint']];
+    }
+    opts.name = opts.name || this.loggerName;
+    startNetworkCapture(opts, (entry) => {
+      this.client.add(entry);
+    });
+  }
+
+  /** Dynamically disable network capture */
+  disableNetworkCapture(): void {
+    stopNetworkCapture();
   }
 
   private parseLevel(level: number | LogLevel): number {
@@ -155,6 +177,7 @@ export class Logger {
   }
 
   async close(): Promise<void> {
+    stopNetworkCapture();
     await this.client.close();
   }
 

@@ -65,5 +65,11 @@ export {
 // Error capture
 export { startErrorCapture, stopErrorCapture, type ErrorCaptureOptions } from './errors.js';
 
+// Performance capture (longtask + slow events)
+export { startPerfCapture, stopPerfCapture, type PerfCaptureOptions } from './perf.js';
+
+// Network capture
+export { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
+
 // Crypto utilities
 export { encrypt, decrypt, generateKey, isCryptoAvailable } from './crypto.js';

@@ -79,6 +79,29 @@ export interface LogEntry {
   time: number;
   msg: string;
   name?: string;
+  error?: {
+    name?: string;
+    message?: string;
+    stack?: string;
+    [key: string]: unknown;
+  };
+  network?: {
+    method?: string;
+    url?: string;
+    type?: 'fetch' | 'xhr' | 'websocket';
+    status?: number;
+    duration?: number;
+    requestBody?: unknown;
+    requestHeaders?: unknown;
+    payload?: unknown;
+    event?: 'connect' | 'disconnect' | 'error' | 'message_in' | 'message_out';
+  };
+  caller?: {
+    function?: string;
+    file?: string;
+    line?: number;
+    column?: number;
+  };
   [key: string]: unknown;
 }
 
