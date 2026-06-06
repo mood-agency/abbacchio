@@ -21,6 +21,9 @@ interface LogEntry {
   namespace: string | null;
   channel: string;
   data: string;
+  source: string | null;
+  instance_id: string | null;
+  source_verified: number;
   encrypted: number;
   encrypted_data: string | null;
   decryption_failed: number;
@@ -350,6 +353,9 @@ async function initDB() {
       namespace TEXT,
       channel TEXT NOT NULL,
       data TEXT NOT NULL,
+      source TEXT,
+      instance_id TEXT,
+      source_verified INTEGER DEFAULT 0,
       encrypted INTEGER DEFAULT 0,
       encrypted_data TEXT,
       decryption_failed INTEGER DEFAULT 0,
@@ -357,11 +363,18 @@ async function initDB() {
     )
   `);
 
-  // Add was_encrypted column if it doesn't exist (migration for existing DBs)
-  try {
-    db.exec(`ALTER TABLE logs ADD COLUMN was_encrypted INTEGER DEFAULT 0`);
-  } catch {
-    // Column already exists, ignore error
+  // Add columns that may be missing on pre-existing DBs (idempotent migrations)
+  for (const [col, def] of [
+    ['was_encrypted', 'INTEGER DEFAULT 0'],
+    ['source', 'TEXT'],
+    ['instance_id', 'TEXT'],
+    ['source_verified', 'INTEGER DEFAULT 0'],
+  ] as const) {
+    try {
+      db.exec(`ALTER TABLE logs ADD COLUMN ${col} ${def}`);
+    } catch {
+      // Column already exists, ignore error
+    }
   }
 
   // Indexes for common query patterns
@@ -436,6 +449,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
           namespace?: string;
           channel: string;
           data: Record<string, unknown>;
+          source?: string;
+          instanceId?: string;
+          sourceVerified?: boolean;
           encrypted?: boolean;
           encryptedData?: string;
           decryptionFailed?: boolean;
@@ -448,8 +464,8 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
             const dataStr = JSON.stringify(log.data);
 
             db.exec({
-              sql: `INSERT OR REPLACE INTO logs (id, level, level_label, time, msg, namespace, channel, data, encrypted, encrypted_data, decryption_failed, was_encrypted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              sql: `INSERT OR REPLACE INTO logs (id, level, level_label, time, msg, namespace, channel, data, source, instance_id, source_verified, encrypted, encrypted_data, decryption_failed, was_encrypted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               bind: [
                 log.id,
                 log.level,
@@ -459,6 +475,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
                 log.namespace ?? null,
                 log.channel,
                 dataStr,
+                log.source ?? null,
+                log.instanceId ?? null,
+                log.sourceVerified ? 1 : 0,
                 log.encrypted ? 1 : 0,
                 log.encryptedData ?? null,
                 log.decryptionFailed ? 1 : 0,
@@ -479,6 +498,9 @@ self.onmessage = async (e: MessageEvent<MessageData>) => {
               namespace: log.namespace ?? null,
               channel: log.channel,
               data: dataStr,
+              source: log.source ?? null,
+              instance_id: log.instanceId ?? null,
+              source_verified: log.sourceVerified ? 1 : 0,
               encrypted: log.encrypted ? 1 : 0,
               encrypted_data: log.encryptedData ?? null,
               decryption_failed: log.decryptionFailed ? 1 : 0,

@@ -1,12 +1,12 @@
 import { EventEmitter } from 'events';
 import { getIdPool } from './id-pool.js';
-import { LOG_LEVELS, type IncomingLog, type IncomingLogOrEncrypted, type EncryptedLog, type LogEntry, type LogLevelLabel } from '../types.js';
+import { LOG_LEVELS, type IncomingLog, type LogEntry, type LogLevelLabel } from '../types.js';
 
 /** Default channel name when none is specified */
 export const DEFAULT_CHANNEL = 'default';
 
 /** Known fields to extract from incoming logs (avoid object spread overhead) */
-const KNOWN_FIELDS = new Set(['level', 'time', 'msg', 'message', 'namespace', 'name', 'channel']);
+const KNOWN_FIELDS = new Set(['level', 'time', 'msg', 'message', 'namespace', 'name', 'channel', 'source', 'instanceId', 'sourceVerified']);
 
 export interface ChannelInfo {
   name: string;
@@ -27,12 +27,6 @@ const DEFAULT_CONFIG: LogBufferConfig = {
   maxLogsPerChannel: parseInt(process.env.MAX_LOGS_PER_CHANNEL || '5000', 10),
 };
 
-/**
- * Check if a log is encrypted
- */
-function isEncryptedLog(log: IncomingLogOrEncrypted): log is EncryptedLog {
-  return 'encrypted' in log && typeof log.encrypted === 'string';
-}
 
 /**
  * Extract data fields from incoming log (avoiding object spread)
@@ -136,37 +130,14 @@ export class LogBuffer extends EventEmitter {
       channel,
       traceId: incoming.traceId,
       spanId: incoming.spanId,
+      source: typeof incoming.source === 'string' ? incoming.source : undefined,
+      instanceId: typeof incoming.instanceId === 'string' ? incoming.instanceId : undefined,
+      sourceVerified: incoming.sourceVerified === true,
       data: extractDataFields(incoming),
     };
   }
 
-  /**
-   * Create an encrypted log entry
-   */
-  private createEncryptedEntry(encryptedLog: EncryptedLog, channel: string): LogEntry {
-    return {
-      id: getIdPool().getId(),
-      level: 30,
-      levelLabel: 'info',
-      time: Date.now(),
-      msg: '[Encrypted]',
-      channel,
-      encrypted: true,
-      encryptedData: encryptedLog.encrypted,
-      data: {},
-    };
-  }
-
-  /**
-   * Process incoming log (plain or encrypted)
-   */
-  private processLog(incoming: IncomingLogOrEncrypted, channel: string): LogEntry {
-    if (isEncryptedLog(incoming)) {
-      return this.createEncryptedEntry(incoming, channel);
-    }
-    return this.normalizeLog(incoming, channel);
-  }
-
+  
   /**
    * Register a channel (with LRU-style eviction if at limit)
    */
@@ -236,8 +207,8 @@ export class LogBuffer extends EventEmitter {
   /**
    * Add a single log entry
    */
-  add(incoming: IncomingLogOrEncrypted, defaultChannel: string = DEFAULT_CHANNEL): LogEntry {
-    const entry = this.processLog(incoming, defaultChannel);
+  add(incoming: IncomingLog, defaultChannel: string = DEFAULT_CHANNEL): LogEntry {
+    const entry = this.normalizeLog(incoming, defaultChannel);
     const channel = entry.channel;
 
     this.registerChannel(channel);
@@ -250,17 +221,19 @@ export class LogBuffer extends EventEmitter {
 
     this.storeLog(entry, channel);
 
+    this.emit('logs', [entry]);
+
     return entry;
   }
 
   /**
    * Add multiple log entries
    */
-  addBatch(logs: IncomingLogOrEncrypted[], defaultChannel: string = DEFAULT_CHANNEL): LogEntry[] {
+  addBatch(logs: IncomingLog[], defaultChannel: string = DEFAULT_CHANNEL): LogEntry[] {
     const allEntries: LogEntry[] = [];
 
     for (const log of logs) {
-      const entry = this.processLog(log, defaultChannel);
+      const entry = this.normalizeLog(log, defaultChannel);
       const channel = entry.channel;
 
       this.registerChannel(channel);
@@ -273,6 +246,10 @@ export class LogBuffer extends EventEmitter {
 
       this.storeLog(entry, channel);
       allEntries.push(entry);
+    }
+
+    if (allEntries.length > 0) {
+      this.emit('logs', allEntries);
     }
 
     return allEntries;

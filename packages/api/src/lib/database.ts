@@ -88,6 +88,20 @@ export interface DbStats {
   channels: ChannelStats[];
 }
 
+function buildFtsQuery(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  return tokens
+    .map(t => {
+      const sanitized = t.replace(/["'*(){}[\]^~\\:+\-!,;.]/g, '');
+      if (!sanitized) return '';
+      return '"' + sanitized + '"' + '*';
+    })
+    .filter(Boolean)
+    .join(' AND ');
+}
+
 function addLevelAndNamespaceConditions(
   conditions: string[],
   params: Record<string, any>,
@@ -162,13 +176,18 @@ export class LogDatabase {
     }
 
     this.db = new Database(this.config.path);
-    this.readonlyDb = new Database(this.config.path, { readonly: true });
+    if (this.config.path === ':memory:') {
+      this.readonlyDb = this.db;
+    } else {
+      this.readonlyDb = new Database(this.config.path, { readonly: true });
+    }
 
-    // Performance pragmas
+    // Performance pragmas for high-throughput
     if (this.config.walMode) {
       this.db.run('PRAGMA journal_mode = WAL');
-      this.db.run('PRAGMA synchronous = NORMAL');
+      this.db.run('PRAGMA synchronous = OFF');
     } else {
+      this.db.run('PRAGMA journal_mode = MEMORY');
       this.db.run('PRAGMA synchronous = OFF');
     }
     this.db.run('PRAGMA cache_size = -64000');       // 64MB cache
@@ -186,6 +205,36 @@ export class LogDatabase {
     this.flushTimer = setInterval(() => this.flush(), this.flushInterval);
   }
 
+  /**
+   * Add a column to a table if it doesn't already exist (idempotent migration).
+   */
+  private addColumnIfMissing(table: string, column: string, definition: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (cols.some((c) => c.name === column)) return;
+    this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+
+  /**
+   * Map a raw logs row to a LogEntry.
+   */
+  private rowToLog(row: any): LogEntry {
+    return {
+      id: row.id,
+      level: row.level,
+      levelLabel: row.level_label as LogEntry['levelLabel'],
+      time: row.time,
+      msg: row.msg,
+      namespace: row.namespace || undefined,
+      channel: row.channel,
+      data: JSON.parse(row.data),
+      traceId: row.trace_id || undefined,
+      spanId: row.span_id || undefined,
+      source: row.source || undefined,
+      instanceId: row.instance_id || undefined,
+      sourceVerified: row.source_verified === 1,
+    };
+  }
+
   private createTables(): void {
     this.db.run(`
       CREATE TABLE IF NOT EXISTS logs (
@@ -198,14 +247,52 @@ export class LogDatabase {
         channel TEXT NOT NULL DEFAULT 'default',
         data TEXT DEFAULT '{}',
         trace_id TEXT,
-        span_id TEXT
+        span_id TEXT,
+        source TEXT,
+        instance_id TEXT,
+        source_verified INTEGER NOT NULL DEFAULT 0
       )
     `);
+
+    // Migration: add emitter-identity columns to pre-existing tables.
+    this.addColumnIfMissing('logs', 'source', 'TEXT');
+    this.addColumnIfMissing('logs', 'instance_id', 'TEXT');
+    this.addColumnIfMissing('logs', 'source_verified', 'INTEGER NOT NULL DEFAULT 0');
 
     this.db.run('CREATE INDEX IF NOT EXISTS idx_logs_channel_time ON logs(channel, time DESC)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time DESC)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_logs_trace_id ON logs(trace_id)');
+
+    // FTS5 full-text search index on msg and data columns
+    const ftsExists = this.db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='logs_fts'"
+    ).get();
+
+    this.db.run(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS logs_fts USING fts5(
+        msg, data,
+        content=logs,
+        content_rowid=rowid,
+        tokenize='unicode61 remove_diacritics 2'
+      )
+    `);
+
+    this.db.run(`
+      CREATE TRIGGER IF NOT EXISTS logs_fts_insert AFTER INSERT ON logs BEGIN
+        INSERT INTO logs_fts(rowid, msg, data) VALUES (new.rowid, new.msg, new.data);
+      END
+    `);
+
+    this.db.run(`
+      CREATE TRIGGER IF NOT EXISTS logs_fts_delete AFTER DELETE ON logs BEGIN
+        INSERT INTO logs_fts(logs_fts, rowid, msg, data) VALUES('delete', old.rowid, old.msg, old.data);
+      END
+    `);
+
+    if (!ftsExists) {
+      this.db.run("INSERT INTO logs_fts(logs_fts) VALUES('rebuild')");
+    }
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS metrics (
@@ -246,8 +333,8 @@ export class LogDatabase {
 
   private prepareStatements(): void {
     this.insertLogStmt = this.db.prepare(`
-      INSERT OR IGNORE INTO logs (id, level, level_label, time, msg, namespace, channel, data, trace_id, span_id)
-      VALUES ($id, $level, $levelLabel, $time, $msg, $namespace, $channel, $data, $traceId, $spanId)
+      INSERT OR IGNORE INTO logs (id, level, level_label, time, msg, namespace, channel, data, trace_id, span_id, source, instance_id, source_verified)
+      VALUES ($id, $level, $levelLabel, $time, $msg, $namespace, $channel, $data, $traceId, $spanId, $source, $instanceId, $sourceVerified)
     `);
 
     this.insertMetricStmt = this.db.prepare(`
@@ -323,6 +410,9 @@ export class LogDatabase {
           $data: JSON.stringify(entry.data),
           $traceId: entry.traceId || null,
           $spanId: entry.spanId || null,
+          $source: entry.source || null,
+          $instanceId: entry.instanceId || null,
+          $sourceVerified: entry.sourceVerified ? 1 : 0,
         });
       }
 
@@ -367,50 +457,47 @@ export class LogDatabase {
 
     const conditions: string[] = [];
     const params: Record<string, any> = {};
+    let useFts = false;
 
     if (opts.channel) {
-      conditions.push('channel = $channel');
+      conditions.push('logs.channel = $channel');
       params.$channel = opts.channel;
     }
     if (opts.level !== undefined) {
-      conditions.push('level >= $level');
+      conditions.push('logs.level >= $level');
       params.$level = opts.level;
     }
     addLevelAndNamespaceConditions(conditions, params, opts.levels, opts.namespaces);
     if (opts.search) {
-      conditions.push('(msg LIKE $search OR trace_id LIKE $search OR span_id LIKE $search)');
-      params.$search = `%${opts.search}%`;
+      const ftsQuery = buildFtsQuery(opts.search);
+      if (ftsQuery) {
+        useFts = true;
+        conditions.push('logs_fts MATCH $ftsSearch');
+        params.$ftsSearch = ftsQuery;
+      }
     }
     if (opts.since !== undefined) {
-      conditions.push('time >= $since');
+      conditions.push('logs.time >= $since');
       params.$since = opts.since;
     }
     if (opts.until !== undefined) {
-      conditions.push('time <= $until');
+      conditions.push('logs.time <= $until');
       params.$until = opts.until;
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const from = useFts
+      ? 'logs JOIN logs_fts ON logs.rowid = logs_fts.rowid'
+      : 'logs';
 
-    const countRow = this.db.prepare(`SELECT COUNT(*) as total FROM logs ${where}`).get(params) as { total: number };
+    const countRow = this.db.prepare(`SELECT COUNT(*) as total FROM ${from} ${where}`).get(params) as { total: number };
     const total = countRow.total;
 
     const rows = this.db.prepare(
-      `SELECT * FROM logs ${where} ORDER BY time ${order}, rowid ${order} LIMIT $limit OFFSET $offset`
+      `SELECT logs.* FROM ${from} ${where} ORDER BY logs.time ${order}, logs.rowid ${order} LIMIT $limit OFFSET $offset`
     ).all({ ...params, $limit: limit, $offset: offset }) as any[];
 
-    const logs: LogEntry[] = rows.map((row) => ({
-      id: row.id,
-      level: row.level,
-      levelLabel: row.level_label as LogEntry['levelLabel'],
-      time: row.time,
-      msg: row.msg,
-      namespace: row.namespace || undefined,
-      channel: row.channel,
-      data: JSON.parse(row.data),
-      traceId: row.trace_id || undefined,
-      spanId: row.span_id || undefined,
-    }));
+    const logs: LogEntry[] = rows.map((row) => this.rowToLog(row));
 
     return { logs, count: logs.length, total, limit, offset };
   }
@@ -583,11 +670,11 @@ export class LogDatabase {
 
     const levelRows = this.db.prepare(
       `SELECT level_label, COUNT(*) as count FROM logs ${where} GROUP BY level_label`
-    ).all(params) as { level_label: string; count: number }[];
+    ).all(params as Record<string, string>) as { level_label: string; count: number }[];
 
     const nsRows = this.db.prepare(
       `SELECT COALESCE(namespace, '(none)') as ns, COUNT(*) as count FROM logs ${where} GROUP BY ns`
-    ).all(params) as { ns: string; count: number }[];
+    ).all(params as Record<string, string>) as { ns: string; count: number }[];
 
     const levels: Record<string, number> = {};
     let total = 0;
@@ -625,18 +712,7 @@ export class LogDatabase {
       `SELECT * FROM logs ${where} ORDER BY time ASC LIMIT $limit`
     ).all(params) as any[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      level: row.level,
-      levelLabel: row.level_label as LogEntry['levelLabel'],
-      time: row.time,
-      msg: row.msg,
-      namespace: row.namespace || undefined,
-      channel: row.channel,
-      data: JSON.parse(row.data),
-      traceId: row.trace_id || undefined,
-      spanId: row.span_id || undefined,
-    }));
+    return rows.map((row) => this.rowToLog(row));
   }
 
   /**
@@ -664,18 +740,7 @@ export class LogDatabase {
     // Reverse to chronological order (oldest first)
     resultRows.reverse();
 
-    const logs: LogEntry[] = resultRows.map((row) => ({
-      id: row.id,
-      level: row.level,
-      levelLabel: row.level_label as LogEntry['levelLabel'],
-      time: row.time,
-      msg: row.msg,
-      namespace: row.namespace || undefined,
-      channel: row.channel,
-      data: JSON.parse(row.data),
-      traceId: row.trace_id || undefined,
-      spanId: row.span_id || undefined,
-    }));
+    const logs: LogEntry[] = resultRows.map((row) => this.rowToLog(row));
 
     return { logs, hasMore };
   }

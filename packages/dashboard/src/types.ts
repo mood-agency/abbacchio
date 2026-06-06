@@ -20,6 +20,12 @@ export interface LogEntry {
   /** Channel/app identifier for multi-app support */
   channel: string;
   data: Record<string, unknown>;
+  /** Self-declared emitter label (e.g. hostname or service name) */
+  source?: string;
+  /** Self-declared unique id of the emitting process/instance */
+  instanceId?: string;
+  /** True only if the source identity was cryptographically verified */
+  sourceVerified?: boolean;
   /** If true, the log is encrypted and needs client-side decryption */
   encrypted?: boolean;
   /** The encrypted payload (only present if encrypted=true) */

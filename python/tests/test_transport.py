@@ -63,6 +63,26 @@ class TestAbbacchioTransport:
         assert transport.channel == "test-channel"
         transport.shutdown()
 
+    def test_default_identity_headers(self):
+        transport = AbbacchioTransport()
+        try:
+            # Defaults are derived from hostname:pid and sent as headers.
+            assert transport.instance_id
+            assert "X-Instance-Id" in transport._headers
+            assert transport._headers["X-Instance-Id"] == transport.instance_id
+            if transport.source:
+                assert transport._headers["X-Source"] == transport.source
+        finally:
+            transport.shutdown()
+
+    def test_custom_identity_headers(self):
+        transport = AbbacchioTransport(source="worker-1", instance_id="host-a:42")
+        try:
+            assert transport._headers["X-Source"] == "worker-1"
+            assert transport._headers["X-Instance-Id"] == "host-a:42"
+        finally:
+            transport.shutdown()
+
     def test_send_queues_log(self):
         transport = AbbacchioTransport()
 

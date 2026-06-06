@@ -63,6 +63,25 @@ function getChannelFromResource(resource: OTLPResource | undefined, defaultChann
 }
 
 /**
+ * Extract emitter identity from OTLP Resource attributes.
+ * Uses the standard `service.instance.id` resource attribute for instanceId.
+ * These are fallbacks; request headers (X-Source/X-Instance-Id) take precedence
+ * and are applied later by the handler via stampIdentity().
+ */
+function getIdentityFromResource(resource: OTLPResource | undefined): { source?: string; instanceId?: string } {
+    if (!resource || !Array.isArray(resource.attributes)) return {};
+    let source: string | undefined;
+    let instanceId: string | undefined;
+    for (const attr of resource.attributes) {
+        const val = attr.value?.stringValue;
+        if (!val) continue;
+        if (attr.key === 'service.instance.id') instanceId = val;
+        else if (attr.key === 'service.source') source = val;
+    }
+    return { source, instanceId };
+}
+
+/**
  * Convert OTLP KeyValue array to a simple Record map
  */
 function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | number | boolean> {
@@ -111,6 +130,7 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
 
     for (const resourceLog of request.resourceLogs) {
         const channel = getChannelFromResource(resourceLog.resource, defaultChannel);
+        const identity = getIdentityFromResource(resourceLog.resource);
 
         if (!Array.isArray(resourceLog.scopeLogs)) continue;
 
@@ -131,6 +151,8 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
                     channel: channel,
                     traceId: logRecord.traceId,
                     spanId: logRecord.spanId,
+                    source: identity.source,
+                    instanceId: identity.instanceId,
                     ...attributes, // Dump attributes at root
                 };
 

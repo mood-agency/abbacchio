@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { createTestApp } from '../helpers/test-app.js';
-import { sampleLog, sampleLogs, winstonStyleLog, createLogBatch, createEncryptedLog, createLogWithExtras } from '../helpers/fixtures.js';
+import { sampleLog, sampleLogs, winstonStyleLog, createLogBatch, createLogWithExtras } from '../helpers/fixtures.js';
 import { getLogBuffer } from '../../src/lib/log-buffer.js';
 
 describe('POST /api/logs', () => {
@@ -286,39 +286,65 @@ describe('POST /api/logs', () => {
     });
   });
 
-  describe('encrypted logs', () => {
-    it('should accept encrypted log', async () => {
+  describe('source identity', () => {
+    it('should stamp source/instanceId from headers on a single log', async () => {
       const app = createTestApp();
+      const buffer = getLogBuffer();
 
-      const encryptedLog = createEncryptedLog('base64encrypteddata');
-
-      const response = await app.request('/api/logs', {
+      await app.request('/api/logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(encryptedLog),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Channel': 'identity-single',
+          'X-Source': 'worker-1',
+          'X-Instance-Id': 'host-a:42',
+        },
+        body: JSON.stringify({ level: 30, msg: 'with identity' }),
       });
 
-      expect(response.status).toBe(201);
+      const stored = buffer.getAll('identity-single').find(l => l.msg === 'with identity');
+      expect(stored?.source).toBe('worker-1');
+      expect(stored?.instanceId).toBe('host-a:42');
+      // No signing today — identity is always unverified.
+      expect(stored?.sourceVerified).toBe(false);
     });
 
-    it('should handle encrypted log in batch', async () => {
+    it('should stamp identity on every log in a batch', async () => {
       const app = createTestApp();
+      const buffer = getLogBuffer();
+      const batch = createLogBatch(4);
 
-      const batch = [
-        { level: 30, msg: 'Plain log' },
-        { encrypted: 'encrypted1' },
-        { encrypted: 'encrypted2' },
-      ];
-
-      const response = await app.request('/api/logs', {
+      await app.request('/api/logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Channel': 'identity-batch',
+          'X-Source': 'api',
+          'X-Instance-Id': 'host-b:7',
+        },
         body: JSON.stringify({ logs: batch }),
       });
 
-      expect(response.status).toBe(201);
-      const json = await response.json();
-      expect(json.received).toBe(3);
+      const stored = buffer.getAll('identity-batch');
+      expect(stored.length).toBe(4);
+      expect(stored.every(l => l.source === 'api' && l.instanceId === 'host-b:7')).toBe(true);
+    });
+
+    it('should leave identity undefined when no headers are sent', async () => {
+      const app = createTestApp();
+      const buffer = getLogBuffer();
+
+      await app.request('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Channel': 'identity-none' },
+        body: JSON.stringify({ level: 30, msg: 'no identity' }),
+      });
+
+      const stored = buffer.getAll('identity-none').find(l => l.msg === 'no identity');
+      expect(stored?.source).toBeUndefined();
+      expect(stored?.instanceId).toBeUndefined();
+      expect(stored?.sourceVerified).toBe(false);
     });
   });
+
 });

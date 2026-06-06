@@ -1,16 +1,52 @@
 import type { Context } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { getLogBuffer, DEFAULT_CHANNEL } from '../lib/log-buffer.js';
 import { getMetricBuffer } from '../lib/metric-buffer.js';
 import { getTraceBuffer } from '../lib/trace-buffer.js';
 import { getDatabase } from '../lib/database.js';
 import { getValidatedBody } from '../middleware/validator.js';
-import type { IncomingLog, BatchLogRequest } from '../types.js';
+import type { IncomingLog, BatchLogRequest, LogEntry } from '../types.js';
 
 /**
  * Extract channel from request (header or query param)
  */
 function getChannel(c: Context): string {
   return c.req.header('X-Channel') || c.req.query('channel') || DEFAULT_CHANNEL;
+}
+
+/**
+ * Self-declared emitter identity carried on every ingest request.
+ * `verified` is reserved for a future signing scheme and is always false today
+ * (identity is self-asserted and can be spoofed by any client).
+ */
+export interface SourceIdentity {
+  source?: string;
+  instanceId?: string;
+  verified: boolean;
+}
+
+/**
+ * Extract the emitter identity from request headers (X-Source / X-Instance-Id).
+ */
+export function getSourceIdentity(c: Context): SourceIdentity {
+  return {
+    source: c.req.header('X-Source') || undefined,
+    instanceId: c.req.header('X-Instance-Id') || undefined,
+    verified: false,
+  };
+}
+
+/**
+ * Stamp the emitter identity onto each incoming log (mutates in place).
+ * Header-supplied identity wins over any value already present on the log
+ * (e.g. an OTLP resource attribute), so the transport's headers are authoritative.
+ */
+export function stampIdentity(logs: IncomingLog[], identity: SourceIdentity): void {
+  for (const log of logs) {
+    if (identity.source !== undefined) log.source = identity.source;
+    if (identity.instanceId !== undefined) log.instanceId = identity.instanceId;
+    log.sourceVerified = identity.verified;
+  }
 }
 
 /**
@@ -28,10 +64,12 @@ export async function ingestLogs(c: Context) {
   }
 
   const db = getDatabase();
+  const identity = getSourceIdentity(c);
 
   // Check if it's a batch request
   if (body && 'logs' in body && Array.isArray(body.logs)) {
     const batchBody = body as BatchLogRequest;
+    stampIdentity(batchBody.logs, identity);
     const entries = buffer.addBatch(batchBody.logs, channel);
     db.insertBatch(entries);
     return c.json({ received: entries.length, channel }, 201);
@@ -39,6 +77,7 @@ export async function ingestLogs(c: Context) {
 
   // Single log
   const log = body as IncomingLog;
+  stampIdentity([log], identity);
   const entry = buffer.add(log, channel);
   db.insert(entry);
   return c.json({ received: 1, channel }, 201);
@@ -117,12 +156,14 @@ export function getLogs(c: Context) {
 
   // --- Initial load: fetch NEWEST logs, return in chronological order ---
   db.flush();
+  const search = c.req.query('search') || undefined;
   const result = db.query({
     channel: channel || undefined,
     order: 'desc',
     limit: limit || 1000,
     levels,
     namespaces,
+    search,
   });
 
   // Reverse to chronological order (oldest-to-newest) for display
@@ -268,4 +309,62 @@ export async function executeSql(c: Context) {
     }
     return c.json({ error: message }, 400);
   }
+}
+
+/**
+ * GET /api/stream - Stream logs using Server-Sent Events
+ * Query params:
+ *   - channel: filter by specific channel (optional, default: all channels)
+ */
+export function streamLogs(c: Context) {
+  const buffer = getLogBuffer();
+  const channel = c.req.query('channel');
+
+  return streamSSE(c, async (stream) => {
+    // Keep connection alive
+    const keepAlive = setInterval(() => {
+      stream.writeSSE({ event: 'ping', data: 'ping' }).catch(() => {});
+    }, 15000);
+
+    const onLogs = async (logs: LogEntry[]) => {
+      // Filter by channel if requested
+      const filtered = channel ? logs.filter(l => l.channel === channel) : logs;
+      if (filtered.length > 0) {
+        try {
+          await stream.writeSSE({
+            event: 'logs',
+            data: JSON.stringify(filtered)
+          });
+        } catch (e) {
+          // Ignore write errors
+        }
+      }
+    };
+
+    const onClear = async (clearedChannel?: string) => {
+      if (!channel || clearedChannel === channel || !clearedChannel) {
+        try {
+          await stream.writeSSE({
+            event: 'clear',
+            data: JSON.stringify({ channel: clearedChannel || 'all' })
+          });
+        } catch (e) {}
+      }
+    };
+
+    buffer.on('logs', onLogs);
+    buffer.on('clear', onClear);
+
+    await stream.writeSSE({ event: 'connected', data: 'ok' });
+
+    // Wait until client disconnects
+    await new Promise<void>((resolve) => {
+      stream.onAbort(() => {
+        clearInterval(keepAlive);
+        buffer.off('logs', onLogs);
+        buffer.off('clear', onClear);
+        resolve();
+      });
+    });
+  });
 }

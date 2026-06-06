@@ -36,7 +36,10 @@ const SHUTDOWN_TIMEOUT = parseInt(process.env.SHUTDOWN_TIMEOUT || '30000', 10);
 const app = new Hono();
 
 // Middleware
-app.use('*', cors({ origin: CORS_ORIGIN }));
+app.use('*', cors({
+  origin: CORS_ORIGIN,
+  allowHeaders: ['Content-Type', 'X-Channel', 'X-API-KEY', 'X-Source', 'X-Instance-Id', 'X-Encrypted'],
+}));
 app.use('*', logger());
 
 // Rate limiting middleware (optional, enabled by default)

@@ -4,6 +4,7 @@ import { parseOtlpLogs, parseOtlpMetrics, parseOtlpTraces } from '../lib/otlp-pa
 import { getMetricBuffer } from '../lib/metric-buffer.js';
 import { getTraceBuffer } from '../lib/trace-buffer.js';
 import { getDatabase } from '../lib/database.js';
+import { getSourceIdentity, stampIdentity } from './logs.handlers.js';
 
 /**
  * Extract default channel from request (header or query param)
@@ -25,6 +26,9 @@ export async function ingestOtlpLogs(c: Context) {
         const incomingLogs = parseOtlpLogs(body, defaultChannel);
 
         if (incomingLogs.length > 0) {
+            // Header identity (X-Source/X-Instance-Id) overrides the OTLP
+            // service.instance.id resource attribute already set by the parser.
+            stampIdentity(incomingLogs, getSourceIdentity(c));
             const entries = buffer.addBatch(incomingLogs, defaultChannel);
             getDatabase().insertBatch(entries);
         }

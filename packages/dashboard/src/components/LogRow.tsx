@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lock, AlertTriangle, Check, Copy } from 'lucide-react';
+import { Lock, AlertTriangle, Check, Copy, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LogRowProps {
@@ -386,6 +386,38 @@ export const LogRow = memo(function LogRow({
                   <span className="text-muted-foreground truncate block">{highlightedNamespace}</span>
                 </CopyableCell>
               )
+            )}
+          </div>
+
+          {/* Source / emitter identity */}
+          <div className="w-32 flex-shrink-0 font-mono text-xs">
+            {(log.source || log.instanceId) && (
+              <CopyableCell value={log.instanceId || log.source || ''} className="w-full">
+                <span className="text-muted-foreground truncate flex items-center gap-1 min-w-0">
+                  {log.sourceVerified ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <ShieldCheck className="w-3 h-3 flex-shrink-0 text-green-500" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('source.verified', 'Verified source')}
+                        {log.instanceId ? ` · ${log.instanceId}` : ''}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="truncate">{log.source || log.instanceId}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('source.unverified', 'Self-declared (unverified)')}
+                        {log.instanceId ? ` · ${log.instanceId}` : ''}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {log.sourceVerified && <span className="truncate">{log.source || log.instanceId}</span>}
+                </span>
+              </CopyableCell>
             )}
           </div>
 

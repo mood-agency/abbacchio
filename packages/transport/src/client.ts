@@ -1,4 +1,18 @@
-import { encrypt } from "./encrypt.js";
+import os from "node:os";
+
+/** Best-effort default emitter identity for a Node/Bun process. */
+function defaultIdentity(): { source: string | undefined; instanceId: string | undefined } {
+  try {
+    const hostname = os.hostname();
+    const pid = typeof process !== "undefined" ? process.pid : undefined;
+    return {
+      source: hostname || undefined,
+      instanceId: hostname && pid !== undefined ? `${hostname}:${pid}` : hostname || undefined,
+    };
+  } catch {
+    return { source: undefined, instanceId: undefined };
+  }
+}
 
 /**
  * OTLP severity numbers per OpenTelemetry spec.
@@ -51,10 +65,18 @@ export interface AbbacchioClientOptions {
   endpoint?: string;
   /** @deprecated Use `endpoint` instead. If set, used as the full URL for log ingestion. */
   url?: string;
-  /** Secret key for encryption. If provided, payloads will be encrypted before sending */
-  secretKey?: string;
   /** Service name — maps to OTLP resource attribute `service.name`. Defaults to 'default' */
   serviceName?: string;
+  /**
+   * Self-declared emitter label sent on every request via the `X-Source` header.
+   * Defaults to the OS hostname. Note: identity is NOT cryptographically verified.
+   */
+  source?: string;
+  /**
+   * Self-declared unique instance id sent via the `X-Instance-Id` header.
+   * Defaults to `<hostname>:<pid>`.
+   */
+  instanceId?: string;
   /** Additional OTLP resource attributes */
   resourceAttributes?: Record<string, string>;
   /** Number of log records to batch before sending. Defaults to 10 */
@@ -132,8 +154,9 @@ export interface SpanRecord {
  */
 export class AbbacchioClient {
   private endpoint: string;
-  private secretKey?: string;
   private serviceName: string;
+  private source?: string;
+  private instanceId?: string;
   private resourceAttributes: Record<string, string>;
   private batchSize: number;
   private interval: number;
@@ -161,8 +184,10 @@ export class AbbacchioClient {
     } else {
       this.endpoint = options.endpoint || 'http://localhost:4002';
     }
-    this.secretKey = options.secretKey;
     this.serviceName = options.serviceName || 'default';
+    const fallback = defaultIdentity();
+    this.source = options.source ?? fallback.source;
+    this.instanceId = options.instanceId ?? fallback.instanceId;
     this.resourceAttributes = options.resourceAttributes || {};
     this.batchSize = options.batchSize || 10;
     this.interval = options.interval || 1000;
@@ -544,17 +569,15 @@ export class AbbacchioClient {
 
   private async post(path: string, payload: unknown): Promise<void> {
     try {
-      let body = JSON.stringify(payload);
+      const body = JSON.stringify(payload);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...this.headers,
       };
 
-      if (this.secretKey) {
-        body = encrypt(JSON.stringify(payload), this.secretKey);
-        headers['X-Encrypted'] = 'true';
-      }
+      if (this.source) headers['X-Source'] = this.source;
+      if (this.instanceId) headers['X-Instance-Id'] = this.instanceId;
 
       await fetch(`${this.endpoint}${path}`, {
         method: 'POST',

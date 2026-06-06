@@ -3,7 +3,6 @@
  * Sends logs to POST /v1/logs, metrics to POST /v1/metrics, traces to POST /v1/traces
  */
 
-import { encrypt } from './crypto.js';
 
 /**
  * OTLP severity numbers per OpenTelemetry spec.
@@ -30,7 +29,9 @@ interface OtlpKeyValue {
 }
 
 function toOtlpAnyValue(val: unknown): OtlpAnyValue {
-  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'string') {
+    return { stringValue: val.length > 2000 ? val.substring(0, 2000) + '...[TRUNCATED]' : val };
+  }
   if (typeof val === 'number') {
     return Number.isInteger(val) ? { intValue: val } : { doubleValue: val };
   }
@@ -38,9 +39,11 @@ function toOtlpAnyValue(val: unknown): OtlpAnyValue {
   if (val === null || val === undefined) return { stringValue: '' };
   // For objects/arrays, JSON.stringify
   try {
-    return { stringValue: JSON.stringify(val) };
+    const str = JSON.stringify(val);
+    return { stringValue: str.length > 2000 ? str.substring(0, 2000) + '...[TRUNCATED]' : str };
   } catch {
-    return { stringValue: String(val) };
+    const str = String(val);
+    return { stringValue: str.length > 2000 ? str.substring(0, 2000) + '...[TRUNCATED]' : str };
   }
 }
 
@@ -53,20 +56,49 @@ function toOtlpAttributes(obj: Record<string, unknown>): OtlpKeyValue[] {
   return attrs;
 }
 
+const INSTANCE_ID_STORAGE_KEY = 'abbacchio_instance_id';
+
+/**
+ * Return a stable per-browser instance id, persisted in localStorage so it
+ * survives reloads. Falls back to an ephemeral id when storage is unavailable.
+ */
+function defaultBrowserInstanceId(): string | undefined {
+  const random = () => 'web-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  try {
+    if (typeof localStorage === 'undefined') return random();
+    let id = localStorage.getItem(INSTANCE_ID_STORAGE_KEY);
+    if (!id) {
+      id = random();
+      localStorage.setItem(INSTANCE_ID_STORAGE_KEY, id);
+    }
+    return id;
+  } catch {
+    return random();
+  }
+}
+
 export interface AbbacchioClientOptions {
   /** Base URL of the OTLP server (e.g. "http://localhost:4002"). Logs go to {endpoint}/v1/logs */
   endpoint?: string;
   /** @deprecated Use `endpoint` instead */
   url?: string;
-  /** Secret key for encryption. If provided, payloads will be encrypted before sending */
-  secretKey?: string;
   /** Service name — maps to OTLP resource attribute `service.name`. Defaults to 'default' */
   serviceName?: string;
+  /**
+   * Self-declared emitter label sent on every request via the `X-Source` header.
+   * Not cryptographically verified.
+   */
+  source?: string;
+  /**
+   * Self-declared unique instance id sent via the `X-Instance-Id` header.
+   * Defaults to a random id persisted in localStorage (stable across reloads).
+   */
+  instanceId?: string;
   /** Additional OTLP resource attributes */
   resourceAttributes?: Record<string, string>;
-  /** Number of log records to batch before sending. Defaults to 10 */
+  /** Number of log records to batch before sending. Defaults to 1000 */
   batchSize?: number;
-  /** Interval in ms between flushes. Defaults to 1000 */
+  /** Interval in ms between flushes. Defaults to 2000 */
   flushInterval?: number;
   /** Additional headers to send with requests */
   headers?: Record<string, string>;
@@ -139,8 +171,9 @@ export interface SpanRecord {
  */
 export class AbbacchioClient {
   private endpoint: string;
-  private secretKey?: string;
   private serviceName: string;
+  private source?: string;
+  private instanceId?: string;
   private resourceAttributes: Record<string, string>;
   private batchSize: number;
   private flushInterval: number;
@@ -166,11 +199,12 @@ export class AbbacchioClient {
     } else {
       this.endpoint = options.endpoint || 'http://localhost:4002';
     }
-    this.secretKey = options.secretKey;
     this.serviceName = options.serviceName || 'default';
+    this.source = options.source;
+    this.instanceId = options.instanceId ?? defaultBrowserInstanceId();
     this.resourceAttributes = options.resourceAttributes || {};
-    this.batchSize = options.batchSize || 10;
-    this.flushInterval = options.flushInterval || 1000;
+    this.batchSize = options.batchSize || 1000;
+    this.flushInterval = options.flushInterval || 2000;
     this.headers = options.headers || {};
     this.enabled = options.enabled ?? true;
 
@@ -442,16 +476,14 @@ export class AbbacchioClient {
   }
 
   private async post(path: string, payload: unknown): Promise<void> {
-    let body = JSON.stringify(payload);
+    const body = JSON.stringify(payload);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...this.headers,
     };
 
-    if (this.secretKey) {
-      body = await encrypt(JSON.stringify(payload), this.secretKey);
-      headers['X-Encrypted'] = 'true';
-    }
+    if (this.source) headers['X-Source'] = this.source;
+    if (this.instanceId) headers['X-Instance-Id'] = this.instanceId;
 
     await fetch(`${this.endpoint}${path}`, {
       method: 'POST',
@@ -471,8 +503,9 @@ export class AbbacchioClient {
         this.endpoint = options.url;
       }
     }
-    if (options.secretKey !== undefined) this.secretKey = options.secretKey;
     if (options.serviceName !== undefined) this.serviceName = options.serviceName;
+    if (options.source !== undefined) this.source = options.source;
+    if (options.instanceId !== undefined) this.instanceId = options.instanceId;
     if (options.resourceAttributes !== undefined) this.resourceAttributes = options.resourceAttributes;
     if (options.enabled !== undefined) this.enabled = options.enabled;
     if (options.batchSize !== undefined) this.batchSize = options.batchSize;

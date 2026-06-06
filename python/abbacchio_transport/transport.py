@@ -5,13 +5,31 @@ Core transport for sending logs to Abbacchio server.
 from __future__ import annotations
 
 import atexit
+import os
 import queue
+import socket
 import threading
 import time
 from typing import Any
 from uuid import uuid4
 
 import httpx
+
+
+def _default_instance_id() -> str:
+    """Stable per-process emitter id: '<hostname>:<pid>'."""
+    try:
+        return f"{socket.gethostname()}:{os.getpid()}"
+    except Exception:
+        return str(os.getpid())
+
+
+def _default_source() -> str | None:
+    """Default emitter label (hostname)."""
+    try:
+        return socket.gethostname() or None
+    except Exception:
+        return None
 
 # Log level mapping (matching Pino/Bunyan levels)
 LEVEL_MAP = {
@@ -45,6 +63,10 @@ class AbbacchioTransport:
         flush_interval: Seconds between flushes (default: 1.0)
         timeout: HTTP request timeout in seconds (default: 5.0)
         headers: Additional HTTP headers to send
+        source: Self-declared emitter label sent via the X-Source header
+            (defaults to the hostname). Not cryptographically verified.
+        instance_id: Self-declared unique instance id sent via the
+            X-Instance-Id header (defaults to '<hostname>:<pid>').
     """
 
     def __init__(
@@ -55,14 +77,22 @@ class AbbacchioTransport:
         flush_interval: float = 1.0,
         timeout: float = 5.0,
         headers: dict[str, str] | None = None,
+        source: str | None = None,
+        instance_id: str | None = None,
     ):
         self.url = url
         self.channel = channel
         self.batch_size = batch_size
         self.flush_interval = flush_interval
         self.timeout = timeout
+        self.source = source if source is not None else _default_source()
+        self.instance_id = instance_id if instance_id is not None else _default_instance_id()
 
         self._headers = {"Content-Type": "application/json", "X-Channel": channel}
+        if self.source:
+            self._headers["X-Source"] = self.source
+        if self.instance_id:
+            self._headers["X-Instance-Id"] = self.instance_id
         if headers:
             self._headers.update(headers)
 

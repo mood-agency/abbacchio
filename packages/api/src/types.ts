@@ -26,20 +26,12 @@ export interface IncomingLog {
   channel?: string; // Optional per-log channel override
   traceId?: string; // OTLP correlation
   spanId?: string; // OTLP correlation
+  source?: string; // Self-declared emitter label (e.g. hostname/service)
+  instanceId?: string; // Self-declared unique emitter instance id
+  sourceVerified?: boolean; // True only if the identity was cryptographically verified
   [key: string]: unknown;
 }
 
-/**
- * Encrypted log entry
- */
-export interface EncryptedLog {
-  encrypted: string;
-}
-
-/**
- * Incoming log can be plain or encrypted
- */
-export type IncomingLogOrEncrypted = IncomingLog | EncryptedLog;
 
 /**
  * Normalized log entry stored in buffer
@@ -57,10 +49,12 @@ export interface LogEntry {
   /** OTLP correlation fields */
   traceId?: string;
   spanId?: string;
-  /** If true, the log is encrypted and needs client-side decryption */
-  encrypted?: boolean;
-  /** The encrypted payload (only present if encrypted=true) */
-  encryptedData?: string;
+  /** Self-declared emitter label (e.g. hostname or service name) */
+  source?: string;
+  /** Self-declared unique id of the emitting process/instance */
+  instanceId?: string;
+  /** True only if the source identity was cryptographically verified (reserved; always false today) */
+  sourceVerified?: boolean;
 }
 
 /**
