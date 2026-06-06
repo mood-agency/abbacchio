@@ -82,14 +82,6 @@ describe('LogBuffer', () => {
       }
     });
 
-    it('should handle encrypted logs', () => {
-      const buffer = new LogBuffer();
-      const entry = buffer.add({ encrypted: 'base64encrypteddata' });
-
-      expect(entry.encrypted).toBe(true);
-      expect(entry.encryptedData).toBe('base64encrypteddata');
-      expect(entry.msg).toBe('[Encrypted]');
-    });
 
     it('should add to specified channel', () => {
       const buffer = new LogBuffer();

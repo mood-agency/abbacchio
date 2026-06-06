@@ -29,6 +29,10 @@ export interface ConsoleInterceptorOptions extends AbbacchioClientOptions, Netwo
   captureSlowEvents?: boolean;
   /** Duration threshold (ms) for slow events. Defaults to 50 */
   slowEventThresholdMs?: number;
+  /** Capture memory consumption. Defaults to false */
+  captureMemory?: boolean;
+  /** Interval in ms for memory capture. Defaults to 10000 (10s) */
+  memoryCaptureIntervalMs?: number;
 }
 
 const LEVEL_MAP: Record<string, number> = {
@@ -201,10 +205,12 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
     if (
       opts.captureLongTasks !== undefined ||
       opts.captureSlowEvents !== undefined ||
-      opts.slowEventThresholdMs !== undefined
+      opts.slowEventThresholdMs !== undefined ||
+      opts.captureMemory !== undefined ||
+      opts.memoryCaptureIntervalMs !== undefined
     ) {
       stopPerfCapture();
-      if (options.captureLongTasks || options.captureSlowEvents) {
+      if (options.captureLongTasks || options.captureSlowEvents || options.captureMemory) {
         startPerfCapture(options, (entry) => { if (client) client.add(entry); });
       }
     }
@@ -235,7 +241,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
     startErrorCapture(options, (entry) => { if (client) client.add(entry); });
   }
 
-  if (options.captureLongTasks || options.captureSlowEvents) {
+  if (options.captureLongTasks || options.captureSlowEvents || options.captureMemory) {
     startPerfCapture(options, (entry) => { if (client) client.add(entry); });
   }
 

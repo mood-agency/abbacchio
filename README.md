@@ -8,7 +8,6 @@ Real-time log viewer dashboard with HTTP ingestion. Works with **any logging lib
 - **OpenTelemetry native** - OTLP/HTTP JSON receiver for logs, metrics, and traces
 - **Real-time streaming** via HTTP polling
 - **Multi-channel support** - view logs from multiple apps in one dashboard
-- **End-to-end encryption** - encrypt logs before sending, decrypt in browser
 - **Searchable** - full-text search across all log fields
 - **Filterable** - by log level, channel, and namespace
 - **Expandable JSON** - click to expand structured data
@@ -119,6 +118,41 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otel-collector:4318
 
 No code changes required.
 
+### Tracing & Memory Diagnostics
+
+Abbacchio provides built-in utilities to measure execution time and memory consumption for specific operations, tracking the memory delta as OTLP Spans. This works universally across both Node.js (`process.memoryUsage`) and Chromium-based browsers (`performance.memory`).
+
+#### In Node.js (Backend)
+```typescript
+import { traceWithMemory } from '@abbacchio/transport';
+import { telemetry } from './lib/telemetry.js'; // Your AbbacchioClient instance
+
+await traceWithMemory(telemetry, 'heavy_video_processing', async () => {
+  // Heavy operations here...
+  await processVideoFile();
+});
+```
+
+#### In the Browser (React)
+```tsx
+import { useLogger } from '@abbacchio/browser-transport/react';
+
+function VideoProcessor() {
+  const logger = useLogger();
+
+  const handleUpload = async () => {
+    await logger.traceWithMemory('video_upload_process', async () => {
+      // The logger measures time and memory delta automatically
+      await uploadFile(file);
+    });
+  };
+  
+  return <button onClick={handleUpload}>Upload</button>;
+}
+```
+
+This will generate an OTLP Span containing the duration and exact memory metrics (`memory.delta_bytes`, `memory.is_leak_suspect`, etc.), allowing you to instantly pinpoint memory leaks caused by specific user interactions or backend processes.
+
 ## High-Throughput & Agent Sandboxes
 
 Abbacchio is optimized to handle massive amounts of logs quickly. For ephemeral environments like AI Agent Sandboxes where you don't need persistent disk storage, you can run Abbacchio entirely in-memory with strict memory bounding.
@@ -136,7 +170,6 @@ This configuration guarantees your sandbox will not hit an Out-Of-Memory (OOM) e
 - [OpenTelemetry](docs/opentelemetry.md) - OTLP integration and pino-opentelemetry-transport
 - [Transports](docs/transports.md) - Pino, Winston, Bunyan, Console, HTTP
 - [API Reference](docs/api.md) - REST endpoints and log format
-- [Encryption](docs/encryption.md) - End-to-end encryption setup
 - [Channels](docs/channels.md) - Multi-channel support
 - [Dashboard](docs/dashboard.md) - URL parameters and filtering
 - [Terminal UI](docs/tui.md) - CLI for viewing logs in terminal

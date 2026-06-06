@@ -2,8 +2,9 @@
 export { AbbacchioClient, createClient } from "./client.js";
 export type { AbbacchioClientOptions, LogRecord, MetricRecord, HistogramRecord, SpanRecord } from "./client.js";
 
-// Encryption utilities
-export { generateKey, encrypt, decrypt, encryptLog, decryptLog } from "./encrypt.js";
+// Trace & Memory utilities
+export { traceWithMemory, getMemoryUsageBytes } from "./trace.js";
+export type { TraceOptions } from "./trace.js";
 
 // Re-export transports for convenience
 export { default as pinoTransport } from "./transports/pino.js";

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getLogs, ingestLogs, clearLogs, deleteChannel, getChannels, getStats, getMetrics, getTraces, executeSql, getLogCounts } from './logs.handlers.js';
+import { getLogs, ingestLogs, clearLogs, deleteChannel, getChannels, getStats, getMetrics, getTraces, executeSql, getLogCounts, streamLogs } from './logs.handlers.js';
 import { ingestOtlpLogs, ingestOtlpMetrics, ingestOtlpTraces } from './otlp.handlers.js';
 
 const router = new Hono();
@@ -15,6 +15,7 @@ router.get('/api/metrics', getMetrics);
 router.get('/api/traces', getTraces);
 router.get('/api/stats', getStats);
 router.post('/api/sql', executeSql);
+router.get('/api/stream', streamLogs);
 
 // OTLP Ingestion Routes (under /v1 per OpenTelemetry spec)
 router.post('/v1/logs', ingestOtlpLogs);

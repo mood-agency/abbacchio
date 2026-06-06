@@ -32,14 +32,6 @@ Ingest logs (single or batch).
 }
 ```
 
-**Encrypted log:**
-
-```json
-{
-  "encrypted": "base64-encoded-ciphertext"
-}
-```
-
 **Response:** `201 Created`
 
 ```json
@@ -110,20 +102,6 @@ Execute SQL queries against stored logs.
   "rowCount": 10,
   "executionTimeMs": 5
 }
-```
-
-## GET /api/generate-key
-
-Generate a cryptographically secure random encryption key.
-
-**Query params:**
-
-- `length` - Key length in bytes (default: 32, min: 16, max: 64)
-
-**Response:**
-
-```json
-{ "key": "Yx2kL9mN3pQ7rS1tU5vW8xZ0aB4cD6eF..." }
 ```
 
 ## Log Format

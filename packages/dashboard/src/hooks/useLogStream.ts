@@ -37,9 +37,7 @@ interface UseLogStreamResult {
   setPageSize: (size: PageSize) => void;
   totalPages: number;
   clearLogs: () => void;
-  secretKey: string;
-  setSecretKey: (key: string) => void;
-  hasEncryptedLogs: boolean;
+
   channels: string[];
   urlChannel: string;
   /** Available namespaces for filter dropdown */
@@ -60,9 +58,7 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
     clearLogs: clearStore,
     onNewLogs,
     onClear,
-    secretKey,
-    setSecretKey,
-    hasEncryptedLogs,
+
     channels,
     urlChannel,
     persistLogs,
@@ -198,9 +194,7 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamResult {
     setPageSize,
     totalPages,
     clearLogs,
-    secretKey,
-    setSecretKey,
-    hasEncryptedLogs,
+
     channels,
     urlChannel,
     availableNamespaces,

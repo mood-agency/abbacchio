@@ -6,6 +6,7 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { Logger, createLogger, type LoggerOptions } from '../logger.js';
 import { interceptConsole, stopInterceptConsole, type ConsoleInterceptorOptions } from '../console.js';
+import type { WebVitalsCaptureOptions } from '../web-vitals.js';
 
 export interface AbbacchioContextValue {
   logger: Logger;
@@ -26,6 +27,8 @@ export interface AbbacchioProviderProps extends LoggerOptions {
   captureConsole?: boolean;
   /** Options for console capture (only used if captureConsole is true) */
   consoleOptions?: Omit<ConsoleInterceptorOptions, keyof LoggerOptions>;
+  /** Options for Web Vitals capture (only used if captureWebVitals is true in LoggerOptions) */
+  webVitalsOptions?: Omit<WebVitalsCaptureOptions, 'appName' | 'includeUrl'>;
 }
 
 /**
@@ -50,16 +53,20 @@ export function AbbacchioProvider({
   children,
   captureConsole = false,
   consoleOptions,
+  webVitalsOptions,
   ...loggerOptions
 }: AbbacchioProviderProps) {
-  const logger = useMemo(() => createLogger(loggerOptions), [
+  const logger = useMemo(() => createLogger({
+    ...loggerOptions,
+    webVitalsOptions,
+  }), [
     loggerOptions.endpoint,
     loggerOptions.serviceName,
-    loggerOptions.secretKey,
     loggerOptions.name,
     loggerOptions.level,
     loggerOptions.batchSize,
     loggerOptions.flushInterval,
+    loggerOptions.captureWebVitals,
   ]);
 
   useEffect(() => {

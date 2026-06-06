@@ -5,6 +5,7 @@
 
 import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry, type MetricRecord } from './client.js';
 import { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
+import { startWebVitalsCapture, stopWebVitalsCapture, type WebVitalsCaptureOptions } from './web-vitals.js';
 
 export interface LoggerOptions extends AbbacchioClientOptions, NetworkCaptureOptions {
   /** Logger name (used as namespace attribute). Defaults to 'app' */
@@ -13,6 +14,20 @@ export interface LoggerOptions extends AbbacchioClientOptions, NetworkCaptureOpt
   level?: number | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
   /** Include the current URL in log data. Defaults to false */
   includeUrl?: boolean;
+  /** Capture Web Vitals (LCP, INP, CLS, FCP, TTFB). Defaults to false */
+  captureWebVitals?: boolean;
+  /** Web Vitals capture options */
+  webVitalsOptions?: Omit<WebVitalsCaptureOptions, 'appName' | 'includeUrl'>;
+}
+
+export function getMemoryUsageBytes(): number {
+  if (typeof process !== 'undefined' && process.memoryUsage) {
+    return process.memoryUsage().heapUsed;
+  }
+  if (typeof performance !== 'undefined' && (performance as any).memory) {
+    return (performance as any).memory.usedJSHeapSize;
+  }
+  return 0;
 }
 
 export const LOG_LEVELS = {
@@ -45,6 +60,10 @@ export class Logger {
     if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
       this.enableNetworkCapture(options);
     }
+
+    if (options.captureWebVitals) {
+      this.enableWebVitals(options.webVitalsOptions);
+    }
   }
 
   /** Dynamically enable network capture with options */
@@ -62,6 +81,20 @@ export class Logger {
   /** Dynamically disable network capture */
   disableNetworkCapture(): void {
     stopNetworkCapture();
+  }
+
+  /** Dynamically enable Web Vitals capture (LCP, INP, CLS, FCP, TTFB) */
+  enableWebVitals(options?: Omit<WebVitalsCaptureOptions, 'appName' | 'includeUrl'>): void {
+    startWebVitalsCapture(
+      { ...options, appName: this.loggerName, includeUrl: this.includeUrl },
+      (entry) => this.client.add(entry),
+      (metric) => this.client.addMetric(metric),
+    );
+  }
+
+  /** Dynamically disable Web Vitals capture */
+  disableWebVitals(): void {
+    stopWebVitalsCapture();
   }
 
   private parseLevel(level: number | LogLevel): number {
@@ -144,13 +177,13 @@ export class Logger {
     this.client.addMetric(record);
   }
 
-  startSpan(name: string, attrs?: Record<string, string>): { end: (status?: 'OK' | 'ERROR') => void } {
+  startSpan(name: string, attrs?: Record<string, string>): { end: (status?: 'OK' | 'ERROR', finalAttrs?: Record<string, string>) => void } {
     const traceId = crypto.randomUUID().replace(/-/g, '');
     const spanId = traceId.slice(0, 16);
     const startNano = BigInt(Date.now()) * 1_000_000n;
 
     return {
-      end: (status: 'OK' | 'ERROR' = 'OK') => {
+      end: (status: 'OK' | 'ERROR' = 'OK', finalAttrs?: Record<string, string>) => {
         const endNano = BigInt(Date.now()) * 1_000_000n;
         this.client.addSpan({
           traceId,
@@ -159,11 +192,40 @@ export class Logger {
           kind: 1,
           startTimeUnixNano: startNano.toString(),
           endTimeUnixNano: endNano.toString(),
-          attributes: { ...attrs, 'logger.name': this.loggerName },
+          attributes: { ...attrs, ...finalAttrs, 'logger.name': this.loggerName },
           status: { code: status === 'OK' ? 1 : 2 },
         });
       },
     };
+  }
+
+  async traceWithMemory<T>(
+    name: string,
+    operation: () => Promise<T> | T,
+    attrs?: Record<string, string>
+  ): Promise<T> {
+    const startMemory = getMemoryUsageBytes();
+    const span = this.startSpan(name, attrs);
+    let hasError = false;
+
+    try {
+      return await operation();
+    } catch (error) {
+      hasError = true;
+      throw error;
+    } finally {
+      const endMemory = getMemoryUsageBytes();
+      const memoryDelta = endMemory - startMemory;
+
+      const finalAttrs = {
+        'memory.start_bytes': String(startMemory),
+        'memory.end_bytes': String(endMemory),
+        'memory.delta_bytes': String(memoryDelta),
+        'memory.is_leak_suspect': String(memoryDelta > 50_000_000), // > 50MB
+      };
+
+      span.end(hasError ? 'ERROR' : 'OK', finalAttrs);
+    }
   }
 
   child(bindings: Record<string, unknown>): Logger {
@@ -178,6 +240,7 @@ export class Logger {
 
   async close(): Promise<void> {
     stopNetworkCapture();
+    stopWebVitalsCapture();
     await this.client.close();
   }
 

@@ -10,7 +10,6 @@ All transports share these common options:
 | ----------- | ------ | -------------------------------- | -------------------------------------- |
 | `url`       | string | `http://localhost:4000/api/logs` | Abbacchio server URL                   |
 | `channel`   | string | `default`                        | Channel name for multi-app support     |
-| `secretKey` | string | -                                | Encryption key (enables E2E encryption)|
 | `batchSize` | number | `10`                             | Send batch when this many logs accumulate |
 | `interval`  | number | `1000`                           | Send batch after this many ms          |
 | `headers`   | object | `{}`                             | Additional HTTP headers                |
@@ -36,23 +35,6 @@ const logger = pino({
 });
 
 logger.info({ user: "john" }, "User logged in");
-```
-
-### With encryption
-
-```typescript
-import pino from "pino";
-
-const logger = pino({
-  transport: {
-    target: "abbacchio/transports/pino",
-    options: {
-      url: "http://localhost:4000/api/logs",
-      channel: "api-server",
-      secretKey: process.env.ABBACCHIO_SECRET_KEY,
-    },
-  },
-});
 ```
 
 ## Winston

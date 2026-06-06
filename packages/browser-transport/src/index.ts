@@ -68,8 +68,9 @@ export { startErrorCapture, stopErrorCapture, type ErrorCaptureOptions } from '.
 // Performance capture (longtask + slow events)
 export { startPerfCapture, stopPerfCapture, type PerfCaptureOptions } from './perf.js';
 
+// Web Vitals (LCP, INP, CLS, FCP, TTFB)
+export { startWebVitalsCapture, stopWebVitalsCapture, type WebVitalsCaptureOptions } from './web-vitals.js';
+
 // Network capture
 export { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
 
-// Crypto utilities
-export { encrypt, decrypt, generateKey, isCryptoAvailable } from './crypto.js';

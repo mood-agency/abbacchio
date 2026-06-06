@@ -43,12 +43,6 @@ export function createLogBatch(count: number): IncomingLog[] {
   }));
 }
 
-/**
- * Create an encrypted log entry
- */
-export function createEncryptedLog(data: string) {
-  return { encrypted: data };
-}
 
 /**
  * Create a log with extra custom fields

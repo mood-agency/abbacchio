@@ -1,6 +1,6 @@
 # @abbacchio/browser-transport
 
-Browser and React logging client for Abbacchio. Intercept `console.log` and send structured logs to your Abbacchio log viewer.
+OTLP-native browser and React logging client for Abbacchio. Intercept `console.log`, capture network requests, Web Vitals, errors, and performance metrics — all sent via OpenTelemetry protocol.
 
 ## Installation
 
@@ -29,9 +29,8 @@ Configure via global variable:
 ```html
 <script>
   window.__ABBACCHIO_CONFIG__ = {
-    url: 'http://localhost:4000/api/logs',
-    channel: 'my-app',
-    appName: 'my-web-app',
+    endpoint: 'http://localhost:4002',
+    serviceName: 'my-app',
   }
 </script>
 <script type="module">
@@ -44,20 +43,16 @@ Configure via global variable:
 ```javascript
 import { interceptConsole, stopInterceptConsole } from '@abbacchio/browser-transport'
 
-// Start capturing
 interceptConsole({
-  url: 'http://localhost:4000/api/logs',
-  channel: 'my-frontend',
-  namespace: 'my-app',
-  secretKey: 'optional-encryption-key', // optional
+  endpoint: 'http://localhost:4002',
+  serviceName: 'my-frontend',
+  appName: 'my-app',
 })
 
-// All console methods are now captured
 console.log('Captured!')
 console.warn('Warning captured!')
 console.error('Error captured!')
 
-// Stop capturing when done
 stopInterceptConsole()
 ```
 
@@ -67,9 +62,9 @@ stopInterceptConsole()
 import { createLogger } from '@abbacchio/browser-transport'
 
 const log = createLogger({
-  url: 'http://localhost:4000/api/logs',
-  channel: 'my-app',
-  namespace: 'my-service',
+  endpoint: 'http://localhost:4002',
+  serviceName: 'my-app',
+  name: 'my-service',
 })
 
 log.info('User logged in', { userId: 123 })
@@ -86,108 +81,230 @@ requestLog.info('Processing request')
 ```tsx
 import { AbbacchioProvider, useLogger } from '@abbacchio/browser-transport/react'
 
-// Wrap your app
 function App() {
   return (
     <AbbacchioProvider
-      url="http://localhost:4000/api/logs"
-      channel="my-react-app"
-      captureConsole  // Optional: also capture console.log
+      endpoint="http://localhost:4002"
+      serviceName="my-react-app"
+      captureConsole
+      captureWebVitals
     >
       <MyApp />
     </AbbacchioProvider>
   )
 }
 
-// Use in any component
 function MyComponent() {
   const log = useLogger()
+  return <button onClick={() => log.info('clicked')}>Click me</button>
+}
+```
 
-  const handleClick = () => {
-    log.info('Button clicked', { component: 'MyComponent' })
-  }
+## Web Vitals
 
-  return <button onClick={handleClick}>Click me</button>
+Capture Core Web Vitals (LCP, INP, CLS, FCP, TTFB) using Google's [web-vitals](https://github.com/GoogleChrome/web-vitals) library. Each vital is reported as both a log entry and an OTLP metric gauge.
+
+### Via Logger
+
+```javascript
+import { createLogger } from '@abbacchio/browser-transport'
+
+const log = createLogger({
+  endpoint: 'http://localhost:4002',
+  serviceName: 'my-app',
+  captureWebVitals: true,
+})
+```
+
+### Via React Provider
+
+```tsx
+<AbbacchioProvider
+  endpoint="http://localhost:4002"
+  serviceName="my-app"
+  captureWebVitals
+>
+  <App />
+</AbbacchioProvider>
+```
+
+### Standalone
+
+```javascript
+import { startWebVitalsCapture, stopWebVitalsCapture } from '@abbacchio/browser-transport'
+
+startWebVitalsCapture(
+  { captureLCP: true, captureINP: true, captureCLS: true },
+  (logEntry) => console.log(logEntry),
+  (metric) => console.log(metric),
+)
+```
+
+### Options
+
+```typescript
+interface WebVitalsCaptureOptions {
+  captureLCP?: boolean     // Largest Contentful Paint (default: true)
+  captureINP?: boolean     // Interaction to Next Paint (default: true)
+  captureCLS?: boolean     // Cumulative Layout Shift (default: true)
+  captureFCP?: boolean     // First Contentful Paint (default: true)
+  captureTTFB?: boolean    // Time to First Byte (default: true)
+  reportAsMetrics?: boolean // Send as OTLP metrics too (default: true)
+  goodLevel?: number       // Log level for "good" ratings (default: 30/info)
+  needsImprovementLevel?: number // Log level for "needs improvement" (default: 40/warn)
+  poorLevel?: number       // Log level for "poor" ratings (default: 50/error)
+}
+```
+
+### Output
+
+Log entries include the vital name, value, rating, and metadata:
+
+```
+LCP 3060ms (poor)      → level: error
+FCP 800ms (good)       → level: info
+CLS 0.150 (needs-improvement) → level: warn
+INP 120ms (good)       → level: info
+TTFB 450ms (good)      → level: info
+```
+
+OTLP metrics are sent as gauges: `web_vital.lcp`, `web_vital.inp`, `web_vital.cls`, `web_vital.fcp`, `web_vital.ttfb` — each with a `rating` attribute.
+
+## Network Capture
+
+Automatically capture HTTP requests and WebSockets.
+
+### Enabling at Creation
+
+```javascript
+const log = createLogger({
+  endpoint: 'http://localhost:4002',
+  serviceName: 'my-app',
+  captureFetch: true,
+  captureXhr: true,
+  captureWebSockets: true,
+  includeBody: false,
+  ignoreNetworkUrls: ['/analytics', /\.png$/],
+})
+```
+
+### Enabling at Runtime
+
+```javascript
+log.enableNetworkCapture({
+  captureFetch: true,
+  captureXhr: true,
+  captureWebSockets: true,
+})
+
+log.disableNetworkCapture()
+```
+
+## Performance Capture
+
+Capture main-thread jank (long tasks > 50ms) and slow event handlers via PerformanceObserver.
+
+```javascript
+import { startPerfCapture, stopPerfCapture } from '@abbacchio/browser-transport'
+
+startPerfCapture(
+  {
+    captureLongTasks: true,
+    captureSlowEvents: true,
+    captureMemory: true,
+    slowEventThresholdMs: 100,
+    memoryCaptureIntervalMs: 10000,
+  },
+  (entry) => console.log(entry),
+)
+```
+
+## Error Capture
+
+Capture uncaught exceptions and unhandled promise rejections.
+
+```javascript
+import { startErrorCapture, stopErrorCapture } from '@abbacchio/browser-transport'
+
+startErrorCapture(
+  {
+    captureErrors: true,
+    captureUnhandledRejections: true,
+  },
+  (entry) => console.log(entry),
+)
+```
+
+## OTLP Metrics & Traces
+
+The client supports sending custom metrics and traces via the OTLP protocol.
+
+### Metrics
+
+```javascript
+import { createLogger } from '@abbacchio/browser-transport'
+
+const log = createLogger({ endpoint: 'http://localhost:4002', serviceName: 'my-app' })
+
+log.metric({
+  name: 'page_load_time',
+  value: 1200,
+  type: 'gauge',
+  unit: 'ms',
+  attributes: { route: '/dashboard' },
+})
+```
+
+### Traces
+
+```javascript
+const span = log.startSpan('fetch-users', { route: '/api/users' })
+try {
+  const users = await fetchUsers()
+  span.end('OK')
+} catch (err) {
+  span.end('ERROR')
 }
 ```
 
 ## API Reference
 
-### `interceptConsole(options)`
-
-Start intercepting console methods.
-
-```typescript
-interface ConsoleInterceptorOptions {
-  url?: string           // Server URL (default: 'http://localhost:4000/api/logs')
-  channel?: string       // Channel name (default: 'default')
-  namespace?: string     // Namespace for logs (takes precedence over appName)
-  appName?: string       // Logger name (default: 'browser')
-  enabled?: boolean      // Whether to send logs (default: true)
-  secretKey?: string     // Encryption key (optional)
-  batchSize?: number     // Logs per batch (default: 10)
-  flushInterval?: number // Ms between flushes (default: 1000)
-  passthrough?: boolean  // Still log to console (default: true)
-  includeUrl?: boolean   // Include page URL (default: true)
-  
-  // Network Capture Options
-  captureFetch?: boolean      // Capture window.fetch requests
-  captureXhr?: boolean        // Capture XMLHttpRequest
-  captureWebSockets?: boolean // Capture WebSocket messages
-  includeBody?: boolean       // Include request/response body payload
-  includeHeaders?: boolean    // Include request headers
-  ignoreNetworkUrls?: (string | RegExp)[] // URLs to ignore
-}
-```
-
 ### `createLogger(options)`
-
-Create a structured logger instance.
 
 ```typescript
 interface LoggerOptions {
-  url?: string
-  channel?: string
-  namespace?: string     // Logger namespace (takes precedence over name)
-  name?: string          // Logger name (deprecated, use namespace)
-  enabled?: boolean      // Whether to send logs (default: true)
+  endpoint?: string       // OTLP server URL (default: 'http://localhost:4002')
+  serviceName?: string    // OTLP service.name attribute (default: 'default')
+  name?: string           // Logger name (default: 'app')
+  enabled?: boolean       // Send logs (default: true)
   level?: number | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
-  secretKey?: string
-  batchSize?: number
-  flushInterval?: number
-  
-  // Network Capture Options
-  captureFetch?: boolean      // Capture window.fetch requests
-  captureXhr?: boolean        // Capture XMLHttpRequest
-  captureWebSockets?: boolean // Capture WebSocket messages
-  includeBody?: boolean       // Include request/response body payload
-  includeHeaders?: boolean    // Include request headers
-  ignoreNetworkUrls?: (string | RegExp)[] // URLs to ignore
+  batchSize?: number      // Logs per batch (default: 1000)
+  flushInterval?: number  // Ms between flushes (default: 2000)
+  includeUrl?: boolean    // Include page URL (default: false)
+
+  // Web Vitals
+  captureWebVitals?: boolean  // Capture LCP, INP, CLS, FCP, TTFB (default: false)
+  webVitalsOptions?: WebVitalsCaptureOptions
+
+  // Network Capture
+  captureFetch?: boolean
+  captureXhr?: boolean
+  captureWebSockets?: boolean
+  includeBody?: boolean
+  includeHeaders?: boolean
+  ignoreNetworkUrls?: (string | RegExp)[]
 }
-
-const log = createLogger(options)
-
-log.trace(msg, data?)
-log.debug(msg, data?)
-log.info(msg, data?)
-log.warn(msg, data?)
-log.error(msg, data?)
-log.fatal(msg, data?)
-
-// Or with data first (Pino style)
-log.info({ userId: 123 }, 'User action')
 ```
 
 ### `AbbacchioProvider` (React)
 
-React context provider for logging.
-
 ```tsx
 <AbbacchioProvider
-  url="..."
-  channel="..."
-  name="..."
-  captureConsole={true}  // Also intercept console.log
+  endpoint="http://localhost:4002"
+  serviceName="my-app"
+  captureConsole={true}
+  captureWebVitals={true}
+  webVitalsOptions={{ captureLCP: true, captureINP: true }}
 >
   {children}
 </AbbacchioProvider>
@@ -196,93 +313,23 @@ React context provider for logging.
 ### `useLogger()` / `useAbbacchio()` (React Hooks)
 
 ```tsx
-const log = useLogger()              // Get logger instance
-const { info, warn, error } = useAbbacchio()  // Get logging methods
-```
-
-## Network Capture
-
-You can automatically capture HTTP requests and WebSockets either globally through the `ConsoleInterceptor` or on a specific `Logger` instance.
-
-### Enabling at Creation
-
-```javascript
-import { createLogger } from '@abbacchio/browser-transport'
-
-const log = createLogger({
-  url: 'http://localhost:4000/api/logs',
-  channel: 'my-app',
-  captureFetch: true,
-  captureXhr: true,
-  captureWebSockets: true,
-  includeBody: false, // Set to true to capture payloads
-  ignoreNetworkUrls: ['/analytics', /\.png$/], // Ignore specific URLs
-})
-```
-
-### Enabling at Runtime
-
-If you want to delay tracking until after login, or toggle it dynamically:
-
-```javascript
-// Enable specific network captures dynamically
-log.enableNetworkCapture({
-  captureFetch: true,
-  captureXhr: true,
-  captureWebSockets: true,
-})
-
-// Stop tracking network traffic
-log.disableNetworkCapture()
+const log = useLogger()
+const { info, warn, error, metric, startSpan } = useAbbacchio()
 ```
 
 ## Disabling in Production
 
-Use `enabled: false` to prevent logs from being sent. Logs are silently dropped.
-
 ```javascript
-import { createLogger } from '@abbacchio/browser-transport'
-
 const log = createLogger({
-  channel: 'my-app',
+  serviceName: 'my-app',
   enabled: process.env.NODE_ENV !== 'production',
 })
 
-// Or toggle at runtime via the underlying client
-import { createClient } from '@abbacchio/browser-transport'
-
+// Or toggle at runtime
 const client = createClient({ enabled: false })
-client.enable()   // start sending
-client.disable()  // stop sending
+client.enable()
+client.disable()
 ```
-
-You can also toggle via `configure()`:
-
-```javascript
-client.configure({ enabled: true })
-```
-
-## Encryption
-
-All options support optional end-to-end encryption:
-
-```javascript
-import { createLogger, generateKey } from '@abbacchio/browser-transport'
-
-// Generate a key (do this once, store securely)
-const key = generateKey()
-console.log('Your key:', key)
-
-// Use the key for encryption
-const log = createLogger({
-  channel: 'my-app',
-  secretKey: key,
-})
-
-log.info('This is encrypted!')
-```
-
-The encrypted logs can only be decrypted in the Abbacchio dashboard by entering the same key.
 
 ## Log Levels
 

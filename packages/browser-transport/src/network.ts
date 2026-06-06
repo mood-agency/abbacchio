@@ -68,13 +68,13 @@ function patchFetch() {
     const url = typeof args[0] === 'string' ? args[0] : (args[0] instanceof URL ? args[0].href : args[0].url);
     
     if (shouldIgnore(url)) {
-      return originalFetch.apply(this, args);
+      return originalFetch!.apply(this, args);
     }
 
     const method = (args[1]?.method || 'GET').toUpperCase();
     const entry = createBaseEntry(`fetch ${method} ${url}`);
     entry.network = { method, url, type: 'fetch' };
-    
+
     if (options.includeBody && args[1]?.body) {
       entry.network.requestBody = args[1].body;
     }
@@ -84,7 +84,7 @@ function patchFetch() {
 
     const startTime = Date.now();
     try {
-      const response = await originalFetch.apply(this, args);
+      const response = await originalFetch!.apply(this, args);
       entry.network.status = response.status;
       entry.network.duration = Date.now() - startTime;
       entry.level = response.status >= 400 ? 40 : 30; // Warn on 4xx/5xx
@@ -205,7 +205,7 @@ export function startNetworkCapture(
   logCallback = onEntry;
   isCapturing = true;
 
-  if (opts.captureFetch && originalFetch) patchFetch();
+  if (opts.captureFetch) patchFetch();
   if (opts.captureXhr && originalXHR) patchXHR();
   if (opts.captureWebSockets && originalWebSocket) patchWebSocket();
 }

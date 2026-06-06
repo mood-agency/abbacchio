@@ -1,25 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { LogEntry, LogLevelLabel } from '../types';
-import { decryptLog, isCryptoAvailable } from '../lib/crypto';
+import type { LogEntry } from '../types';
 import {
   initDatabase,
   insertLogs,
   clearAllLogs,
   getLogCount,
-  updateLogs,
   requestPersistence,
-  hasEncryptedLogs as checkHasEncryptedLogs,
-  getLogsNeedingDecryption,
 } from '../lib/sqlite-db';
 
-const LOG_LEVELS: Record<number, LogLevelLabel> = {
-  10: 'trace',
-  20: 'debug',
-  30: 'info',
-  40: 'warn',
-  50: 'error',
-  60: 'fatal',
-};
 
 export interface UseLogStoreResult {
   /** Total number of logs in database */
@@ -32,10 +20,7 @@ export interface UseLogStoreResult {
   onNewLogs: (callback: (logs: LogEntry[]) => void) => () => void;
   /** Subscribe to clear notifications */
   onClear: (callback: () => void) => () => void;
-  /** Encryption */
-  secretKey: string;
-  setSecretKey: (key: string) => void;
-  hasEncryptedLogs: boolean;
+
   /** Channels */
   channels: string[];
   urlChannel: string;
@@ -46,36 +31,19 @@ export interface UseLogStoreResult {
   queueLogs: (logs: LogEntry[]) => void;
 }
 
-// Cache initial URL params (read once before React StrictMode double-invocation)
-// Note: Secret key is kept in memory only for security - never persisted to storage
 const initialUrlParams = (() => {
   const params = new URLSearchParams(window.location.search);
-  const key = params.get('key') || '';
   const channel = params.get('channel') || '';
 
-  // Remove key from URL immediately for security (keep channel)
-  if (key) {
-    params.delete('key');
-    const newUrl = params.toString()
-      ? `${window.location.pathname}?${params.toString()}`
-      : window.location.pathname;
-    window.history.replaceState({}, '', newUrl);
-  }
-
-  return { channel, key };
+  return { channel };
 })();
 
 export function useLogStore(): UseLogStoreResult {
   const [totalCount, setTotalCount] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
-  // Secret key is kept in memory only - never persisted for security
-  const [secretKey, setSecretKey] = useState(initialUrlParams.key);
   const [channels] = useState<string[]>(['default']);
   const [urlChannel] = useState(initialUrlParams.channel);
-  const [hasEncryptedLogs, setHasEncryptedLogs] = useState(false);
   const [persistLogs, setPersistLogs] = useState(true);
-
-  const secretKeyRef = useRef(secretKey);
   const newLogsCallbacks = useRef<Set<(logs: LogEntry[]) => void>>(new Set());
   const clearCallbacks = useRef<Set<() => void>>(new Set());
 
@@ -86,10 +54,6 @@ export function useLogStore(): UseLogStoreResult {
   const persistLogsRef = useRef(persistLogs);
   const BATCH_INTERVAL_MS = 100; // Flush every 100ms
 
-  // Keep refs in sync
-  useEffect(() => {
-    secretKeyRef.current = secretKey;
-  }, [secretKey]);
 
   useEffect(() => {
     persistLogsRef.current = persistLogs;
@@ -103,11 +67,7 @@ export function useLogStore(): UseLogStoreResult {
       const count = await getLogCount();
       setTotalCount(count);
 
-      // Check for encrypted logs on initial load
-      if (count > 0) {
-        const hasEncrypted = await checkHasEncryptedLogs();
-        setHasEncryptedLogs(hasEncrypted);
-      }
+
       setIsInitialized(true);
     };
     init();
@@ -181,93 +141,6 @@ export function useLogStore(): UseLogStoreResult {
     };
   }, []);
 
-  // Process a log entry (decrypt if needed)
-  const processEntry = useCallback(
-    async (entry: LogEntry): Promise<LogEntry> => {
-      // Non-encrypted: return as-is (wasEncrypted stays false/undefined)
-      if (!entry.encrypted || !entry.encryptedData) {
-        return { ...entry, wasEncrypted: false };
-      }
-
-      // Mark as originally encrypted
-      const key = secretKeyRef.current;
-      if (!key || !isCryptoAvailable()) {
-        setHasEncryptedLogs(true);
-        return { ...entry, wasEncrypted: true, decryptionFailed: !key };
-      }
-
-      try {
-        const decrypted = await decryptLog<{
-          level?: number;
-          time?: number;
-          msg?: string;
-          message?: string;
-          namespace?: string;
-          name?: string;
-          [key: string]: unknown;
-        }>(entry.encryptedData, key);
-
-        if (!decrypted) {
-          setHasEncryptedLogs(true);
-          return { ...entry, wasEncrypted: true, decryptionFailed: true };
-        }
-
-        const level = typeof decrypted.level === 'number' ? decrypted.level : 30;
-        const { level: _, time, msg, message, namespace, name, ...rest } = decrypted;
-
-        return {
-          ...entry,
-          level,
-          levelLabel: LOG_LEVELS[level as keyof typeof LOG_LEVELS] || 'info',
-          time: time || entry.time,
-          msg: msg || message || '',
-          namespace: namespace || name,
-          data: rest,
-          encrypted: false,
-          encryptedData: undefined,
-          wasEncrypted: true, // Preserve that it was originally encrypted
-        };
-      } catch {
-        setHasEncryptedLogs(true);
-        return { ...entry, wasEncrypted: true, decryptionFailed: true };
-      }
-    },
-    []
-  );
-
-  // Re-decrypt logs when secret key changes
-  useEffect(() => {
-    if (!secretKey) return;
-
-    const decryptExisting = async () => {
-      const logsNeedingDecryption = await getLogsNeedingDecryption();
-      if (logsNeedingDecryption.length === 0) return;
-
-      const logsToUpdate: LogEntry[] = [];
-
-      for (const log of logsNeedingDecryption) {
-        const processed = await processEntry({
-          ...log,
-          encrypted: true,
-          decryptionFailed: false,
-        });
-        logsToUpdate.push(processed);
-      }
-
-      if (logsToUpdate.length > 0) {
-        await updateLogs(logsToUpdate);
-        // Notify with empty array to trigger refresh
-        notifyNewLogs([]);
-      }
-
-      // Update hasEncryptedLogs status
-      const hasEncrypted = await checkHasEncryptedLogs();
-      setHasEncryptedLogs(hasEncrypted);
-    };
-
-    decryptExisting();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secretKey]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -282,7 +155,6 @@ export function useLogStore(): UseLogStoreResult {
   const clearLogs = useCallback(async () => {
     await clearAllLogs();
     setTotalCount(0);
-    setHasEncryptedLogs(false);
     notifyClear();
     fetch('/api/logs', { method: 'DELETE' }).catch(console.error);
   }, [notifyClear]);
@@ -293,9 +165,7 @@ export function useLogStore(): UseLogStoreResult {
     clearLogs,
     onNewLogs,
     onClear,
-    secretKey,
-    setSecretKey,
-    hasEncryptedLogs,
+
     channels,
     urlChannel,
     persistLogs,

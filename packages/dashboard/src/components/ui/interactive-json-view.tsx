@@ -118,9 +118,10 @@ const PrimitiveValue = memo(function PrimitiveValue({
 
   return (
     <span
-      className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClass}`}
-      onContextMenu={(e) => {
+      className={`hover:bg-muted rounded px-0.5 cursor-pointer ${colorClass}`}
+      onClick={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         onCopy(copyValue, 'value');
       }}
     >
@@ -180,9 +181,10 @@ const JsonNode = memo(function JsonNode({
     if (value.length === 0) {
       return (
         <span
-          className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClasses.bracket}`}
-          onContextMenu={(e) => {
+          className={`hover:bg-muted rounded px-0.5 cursor-pointer ${colorClasses.bracket}`}
+          onClick={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             onCopy('[]', 'value');
           }}
         >
@@ -196,8 +198,8 @@ const JsonNode = memo(function JsonNode({
 
     return (
       <span
-        className="cursor-context-menu"
-        onContextMenu={(e) => {
+        className="cursor-pointer"
+        onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           onCopy(JSON.stringify(value, null, 2), 'value');
@@ -205,7 +207,10 @@ const JsonNode = memo(function JsonNode({
       >
         <span
           className={`cursor-pointer hover:bg-muted rounded ${colorClasses.bracket}`}
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
         >
           {isExpanded ? <ChevronDown className="inline w-3 h-3" /> : <ChevronRight className="inline w-3 h-3" />}
           {'['}
@@ -260,9 +265,10 @@ const JsonNode = memo(function JsonNode({
     if (entries.length === 0) {
       return (
         <span
-          className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClasses.bracket}`}
-          onContextMenu={(e) => {
+          className={`hover:bg-muted rounded px-0.5 cursor-pointer ${colorClasses.bracket}`}
+          onClick={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             onCopy('{}', 'value');
           }}
         >
@@ -276,8 +282,8 @@ const JsonNode = memo(function JsonNode({
 
     return (
       <span
-        className="cursor-context-menu"
-        onContextMenu={(e) => {
+        className="cursor-pointer"
+        onClick={(e) => {
           if ((e.target as HTMLElement).closest('[data-json-key], [data-json-value]')) {
             return;
           }
@@ -288,7 +294,10 @@ const JsonNode = memo(function JsonNode({
       >
         <span
           className={`cursor-pointer hover:bg-muted rounded ${colorClasses.bracket}`}
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
         >
           {isExpanded ? <ChevronDown className="inline w-3 h-3" /> : <ChevronRight className="inline w-3 h-3" />}
           {'{'}
@@ -303,8 +312,8 @@ const JsonNode = memo(function JsonNode({
                 {indentStr}{'  '}
                 <span
                   data-json-key
-                  className={`hover:bg-muted rounded px-0.5 cursor-context-menu ${colorClasses.key}`}
-                  onContextMenu={(e) => {
+                  className={`hover:bg-muted rounded px-0.5 cursor-pointer ${colorClasses.key}`}
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onCopy(key, 'key');

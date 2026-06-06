@@ -1,6 +1,6 @@
 {
   "name": "@abbacchio/browser-transport",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OTLP-native browser and React logging client for Abbacchio - intercept console.log and send via OpenTelemetry",
   "type": "module",
   "main": "./dist/index.js",
@@ -63,5 +63,8 @@
     "type": "git",
     "url": "https://github.com/mood-agency/abbacchio",
     "directory": "packages/browser-transport"
+  },
+  "dependencies": {
+    "web-vitals": "^5.2.0"
   }
 }

@@ -18,7 +18,7 @@ import { CommandPalette } from './CommandPalette';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { formatLogsForClipboard, downloadLogs, type ExportFormat } from '@/lib/format-logs';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
@@ -145,7 +145,6 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     channels,
     activeChannel,
     setActiveChannel: setActiveChannelRaw,
-    addChannel,
     deleteChannel,
     logs: allLogs,
     metrics,
@@ -263,10 +262,6 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   const [showDeleteChannelDialog, setShowDeleteChannelDialog] = useState(false);
   const [channelToDelete, setChannelToDelete] = useState<string | null>(null);
 
-  // Add channel dialog
-  const [showAddChannelDialog, setShowAddChannelDialog] = useState(false);
-  const [newChannelName, setNewChannelName] = useState('');
-
   // Save filter dialog
   const [showSaveFilterDialog, setShowSaveFilterDialog] = useState(false);
 
@@ -289,6 +284,9 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
 
   // Sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // More Options dropdown state
+  const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
 
   // SQL mode state
   const [sqlMode, setSqlMode] = useState(false);
@@ -378,18 +376,6 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     setSelectedIds(new Set());
     setLastSelectedId(null);
   }, [levelFilters, namespaceFilters, searchQuery, timeRange]);
-
-  // Add new channel
-  const handleAddChannel = () => {
-    if (!newChannelName.trim()) {
-      toast.error(tLogs('toast.channelNameRequired'));
-      return;
-    }
-    addChannel(newChannelName.trim());
-    setShowAddChannelDialog(false);
-    setNewChannelName('');
-    toast.success(tLogs('toast.connected', { channel: newChannelName.trim() }));
-  };
 
   // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -510,7 +496,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     if (logs.length > prevLogCountRef.current && isAtBottom) {
       // Use requestAnimationFrame to ensure virtualizer has updated
       requestAnimationFrame(() => {
-        rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'end' });
+        rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'auto' });
       });
     }
     prevLogCountRef.current = logs.length;
@@ -520,7 +506,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   useEffect(() => {
     if (!isLoading && logs.length > 0) {
       requestAnimationFrame(() => {
-        rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'end' });
+        rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'auto' });
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -671,15 +657,6 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                             </span>
                           </DropdownMenuItem>
                         ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setNewChannelName('');
-                            setShowAddChannelDialog(true);
-                          }}
-                        >
-                          {tFilters('tooltips.addChannel')}
-                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </BreadcrumbItem>
@@ -708,7 +685,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
               <TooltipContent>{t('theme.toggleDarkMode')}</TooltipContent>
             </Tooltip>
             {activeChannel && (
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={setIsMoreOptionsOpen}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
@@ -717,9 +694,11 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                       </Button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
-                  <TooltipContent>{tFilters('tooltips.channelOptions')}</TooltipContent>
+                  {!isMoreOptionsOpen && (
+                    <TooltipContent>{tFilters('tooltips.channelOptions')}</TooltipContent>
+                  )}
                 </Tooltip>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                   <DropdownMenuItem
                     onClick={() => {
                       if (logs.length === 0) {
@@ -958,7 +937,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                       {/* Scroll to bottom button */}
                       {!isAtBottom && (
                         <button
-                          onClick={() => rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'end' })}
+                          onClick={() => rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'auto' })}
                           className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
@@ -1079,39 +1058,6 @@ logger.info("Hello from Pino OTLP!");`}
               </Button>
               <Button variant="destructive" onClick={handleConfirmDeleteChannel}>
                 {tDialogs('deleteChannel.confirm')}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Add Channel Dialog */}
-        <Dialog open={showAddChannelDialog} onOpenChange={setShowAddChannelDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>{tDialogs('addChannel.title')}</DialogTitle>
-              <DialogDescription>
-                {tDialogs('addChannel.description')}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{tDialogs('addChannel.channelName')}</label>
-                <Input
-                  type="text"
-                  value={newChannelName}
-                  onChange={(e) => setNewChannelName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddChannel()}
-                  placeholder={tDialogs('addChannel.channelPlaceholder')}
-                  autoFocus
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setShowAddChannelDialog(false)}>
-                {t('actions.cancel')}
-              </Button>
-              <Button onClick={handleAddChannel}>
-                {t('actions.connect')}
               </Button>
             </DialogFooter>
           </DialogContent>

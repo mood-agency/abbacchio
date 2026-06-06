@@ -144,4 +144,86 @@ describe('GET /api/logs', () => {
     expect(json.logs).toEqual([]);
     expect(json.channel).toBe(ch);
   });
+
+  it('should support FTS5 search on msg field', async () => {
+    const app = createTestApp();
+    const ch = `fts-msg-${Date.now()}`;
+
+    await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Channel': ch },
+      body: JSON.stringify({ logs: [
+        { level: 30, msg: 'User authentication successful' },
+        { level: 50, msg: 'Database connection failed' },
+        { level: 30, msg: 'Payment processed for order 123' },
+      ] }),
+    });
+
+    const resp = await app.request(`/api/logs?channel=${ch}&search=authentication`);
+    const json = await resp.json();
+
+    expect(json.count).toBe(1);
+    expect(json.logs[0].msg).toBe('User authentication successful');
+  });
+
+  it('should support FTS5 search on data field', async () => {
+    const app = createTestApp();
+    const ch = `fts-data-${Date.now()}`;
+
+    await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Channel': ch },
+      body: JSON.stringify({ logs: [
+        { level: 30, msg: 'Request', userId: 'alice' },
+        { level: 30, msg: 'Request', userId: 'bob' },
+      ] }),
+    });
+
+    const resp = await app.request(`/api/logs?channel=${ch}&search=alice`);
+    const json = await resp.json();
+
+    expect(json.count).toBe(1);
+    expect(json.logs[0].data.userId).toBe('alice');
+  });
+
+  it('should support multi-word FTS5 search (AND)', async () => {
+    const app = createTestApp();
+    const ch = `fts-multi-${Date.now()}`;
+
+    await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Channel': ch },
+      body: JSON.stringify({ logs: [
+        { level: 30, msg: 'User login successful' },
+        { level: 30, msg: 'User logout completed' },
+        { level: 30, msg: 'System login attempt' },
+      ] }),
+    });
+
+    const resp = await app.request(`/api/logs?channel=${ch}&search=user login`);
+    const json = await resp.json();
+
+    expect(json.count).toBe(1);
+    expect(json.logs[0].msg).toBe('User login successful');
+  });
+
+  it('should support FTS5 prefix matching', async () => {
+    const app = createTestApp();
+    const ch = `fts-prefix-${Date.now()}`;
+
+    await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Channel': ch },
+      body: JSON.stringify({ logs: [
+        { level: 30, msg: 'authentication started' },
+        { level: 30, msg: 'authorized access' },
+        { level: 30, msg: 'payment processed' },
+      ] }),
+    });
+
+    const resp = await app.request(`/api/logs?channel=${ch}&search=auth`);
+    const json = await resp.json();
+
+    expect(json.count).toBe(2);
+  });
 });

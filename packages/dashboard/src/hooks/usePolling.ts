@@ -21,8 +21,6 @@ interface UsePollingResult {
   activeChannel: string | null;
   /** Set active channel */
   setActiveChannel: (name: string) => void;
-  /** Add a new channel to watch */
-  addChannel: (name: string) => void;
   /** Logs for the active channel */
   logs: LogEntry[];
   /** Metrics for the active channel */
@@ -79,8 +77,6 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   const loadOlderInFlightRef = useRef(false);
   // Track whether initial load has completed for the current channel
   const initialLoadDoneRef = useRef(false);
-  // Track manually added channels so they survive polling overwrites
-  const manualChannelsRef = useRef<Set<string>>(new Set());
   // Track hasMoreOlderLogs in a ref for the stable loadOlderLogs callback
   const hasMoreOlderLogsRef = useRef(false);
   // Server-side filters ref for use in stable callbacks
@@ -120,18 +116,6 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         const info = channelInfos.find((c: { name: string }) => c.name === name);
         return { name, logCount: info?.logCount || 0 };
       });
-
-      // Remove manual channels that now exist on the server
-      for (const name of channelNames) {
-        manualChannelsRef.current.delete(name);
-      }
-
-      // Preserve manually added channels that aren't on the server yet
-      for (const manualName of manualChannelsRef.current) {
-        if (!newChannels.some(ch => ch.name === manualName)) {
-          newChannels.push({ name: manualName, logCount: 0 });
-        }
-      }
 
       setChannels(newChannels);
 
@@ -396,12 +380,90 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     loadInitial();
   }, [activeChannel]); // fetchLogs/fetchMetrics/fetchTraces/fetchCounts are stable (no deps)
 
-  // Poll for new data — runs once since all fetch callbacks are stable
+  // SSE Connection for logs
+  useEffect(() => {
+    const channel = activeChannel;
+    if (!channel) return;
+    
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let es: EventSource | null = null;
+    let reconnectAttempts = 0;
+
+    const connect = () => {
+      const params = new URLSearchParams({ channel });
+      const url = `${API_BASE}/stream?${params}`;
+      
+      es = new EventSource(url);
+      
+      es.addEventListener('logs', (e) => {
+        if (isPausedRef.current) return;
+        try {
+          const newLogs: LogEntry[] = JSON.parse(e.data);
+          if (newLogs.length > 0) {
+            // Apply server-side filters on client side for the stream
+            const filters = serverFiltersRef.current;
+            const filteredLogs = newLogs.filter(log => {
+               if (filters?.levels && filters.levels.length > 0 && !filters.levels.includes(log.levelLabel)) return false;
+               if (filters?.namespaces && filters.namespaces.length > 0 && log.namespace && !filters.namespaces.includes(log.namespace)) return false;
+               return true;
+            });
+            
+            if (filteredLogs.length === 0) return;
+            
+            setLogs(prev => {
+              const existingIds = new Set(prev.map(l => l.id));
+              const unique = filteredLogs.filter(l => !existingIds.has(l.id));
+              if (unique.length === 0) return prev;
+              
+              setServerTotal(st => st !== null ? st + unique.length : null);
+              lastLogIdRef.current = unique[unique.length - 1].id;
+              return [...prev, ...unique];
+            });
+          }
+        } catch (err) {
+          console.error('Failed to parse SSE logs:', err);
+        }
+      });
+      
+      es.addEventListener('clear', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.channel === channel || data.channel === 'all') {
+             setLogs([]);
+             setServerTotal(0);
+             lastLogIdRef.current = null;
+             oldestLogIdRef.current = null;
+             setHasMoreOlderLogs(false);
+             hasMoreOlderLogsRef.current = false;
+          }
+        } catch (err) {}
+      });
+
+      es.onopen = () => {
+        reconnectAttempts = 0; // reset
+      };
+
+      es.onerror = () => {
+        es?.close();
+        // Exponential backoff: 1s, 2s, 4s, 8s, max 10s
+        const backoff = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+        reconnectAttempts++;
+        reconnectTimeout = setTimeout(connect, backoff);
+      };
+    };
+    
+    connect();
+    
+    return () => {
+      if (es) es.close();
+      clearTimeout(reconnectTimeout);
+    };
+  }, [activeChannel, filtersKey]);
+
+  // Poll for other data (metrics, traces, counts, channels)
   useEffect(() => {
     // Poll channels periodically
     const channelInterval = setInterval(fetchChannels, POLL_INTERVAL * 5);
-    // Poll logs more frequently
-    const logInterval = setInterval(fetchLogs, POLL_INTERVAL);
     // Poll metrics/traces/counts less frequently
     const dataInterval = setInterval(() => {
       fetchMetrics();
@@ -414,10 +476,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
 
     return () => {
       clearInterval(channelInterval);
-      clearInterval(logInterval);
       clearInterval(dataInterval);
     };
-  }, [fetchChannels, fetchLogs, fetchMetrics, fetchTraces, fetchCounts]);
+  }, [fetchChannels, fetchMetrics, fetchTraces, fetchCounts]);
 
   // Clear logs
   const clearLogs = useCallback(async (channel?: string) => {
@@ -440,7 +501,6 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       const res = await fetch(`${API_BASE}/channels?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete channel');
 
-      manualChannelsRef.current.delete(name);
       setChannels(prev => prev.filter(ch => ch.name !== name));
 
       // Switch to another channel if the deleted one was active
@@ -460,21 +520,10 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     }
   }, []);
 
-  // Add channel
-  const addChannel = useCallback((name: string) => {
-    manualChannelsRef.current.add(name);
-    setChannels(prev => {
-      if (prev.some(ch => ch.name === name)) return prev;
-      return [...prev, { name, logCount: 0 }];
-    });
-    setActiveChannel(name);
-  }, []);
-
   return {
     channels,
     activeChannel,
     setActiveChannel,
-    addChannel,
     deleteChannel,
     logs,
     metrics,

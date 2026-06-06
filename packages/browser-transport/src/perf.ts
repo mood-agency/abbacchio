@@ -20,6 +20,10 @@ export interface PerfCaptureOptions {
   captureSlowEvents?: boolean;
   /** Duration threshold in ms for slow events. Defaults to 50 */
   slowEventThresholdMs?: number;
+  /** Capture memory consumption. Defaults to false */
+  captureMemory?: boolean;
+  /** Interval in ms for memory capture. Defaults to 10000 (10s) */
+  memoryCaptureIntervalMs?: number;
   /** Log level for longtask entries. Defaults to 40 (warn) */
   longTaskLevel?: number;
   /** Log level for slow event entries. Defaults to 40 (warn) */
@@ -52,6 +56,7 @@ interface EventTimingEntry extends PerformanceEntry {
 
 let longTaskObserver: PerformanceObserver | null = null;
 let eventObserver: PerformanceObserver | null = null;
+let memoryIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function baseEntry(options: PerfCaptureOptions, level: number, msg: string, source: string): LogEntry {
   const entry: LogEntry = {
@@ -141,6 +146,36 @@ export function startPerfCapture(
       } as PerformanceObserverInit & { durationThreshold: number });
     } catch { /* ignore */ }
   }
+
+  if (options.captureMemory) {
+    const intervalMs = options.memoryCaptureIntervalMs ?? 10000;
+    memoryIntervalId = setInterval(async () => {
+      try {
+        const perf = performance as any;
+        if (perf.memory) {
+          // Chromium non-standard API
+          const log = baseEntry(options, 30, 'memory consumption snapshot', 'perf.memory');
+          log.metrics = {
+            usedJSHeapSize: perf.memory.usedJSHeapSize,
+            totalJSHeapSize: perf.memory.totalJSHeapSize,
+            jsHeapSizeLimit: perf.memory.jsHeapSizeLimit,
+          };
+          onEntry(log);
+        } else if (perf.measureUserAgentSpecificMemory) {
+          // Standard COOP/COEP API (Firefox/Safari/Modern Chrome)
+          const result = await perf.measureUserAgentSpecificMemory();
+          const log = baseEntry(options, 30, 'memory consumption snapshot', 'perf.memory');
+          log.metrics = {
+            bytes: result.bytes,
+            breakdown: result.breakdown, // Optional detailed breakdown
+          };
+          onEntry(log);
+        }
+      } catch (e) {
+        // Ignore failures (e.g., cross-origin isolation missing, API not supported)
+      }
+    }, intervalMs);
+  }
 }
 
 export function stopPerfCapture(): void {
@@ -151,5 +186,9 @@ export function stopPerfCapture(): void {
   if (eventObserver) {
     try { eventObserver.disconnect(); } catch { /* ignore */ }
     eventObserver = null;
+  }
+  if (memoryIntervalId !== null) {
+    clearInterval(memoryIntervalId);
+    memoryIntervalId = null;
   }
 }
