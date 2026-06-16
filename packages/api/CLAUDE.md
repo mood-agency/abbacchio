@@ -32,7 +32,7 @@ bun test --watch      # bun test watch mode
 
 ### Key Design Decisions
 
-1. **Dual Storage**: The API stores logs in both an in-memory ring buffer (for fast polling) and SQLite via `bun:sqlite` (for persistence and SQL queries).
+1. **Dual Storage**: Every log is written to *both* an in-memory ring buffer and SQLite in the same request. The buffer is the real-time SSE event bus (`/api/stream`) and a fast poll cache; SQLite is the durable source of truth with TTL + count-based retention, pruned every 30s and disk reclaimed via incremental auto-vacuum. Set `MAX_LOGS_PER_CHANNEL=0` for "disk-only" mode (buffer holds nothing, reads fall back to SQLite, SSE still works). See `docs/configuration.md` for the full rationale.
 
 2. **Channel-Based Isolation**: Logs are namespaced by channel to support multi-app scenarios.
 
@@ -90,6 +90,18 @@ bun test tests/api/logs-ingest.test.ts
 
 ```
 PORT=4000
-API_KEY=<optional>     # Enables X-API-KEY header auth
+API_KEY=<optional>            # Enables X-API-KEY header auth
 CORS_ORIGIN=*
+
+# In-memory buffer
+MAX_LOGS_PER_CHANNEL=5000     # 0 = disk-only mode
+
+# SQLite storage / retention
+SQLITE_PATH=./data/logs.db    # :memory: for ephemeral RAM DB
+SQLITE_MAX_LOGS=100000        # count cap (0 = unlimited)
+SQLITE_TTL_MS=0               # time-based retention in ms (0 = off)
+SQLITE_CACHE_SIZE=-64000      # KiB when negative; lower to reduce RAM
+SQLITE_MMAP_SIZE=268435456    # bytes (0 disables mmap)
 ```
+
+See `docs/configuration.md` for the full variable reference and storage design rationale.
