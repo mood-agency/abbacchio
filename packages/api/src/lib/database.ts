@@ -190,10 +190,26 @@ export class LogDatabase {
       this.db.run('PRAGMA journal_mode = MEMORY');
       this.db.run('PRAGMA synchronous = OFF');
     }
-    this.db.run('PRAGMA cache_size = -64000');       // 64MB cache
+    // RAM footprint pragmas (env-tunable; lower these to use less memory).
+    // cache_size is in KiB when negative; mmap_size in bytes. Set either to 0 to disable.
+    const cacheSize = parseInt(process.env.SQLITE_CACHE_SIZE || '-64000', 10); // 64MB cache
+    const mmapSize = parseInt(process.env.SQLITE_MMAP_SIZE || '268435456', 10); // 256MB memory-mapped I/O
+    this.db.run(`PRAGMA cache_size = ${cacheSize}`);
     this.db.run('PRAGMA temp_store = MEMORY');
-    this.db.run('PRAGMA mmap_size = 268435456');     // 256MB memory-mapped I/O
+    this.db.run(`PRAGMA mmap_size = ${mmapSize}`);
     this.db.run('PRAGMA page_size = 8192');           // Larger pages
+
+    // Incremental auto-vacuum so retention pruning returns freed disk to the OS.
+    // auto_vacuum only takes effect on an empty DB or after a full VACUUM, so we
+    // set it before createTables() and convert any pre-existing DB exactly once.
+    if (this.config.path !== ':memory:') {
+      const current = (this.db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
+      this.db.run('PRAGMA auto_vacuum = INCREMENTAL');
+      if (current !== 2) {
+        // 2 = INCREMENTAL. Rebuild existing DB to apply it (cheap on a fresh/empty file).
+        this.db.run('VACUUM');
+      }
+    }
 
     this.createTables();
     this.prepareStatements();
@@ -837,6 +853,13 @@ export class LogDatabase {
       if (metricLimitResult && metricLimitResult.id) {
         this.db.prepare('DELETE FROM metrics WHERE id <= ?').run(metricLimitResult.id);
       }
+    }
+
+    // 3. Return pages freed by the deletes above back to the OS so the file
+    // shrinks toward average (not peak) volume. No-op when auto_vacuum is off
+    // (e.g. :memory:) or when there are no free pages to reclaim.
+    if (this.config.path !== ':memory:' && (this.config.ttlMs > 0 || this.config.maxLogs > 0)) {
+      this.db.run('PRAGMA incremental_vacuum');
     }
   }
 
