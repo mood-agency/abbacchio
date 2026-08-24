@@ -4,11 +4,19 @@
  */
 
 import { AbbacchioClient, type AbbacchioClientOptions, type LogEntry } from './client.js';
+import { LOG_LEVELS } from './logger.js';
 import { startErrorCapture, stopErrorCapture } from './errors.js';
 import { startPerfCapture, stopPerfCapture } from './perf.js';
 import { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
 
 export interface ConsoleInterceptorOptions extends AbbacchioClientOptions, NetworkCaptureOptions {
+  /**
+   * Minimum level forwarded to the server — `'info'` drops `console.debug`.
+   * Defaults to capturing every level. Passthrough to the real console is never
+   * suppressed, so raising this only reduces what leaves the browser. Call
+   * `interceptConsole({ level })` again to retune it while capture is active.
+   */
+  level?: number | keyof typeof LOG_LEVELS;
   /** App name to use as the logger name. Defaults to 'browser' */
   appName?: string;
   /** Whether to still output to the original console. Defaults to true */
@@ -54,6 +62,17 @@ const originalConsole = {
 let client: AbbacchioClient | null = null;
 let options: ConsoleInterceptorOptions = {};
 let isIntercepting = false;
+
+// Floor applied to captured console output. Unset means capture everything, so
+// callers that never pass `level` keep the original behaviour.
+const DEFAULT_MIN_LEVEL = LOG_LEVELS.trace;
+let minLevel: number = DEFAULT_MIN_LEVEL;
+
+function resolveMinLevel(level: ConsoleInterceptorOptions['level']): number {
+  if (typeof level === 'number') return level;
+  if (typeof level === 'string') return LOG_LEVELS[level] ?? DEFAULT_MIN_LEVEL;
+  return DEFAULT_MIN_LEVEL;
+}
 
 function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
   if (value === null) return null;
@@ -143,12 +162,12 @@ function getCallerLocation(): { file: string; line: number; column: number; func
   return null;
 }
 
-function createLogEntry(method: string, args: unknown[]): LogEntry {
+function createLogEntry(args: unknown[], level: number): LogEntry {
   const { msg, data } = formatArgs(args);
   const location = getCallerLocation();
 
   const entry: LogEntry = {
-    level: LEVEL_MAP[method] || 30,
+    level,
     time: Date.now(),
     name: options.appName || 'browser',
     msg,
@@ -179,14 +198,15 @@ function createLogEntry(method: string, args: unknown[]): LogEntry {
 
 function createInterceptor(method: keyof typeof originalConsole) {
   return function (...args: unknown[]) {
+    // The developer's own console output is never suppressed by `level`.
     if (options.passthrough !== false) {
       originalConsole[method](...args);
     }
 
-    if (isIntercepting && client) {
+    const level = LEVEL_MAP[method] ?? LOG_LEVELS.info;
+    if (isIntercepting && client && level >= minLevel) {
       try {
-        const entry = createLogEntry(method, args);
-        client.add(entry);
+        client.add(createLogEntry(args, level));
       } catch { /* don't break the app */ }
     }
   };
@@ -195,6 +215,7 @@ function createInterceptor(method: keyof typeof originalConsole) {
 export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   if (isIntercepting) {
     options = { ...options, ...opts };
+    minLevel = resolveMinLevel(options.level);
     if (client) client.configure(opts);
     if (opts.captureErrors !== undefined || opts.captureUnhandledRejections !== undefined) {
       stopErrorCapture();
@@ -228,6 +249,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   }
 
   options = opts;
+  minLevel = resolveMinLevel(options.level);
   client = new AbbacchioClient(opts);
   isIntercepting = true;
 
@@ -256,6 +278,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
 export function stopInterceptConsole(): void {
   if (!isIntercepting) return;
   isIntercepting = false;
+  minLevel = DEFAULT_MIN_LEVEL;
   stopErrorCapture();
   stopPerfCapture();
   stopNetworkCapture();

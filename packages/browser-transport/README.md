@@ -344,6 +344,25 @@ Compatible with Pino log levels:
 | error | 50     |
 | fatal | 60     |
 
+### Filtering captured console output
+
+`interceptConsole` and `AbbacchioProvider` accept a `level` that sets the floor
+for what is **sent to the server**. `console.debug` maps to 20, `console.log` /
+`console.info` to 30, `console.warn` to 40 and `console.error` to 50, so
+`level: 'info'` keeps milestones and failures while dropping debug noise. Omit it
+to capture every level.
+
+Passthrough to the browser console is never suppressed by `level` — the developer
+still sees everything locally.
+
+Because `interceptConsole` merges options while capture is active, the floor can
+be retuned at runtime without remounting anything:
+
+```javascript
+interceptConsole({ level: 'debug' }) // temporarily capture debug noise
+interceptConsole({ level: 'info' })  // back to the shipping floor
+```
+
 ## License
 
 MIT
