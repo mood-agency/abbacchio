@@ -87,6 +87,19 @@ export interface AbbacchioClientOptions {
   headers?: Record<string, string>;
   /** Whether to send data to the server. Defaults to true */
   enabled?: boolean;
+  /**
+   * Max records held per buffer (logs/metrics/histograms/spans) before excess
+   * is dropped instead of buffered. Bounds memory under a runaway producer.
+   * Defaults to 10000.
+   */
+  maxBufferSize?: number;
+  /**
+   * Max data points accepted per second across all signals (intake throttle).
+   * Protects the server from a producer that emits one point per streamed line
+   * (e.g. ffprobe progress). Excess is dropped locally with a throttled warning.
+   * Set to 0 to disable. Defaults to 2000.
+   */
+  maxPointsPerSecond?: number;
 }
 
 /**
@@ -162,6 +175,22 @@ export class AbbacchioClient {
   private interval: number;
   private headers: Record<string, string>;
   private enabled: boolean;
+  private maxBufferSize: number;
+
+  // Intake throttle (token bucket) — caps points accepted per second.
+  private maxPointsPerSecond: number;
+  private intakeTokens: number;
+  private intakeLastRefill: number = Date.now();
+
+  // 429 backoff — while paused, flushes are deferred instead of hammering.
+  private pausedUntil = 0;
+  private static BASE_BACKOFF_MS = 1000;
+  private static MAX_BACKOFF_MS = 30000;
+  private backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
+
+  // Throttled drop reporting.
+  private droppedSinceWarn = 0;
+  private lastDropWarn = 0;
 
   private logBuffer: LogRecord[] = [];
   private metricBuffer: MetricRecord[] = [];
@@ -193,6 +222,56 @@ export class AbbacchioClient {
     this.interval = options.interval || 1000;
     this.headers = options.headers || {};
     this.enabled = options.enabled ?? true;
+    this.maxBufferSize = options.maxBufferSize ?? 10000;
+    this.maxPointsPerSecond = options.maxPointsPerSecond ?? 2000;
+    this.intakeTokens = this.maxPointsPerSecond;
+  }
+
+  /** Token-bucket intake check. Returns false when over the per-second cap. */
+  private intakeOK(): boolean {
+    if (this.maxPointsPerSecond <= 0) return true;
+    const now = Date.now();
+    const elapsedSec = (now - this.intakeLastRefill) / 1000;
+    if (elapsedSec > 0) {
+      this.intakeTokens = Math.min(
+        this.maxPointsPerSecond,
+        this.intakeTokens + elapsedSec * this.maxPointsPerSecond,
+      );
+      this.intakeLastRefill = now;
+    }
+    if (this.intakeTokens >= 1) {
+      this.intakeTokens -= 1;
+      return true;
+    }
+    return false;
+  }
+
+  /** Whether outbound sends are paused due to a recent 429. */
+  private isPaused(): boolean {
+    return Date.now() < this.pausedUntil;
+  }
+
+  /** Record a dropped record and emit a single warning at most every 5s. */
+  private noteDropped(): void {
+    this.droppedSinceWarn++;
+    const now = Date.now();
+    if (now - this.lastDropWarn > 5000) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[abbacchio] dropped ${this.droppedSinceWarn} telemetry records (intake rate limit or buffer cap)`,
+      );
+      this.droppedSinceWarn = 0;
+      this.lastDropWarn = now;
+    }
+  }
+
+  /** True if the record may be buffered; otherwise it is dropped + counted. */
+  private admit(bufferLength: number): boolean {
+    if (!this.intakeOK() || bufferLength >= this.maxBufferSize) {
+      this.noteDropped();
+      return false;
+    }
+    return true;
   }
 
   /** Change the service name dynamically */
@@ -225,6 +304,7 @@ export class AbbacchioClient {
   /** Add a log record to the buffer */
   add(log: LogRecord | unknown): void {
     if (!this.enabled) return;
+    if (!this.admit(this.logBuffer.length)) return;
     this.logBuffer.push(log as LogRecord);
 
     if (this.logBuffer.length >= this.batchSize) {
@@ -238,6 +318,7 @@ export class AbbacchioClient {
   addBatch(logs: (LogRecord | unknown)[]): void {
     if (!this.enabled) return;
     for (const log of logs) {
+      if (!this.admit(this.logBuffer.length)) continue;
       this.logBuffer.push(log as LogRecord);
     }
     if (this.logBuffer.length >= this.batchSize) {
@@ -263,6 +344,7 @@ export class AbbacchioClient {
 
   async flushLogs(): Promise<void> {
     if (this.logBuffer.length === 0) return;
+    if (this.isPaused()) { this.scheduleLogFlush(); return; }
     const batch = this.logBuffer;
     this.logBuffer = [];
     await this.sendLogs(batch);
@@ -304,6 +386,7 @@ export class AbbacchioClient {
   /** Add a metric data point to the buffer */
   addMetric(metric: MetricRecord): void {
     if (!this.enabled) return;
+    if (!this.admit(this.metricBuffer.length)) return;
     this.metricBuffer.push(metric);
 
     if (this.metricBuffer.length >= this.batchSize) {
@@ -323,6 +406,7 @@ export class AbbacchioClient {
 
   async flushMetrics(): Promise<void> {
     if (this.metricBuffer.length === 0) return;
+    if (this.isPaused()) { this.scheduleMetricFlush(); return; }
     const batch = this.metricBuffer;
     this.metricBuffer = [];
     await this.sendMetrics(batch);
@@ -385,6 +469,7 @@ export class AbbacchioClient {
   /** Add a histogram observation to the buffer */
   addHistogram(record: HistogramRecord): void {
     if (!this.enabled) return;
+    if (!this.admit(this.histogramBuffer.length)) return;
     this.histogramBuffer.push(record);
 
     if (this.histogramBuffer.length >= this.batchSize) {
@@ -404,6 +489,7 @@ export class AbbacchioClient {
 
   async flushHistograms(): Promise<void> {
     if (this.histogramBuffer.length === 0) return;
+    if (this.isPaused()) { this.scheduleHistogramFlush(); return; }
     const batch = this.histogramBuffer;
     this.histogramBuffer = [];
     await this.sendHistograms(batch);
@@ -486,6 +572,7 @@ export class AbbacchioClient {
   /** Add a trace span to the buffer */
   addSpan(span: SpanRecord): void {
     if (!this.enabled) return;
+    if (!this.admit(this.spanBuffer.length)) return;
     this.spanBuffer.push(span);
 
     if (this.spanBuffer.length >= this.batchSize) {
@@ -505,6 +592,7 @@ export class AbbacchioClient {
 
   async flushSpans(): Promise<void> {
     if (this.spanBuffer.length === 0) return;
+    if (this.isPaused()) { this.scheduleSpanFlush(); return; }
     const batch = this.spanBuffer;
     this.spanBuffer = [];
     await this.sendSpans(batch);
@@ -579,11 +667,23 @@ export class AbbacchioClient {
       if (this.source) headers['X-Source'] = this.source;
       if (this.instanceId) headers['X-Instance-Id'] = this.instanceId;
 
-      await fetch(`${this.endpoint}${path}`, {
+      const res = await fetch(`${this.endpoint}${path}`, {
         method: 'POST',
         headers,
         body,
       });
+
+      if (res.status === 429) {
+        // Honor Retry-After when present; otherwise exponential backoff (capped).
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const backoff = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : this.backoffMs;
+        this.pausedUntil = Date.now() + backoff;
+        this.backoffMs = Math.min(this.backoffMs * 2, AbbacchioClient.MAX_BACKOFF_MS);
+      } else if (res.ok) {
+        this.backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
+      }
     } catch {
       // Silently fail — don't break the app if the telemetry server is down
     }

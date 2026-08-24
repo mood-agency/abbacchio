@@ -40,7 +40,16 @@ app.use('*', cors({
   origin: CORS_ORIGIN,
   allowHeaders: ['Content-Type', 'X-Channel', 'X-API-KEY', 'X-Source', 'X-Instance-Id', 'X-Encrypted'],
 }));
-app.use('*', logger());
+
+// Request logging. The OTLP ingest endpoints (/v1/*) are extremely high volume —
+// logging every POST (and every 429 when a producer floods) drowns the terminal
+// in millions of lines. Skip them by default; set LOG_OTLP_INGEST=true to include.
+const LOG_OTLP_INGEST = process.env.LOG_OTLP_INGEST === 'true';
+const honoLogger = logger();
+app.use('*', (c, next) => {
+  if (!LOG_OTLP_INGEST && c.req.path.startsWith('/v1/')) return next();
+  return honoLogger(c, next);
+});
 
 // Rate limiting middleware (optional, enabled by default)
 if (ENABLE_RATE_LIMIT) {
