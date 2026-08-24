@@ -168,6 +168,7 @@ This configuration guarantees your sandbox will not hit an Out-Of-Memory (OOM) e
 ## Documentation
 
 - [OpenTelemetry](docs/opentelemetry.md) - OTLP integration and pino-opentelemetry-transport
+- [Browser Memory Profiling](docs/memory-profiling.md) - Track heap, DOM, and application counters over time
 - [Transports](docs/transports.md) - Pino, Winston, Bunyan, Console, HTTP
 - [API Reference](docs/api.md) - REST endpoints and log format
 - [Channels](docs/channels.md) - Multi-channel support

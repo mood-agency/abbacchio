@@ -219,6 +219,66 @@ startPerfCapture(
 )
 ```
 
+## Memory Profiler
+
+Install an opt-in, bounded memory profiler for long-running browser
+investigations. Installation exposes a stopped console API; it does not create
+a sampling timer until `start()` is called.
+
+```javascript
+import { installMemoryProfiler } from '@abbacchio/browser-transport'
+
+installMemoryProfiler({
+  domSelectors: {
+    virtualRows: '[data-virtual-row-key]',
+    editors: '.monaco-editor',
+  },
+  collectValues: () => ({
+    framesReceived: applicationDiagnostics.framesReceived,
+  }),
+})
+
+__abbacchioMemory.start({
+  intervalMs: 30_000,
+  maxSamples: 1_440,
+  label: 'baseline-idle',
+})
+```
+
+Use `mark(label)` or `sample(label)` for checkpoints, `getSamples()` and
+`status()` for inspection, and `download()` for a JSONL export. Samples contain
+only copied JSON values and the retained history is capped by `maxSamples`.
+
+The global and downloaded filename prefix are configurable:
+
+```javascript
+installMemoryProfiler({
+  globalName: '__myAppMemory',
+  filenamePrefix: 'my-app-memory',
+  hot: import.meta.hot,
+})
+```
+
+To keep a run after the tab closes, forward samples to Abbacchio as gauge
+metrics. Every point is tagged with the run's `sessionId`, so a run can be
+queried back out of the `metrics` table:
+
+```javascript
+import { toMemoryProfilerMetrics } from '@abbacchio/browser-transport'
+
+installMemoryProfiler({
+  onSample: (sample) => {
+    for (const point of toMemoryProfilerMetrics(sample, { prefix: 'client.memory' })) {
+      client.addMetric({ ...point, type: 'gauge' })
+    }
+  },
+})
+```
+
+See the [browser memory profiling guide](../../docs/memory-profiling.md) for a
+complete investigation workflow, sample format, interpretation guidance,
+persistence and SQL query recipes, and JSONL analysis examples.
+
 ## Error Capture
 
 Capture uncaught exceptions and unhandled promise rejections.

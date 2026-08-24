@@ -68,9 +68,29 @@ export { startErrorCapture, stopErrorCapture, type ErrorCaptureOptions } from '.
 // Performance capture (longtask + slow events)
 export { startPerfCapture, stopPerfCapture, type PerfCaptureOptions } from './perf.js';
 
+// Opt-in, bounded browser memory profiling
+export {
+  MemoryProfiler,
+  collectMemoryProfilerSample,
+  installMemoryProfiler,
+  serializeMemoryProfilerSamples,
+  toMemoryProfilerMetrics,
+  type InstallMemoryProfilerOptions,
+  type MemoryDomSample,
+  type MemoryHeapSample,
+  type MemoryProfilerApi,
+  type MemoryProfilerMetric,
+  type MemoryProfilerMetricOptions,
+  type MemoryProfilerOptions,
+  type MemoryProfilerSample,
+  type MemoryProfilerSampleContext,
+  type MemoryProfilerStartOptions,
+  type MemoryProfilerStatus,
+  type MemoryProfilerValues,
+} from './memory-profiler.js';
+
 // Web Vitals (LCP, INP, CLS, FCP, TTFB)
 export { startWebVitalsCapture, stopWebVitalsCapture, type WebVitalsCaptureOptions } from './web-vitals.js';
 
 // Network capture
 export { startNetworkCapture, stopNetworkCapture, type NetworkCaptureOptions } from './network.js';
-
