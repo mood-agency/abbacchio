@@ -32,7 +32,7 @@ The MCP integration requires the Tauri desktop app, not the browser dashboard. T
 
 ```bash
 # Start the desktop app
-pnpm dev:desktop
+bun run dev:desktop
 ```
 
 ### 2. Configure Claude Code

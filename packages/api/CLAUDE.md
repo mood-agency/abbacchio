@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo Structure
 
-This package is part of a pnpm workspace:
+This package is part of a bun workspace:
 - `packages/api` - Backend server (Hono framework, Bun runtime) - **you are here**
 - `packages/transport` - Client libraries for various loggers
 - `packages/dashboard` - React frontend (Vite + Tailwind)
@@ -17,9 +17,9 @@ This package is part of a pnpm workspace:
 
 ```bash
 # From monorepo root
-pnpm dev              # Run API + Dashboard with hot reload
-pnpm build            # Build all packages
-pnpm start            # Start production server
+bun run dev           # Run API + Dashboard with hot reload
+bun run build         # Build all packages
+bun run start         # Start production server
 
 # From this package (packages/api)
 bun run dev           # bun --watch on port 4000

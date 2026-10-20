@@ -19,25 +19,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # Desktop (Tauri) needs Rust + webkit; it is checked in build-tauri
       - name: Type check
-        run: pnpm -r --filter '!@abbacchio/desktop' run build
+        run: bun run --filter '!@abbacchio/desktop' build
 
   # ============================================
   # Build packages npm
@@ -47,33 +42,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build transport
-        run: pnpm --filter @abbacchio/transport build
+        run: bun run --filter @abbacchio/transport build
 
       - name: Build browser-transport
-        run: pnpm --filter @abbacchio/browser-transport build
+        run: bun run --filter @abbacchio/browser-transport build
 
       - name: Build API
-        run: pnpm --filter @abbacchio/api build
+        run: bun run --filter @abbacchio/api build
 
       - name: Build Dashboard
-        run: pnpm --filter @abbacchio/dashboard build
+        run: bun run --filter @abbacchio/dashboard build
 
   # ============================================
   # Build Tauri (solo verificar que compila)
@@ -95,14 +85,9 @@ jobs:
             patchelf
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -113,14 +98,14 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build Tauri (dev check)
         run: |
           cd packages/desktop
-          pnpm tauri build --ci
+          bun run tauri build --ci
         env:
           TAURI_SIGNING_PRIVATE_KEY: ''

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Real-time log viewer dashboard with HTTP ingestion for Pino, Winston, Bunyan, and other loggers",
   "type": "module",
+  "packageManager": "bun@1.4.3",
   "scripts": {
     "dev": "concurrently -n api,dash -c blue,green \"bun run --filter @abbacchio/api dev\" \"bun run --filter @abbacchio/dashboard dev\"",
     "dev:api": "bun run --filter @abbacchio/api dev",

@@ -5,12 +5,12 @@
   "identifier": "com.abbacchio.app",
   "build": {
     "beforeDevCommand": {
-      "script": "pnpm dev:dashboard",
+      "script": "bun run dev:dashboard",
       "cwd": "../../.."
     },
     "devUrl": "http://localhost:4001",
     "beforeBuildCommand": {
-      "script": "pnpm build:dashboard",
+      "script": "bun run build:dashboard",
       "cwd": "../../.."
     },
     "frontendDist": "../../dashboard/dist"

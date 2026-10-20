@@ -48,7 +48,7 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev
 
 From the project root:
 ```bash
-pnpm install
+bun install
 ```
 
 ## Development
@@ -57,7 +57,7 @@ pnpm install
 
 If Rust/Cargo is in your PATH:
 ```bash
-pnpm dev:desktop
+bun run dev:desktop
 ```
 
 ### If Cargo is not in PATH (Windows PowerShell)
@@ -65,7 +65,7 @@ pnpm dev:desktop
 Add Cargo to your current session:
 ```powershell
 $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-pnpm dev:desktop
+bun run dev:desktop
 ```
 
 Or permanently add to PATH:
@@ -86,7 +86,7 @@ Or permanently add to PATH:
 ### Build the Application
 
 ```bash
-pnpm build:desktop
+bun run build:desktop
 ```
 
 This creates distributable packages in `packages/desktop/src-tauri/target/release/bundle/`:
@@ -99,10 +99,10 @@ This creates distributable packages in `packages/desktop/src-tauri/target/releas
 
 ```bash
 # From packages/desktop directory
-pnpm tauri build --target x86_64-pc-windows-msvc  # Windows
-pnpm tauri build --target x86_64-apple-darwin     # macOS Intel
-pnpm tauri build --target aarch64-apple-darwin    # macOS Apple Silicon
-pnpm tauri build --target x86_64-unknown-linux-gnu # Linux
+bun run tauri build --target x86_64-pc-windows-msvc    # Windows
+bun run tauri build --target x86_64-apple-darwin       # macOS Intel
+bun run tauri build --target aarch64-apple-darwin      # macOS Apple Silicon
+bun run tauri build --target x86_64-unknown-linux-gnu  # Linux
 ```
 
 ## Project Structure

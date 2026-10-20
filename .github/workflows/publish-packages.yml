@@ -89,20 +89,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 9
+          bun-version-file: package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install & Build
         run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @abbacchio/transport build
+          bun install --frozen-lockfile
+          bun run --filter @abbacchio/transport build
 
       - name: Publish
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -131,20 +130,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 9
+          bun-version-file: package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install & Build
         run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @abbacchio/browser-transport build
+          bun install --frozen-lockfile
+          bun run --filter @abbacchio/browser-transport build
 
       - name: Publish
         if: ${{ github.event.inputs.dry_run != 'true' }}

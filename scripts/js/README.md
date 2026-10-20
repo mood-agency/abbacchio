@@ -8,23 +8,23 @@ From the repo root:
 
 ```bash
 # Install all dependencies (includes pino, winston, bunyan)
-pnpm install
+bun install
 
 # Build the transport package
-pnpm build:transport
+bun run build:transport
 ```
 
 ## Usage
 
 ```bash
 # Pino
-npx tsx scripts/js/insert-test-logs-pino.ts [options]
+bun scripts/js/insert-test-logs-pino.ts [options]
 
 # Winston
-npx tsx scripts/js/insert-test-logs-winston.ts [options]
+bun scripts/js/insert-test-logs-winston.ts [options]
 
 # Bunyan
-npx tsx scripts/js/insert-test-logs-bunyan.ts [options]
+bun scripts/js/insert-test-logs-bunyan.ts [options]
 ```
 
 ## Testing npm Package
@@ -33,13 +33,13 @@ To test the `@abbacchio/transport` package directly from npm (without using the 
 
 ```bash
 # Test with Pino
-npx tsx scripts/js/test-npm-package.ts [options]
+bun scripts/js/test-npm-package-pino.ts [options]
 
 # Test with Winston
-npx tsx scripts/js/test-npm-package-winston.ts [options]
+bun scripts/js/test-npm-package-winston.ts [options]
 
 # Test with Bunyan
-npx tsx scripts/js/test-npm-package-bunyan.ts [options]
+bun scripts/js/test-npm-package-bunyan.ts [options]
 ```
 
 These scripts create a temporary directory, install the package from npm, and run a test with the specified logging library.
@@ -60,16 +60,16 @@ These scripts create a temporary directory, install the package from npm, and ru
 
 ```bash
 # Test latest version with Pino
-npx tsx scripts/js/test-npm-package.ts
+bun scripts/js/test-npm-package-pino.ts
 
 # Test specific version with Winston
-npx tsx scripts/js/test-npm-package-winston.ts --version 0.1.3
+bun scripts/js/test-npm-package-winston.ts --version 0.1.3
 
 # Test with Bunyan, more logs, and keep temp dir
-npx tsx scripts/js/test-npm-package-bunyan.ts --count 20 --keep
+bun scripts/js/test-npm-package-bunyan.ts --count 20 --keep
 
 # Test with custom channel
-npx tsx scripts/js/test-npm-package.ts --channel my-test-channel
+bun scripts/js/test-npm-package-pino.ts --channel my-test-channel
 ```
 
 ## Options
@@ -86,13 +86,13 @@ npx tsx scripts/js/test-npm-package.ts --channel my-test-channel
 
 ```bash
 # Send 10 logs per channel with 50ms delay
-npx tsx scripts/js/insert-test-logs-pino.ts --count 10 --delay 50
+bun scripts/js/insert-test-logs-pino.ts --count 10 --delay 50
 
 # Send to a single channel
-npx tsx scripts/js/insert-test-logs-winston.ts -c 20 -C myapp
+bun scripts/js/insert-test-logs-winston.ts -c 20 -C myapp
 
 # Send with a specific namespace
-npx tsx scripts/js/insert-test-logs-bunyan.ts --name auth --channel app1,app2
+bun scripts/js/insert-test-logs-bunyan.ts --name auth --channel app1,app2
 ```
 
 ## Environment Variables

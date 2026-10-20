@@ -6,7 +6,7 @@ React frontend for the Abbacchio real-time log viewer. Connects to the API via H
 
 ```bash
 # From monorepo root
-pnpm dev              # Run API (4000) + Dashboard (4001) with hot reload
+bun run dev           # Run API (4000) + Dashboard (4001) with hot reload
 
 # Or from this package
 npm run dev           # Vite dev server on port 4001

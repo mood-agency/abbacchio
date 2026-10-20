@@ -140,7 +140,7 @@ git push origin v0.2.1
 ### Build de Tauri falla
 
 - Revisa los logs en Actions
-- Verifica que `pnpm-lock.yaml` esté actualizado
+- Verifica que `bun.lock` esté actualizado
 
 ## Links útiles
 

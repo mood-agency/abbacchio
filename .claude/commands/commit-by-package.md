@@ -49,7 +49,7 @@ Organize commits into these categories (in this order):
     - Prefix: `ci:`
 
 11. **config** - Configuration and tooling:
-    - Root config files (`package.json`, `pnpm-lock.yaml`, `tsconfig.json`, etc.)
+    - Root config files (`package.json`, `bun.lock`, `tsconfig.json`, etc.)
     - `.claude/`, `.vscode/`
     - Prefix: `chore:`
 

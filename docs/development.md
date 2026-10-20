@@ -8,25 +8,22 @@ git clone https://github.com/yourusername/abbacchio.git
 cd abbacchio
 
 # Install dependencies
-pnpm install
+bun install
 
 # Run in development mode (server + dashboard hot reload)
-pnpm dev
+bun run dev
 
 # Build for production
-pnpm build
+bun run build
 
 # Start production server
-pnpm start
+bun run start
 
 # Run tests
-pnpm test
+bun run test
 
 # Run tests in watch mode
-pnpm test:watch
-
-# Run tests with coverage
-pnpm test:coverage
+bun run --filter @abbacchio/api test:watch
 ```
 
 ## Test Log Generator
@@ -34,7 +31,7 @@ pnpm test:coverage
 Generate test logs to populate the dashboard during development:
 
 ```bash
-npx tsx scripts/insert-test-logs.ts [options]
+bun scripts/js/insert-test-logs-pino.ts [options]
 ```
 
 **Options:**
@@ -50,16 +47,16 @@ npx tsx scripts/insert-test-logs.ts [options]
 
 ```bash
 # Send 5 logs per channel with 100ms delay
-npx tsx scripts/insert-test-logs.ts
+bun scripts/js/insert-test-logs-pino.ts
 
 # Send 20 logs per channel with 50ms delay
-npx tsx scripts/insert-test-logs.ts --count 20 --delay 50
+bun scripts/js/insert-test-logs-pino.ts --count 20 --delay 50
 
 # Send encrypted logs
-npx tsx scripts/insert-test-logs.ts --key my-secret-key
+bun scripts/js/insert-test-logs-pino.ts --key my-secret-key
 
 # Send logs with a specific namespace
-npx tsx scripts/insert-test-logs.ts --name my-service
+bun scripts/js/insert-test-logs-pino.ts --name my-service
 ```
 
 ## Releasing

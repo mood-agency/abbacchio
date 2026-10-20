@@ -6,7 +6,7 @@ A simple HTML page to test sending logs to Abbacchio from the browser.
 
 1. Start the Abbacchio API server:
    ```bash
-   pnpm dev
+   bun run dev
    ```
 
 2. Open `index.html` in your browser, or serve it:

@@ -22,8 +22,8 @@ Real-time log viewer dashboard with HTTP ingestion. Works with **any logging lib
 
 ```bash
 # Development (from cloned repo)
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```
 
 - API available at http://localhost:4000

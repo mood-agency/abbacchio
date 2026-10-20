@@ -72,10 +72,10 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev
 
 ```bash
 # Install dependencies
-pnpm install
+bun install
 
 # Build the application
-pnpm build:desktop
+bun run build:desktop
 ```
 
 Output packages are in `packages/desktop/src-tauri/target/release/bundle/`.
@@ -83,7 +83,7 @@ Output packages are in `packages/desktop/src-tauri/target/release/bundle/`.
 ### Development
 
 ```bash
-pnpm dev:desktop
+bun run dev:desktop
 ```
 
 This starts the Vite dev server (port 4001), compiles the Rust backend, and opens the app with hot reload enabled.

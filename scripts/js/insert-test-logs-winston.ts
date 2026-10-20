@@ -1,8 +1,8 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env bun
 /**
  * Script to insert test logs into abbacchio using winston transport
  *
- * Usage: npx tsx scripts/js/insert-test-logs-winston.ts [options]
+ * Usage: bun scripts/js/insert-test-logs-winston.ts [options]
  *   --count <n>       Number of logs per channel (default: 5)
  *   --delay <ms>      Delay between logs in ms (default: 100)
  *   --key <key>       Encryption key (optional)

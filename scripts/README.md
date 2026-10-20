@@ -22,13 +22,13 @@ scripts/
 
 ```bash
 # From repo root - install all dependencies and build
-pnpm install
-pnpm build:transport
+bun install
+bun run build:transport
 
 # Run tests
-npx tsx scripts/js/insert-test-logs-pino.ts --count 10
-npx tsx scripts/js/insert-test-logs-winston.ts --count 10
-npx tsx scripts/js/insert-test-logs-bunyan.ts --count 10
+bun scripts/js/insert-test-logs-pino.ts --count 10
+bun scripts/js/insert-test-logs-winston.ts --count 10
+bun scripts/js/insert-test-logs-bunyan.ts --count 10
 ```
 
 ### Python
@@ -73,19 +73,19 @@ JavaScript scripts also support:
 
 ```bash
 # Send 20 logs to a single channel
-npx tsx scripts/js/insert-test-logs-pino.ts -c 20 -C myapp
+bun scripts/js/insert-test-logs-pino.ts -c 20 -C myapp
 python scripts/python/insert-test-logs-logging.py -c 20 -C myapp
 
 # Send logs with a specific namespace, slower rate
-npx tsx scripts/js/insert-test-logs-winston.ts --name auth --delay 500
+bun scripts/js/insert-test-logs-winston.ts --name auth --delay 500
 python scripts/python/insert-test-logs-structlog.py --name auth --delay 500
 
 # Send to multiple channels
-npx tsx scripts/js/insert-test-logs-bunyan.ts -C app1,app2,app3
+bun scripts/js/insert-test-logs-bunyan.ts -C app1,app2,app3
 python scripts/python/insert-test-logs-loguru.py -C app1,app2,app3
 
 # Use a different server
-API_URL=http://prod:4000/api/logs npx tsx scripts/js/insert-test-logs-pino.ts
+API_URL=http://prod:4000/api/logs bun scripts/js/insert-test-logs-pino.ts
 ```
 
 ## See Also

@@ -6,18 +6,18 @@ Terminal user interface for the Abbacchio real-time log viewer. Connects to the 
 
 ```bash
 # From the monorepo root
-pnpm install
+bun install
 ```
 
 ## Building
 
 ```bash
 # Build only the TUI package
-pnpm build:tui
+bun run build:tui
 
 # Or from packages/tui
 cd packages/tui
-pnpm build
+bun run build
 ```
 
 ## Usage
@@ -26,14 +26,14 @@ pnpm build
 
 ```bash
 # From monorepo root
-pnpm tui -c <channel>
+bun run tui -c <channel>
 
 # Or directly
 cd packages/tui
-pnpm dev -- -c <channel>
+bun run dev -c <channel>
 
-# Using npx
-npx tsx src/cli.ts -c <channel>
+# Using bun directly
+bun src/cli.ts -c <channel>
 ```
 
 ### Production (after build)
@@ -56,16 +56,16 @@ node dist/cli.js -c <channel>
 
 ```bash
 # Basic usage
-pnpm tui -c my-app
+bun run tui -c my-app
 
 # With custom API URL
-pnpm tui -c production -u https://logs.example.com
+bun run tui -c production -u https://logs.example.com
 
 # With encryption key (will be saved for future sessions)
-pnpm tui -c secure-channel -k mySecretKey123
+bun run tui -c secure-channel -k mySecretKey123
 
 # Filter by level (only show warn and above)
-pnpm tui -c my-app -l warn
+bun run tui -c my-app -l warn
 ```
 
 ## Channel & Key Management
@@ -80,13 +80,13 @@ The TUI stores channel configurations and encryption keys in a local JSON file a
 
 1. First time connecting to an encrypted channel:
    ```bash
-   pnpm tui -c my-channel -k mySecretKey123
+   bun run tui -c my-channel -k mySecretKey123
    ```
    The key is saved to the database.
 
 2. Subsequent connections:
    ```bash
-   pnpm tui -c my-channel
+   bun run tui -c my-channel
    ```
    The stored key is automatically loaded.
 

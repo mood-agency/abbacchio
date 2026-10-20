@@ -47,21 +47,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 9
+          bun-version-file: package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build package
-        run: pnpm --filter ${{ matrix.package.filter }} build
+        run: bun run --filter ${{ matrix.package.filter }} build
 
       - name: Check if version exists on npm
         id: check
@@ -80,13 +79,15 @@ jobs:
 
       - name: Publish to npm
         if: steps.check.outputs.exists == 'false' && github.event.inputs.dry_run != 'true'
-        run: pnpm --filter ${{ matrix.package.filter }} publish --access public --no-git-checks
+        working-directory: packages/${{ matrix.package.name }}
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Dry run
         if: github.event.inputs.dry_run == 'true'
-        run: pnpm --filter ${{ matrix.package.filter }} publish --access public --no-git-checks --dry-run
+        working-directory: packages/${{ matrix.package.name }}
+        run: npm publish --access public --dry-run
 
       - name: Summary
         run: |

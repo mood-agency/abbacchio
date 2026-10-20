@@ -173,7 +173,7 @@ if (shouldServeDashboard) {
   app.get('/', (c) => {
     const devMessage = IS_DEV
       ? `<p><strong>Development mode:</strong> Use <a href="http://localhost:4001">http://localhost:4001</a> for the dashboard (with hot reload).</p>`
-      : `<p>Dashboard not built yet. Run <code>pnpm build</code> or use <code>pnpm dev</code> for development.</p>`;
+      : `<p>Dashboard not built yet. Run <code>bun run build</code> or use <code>bun run dev</code> for development.</p>`;
 
     return c.html(`
       <!DOCTYPE html>

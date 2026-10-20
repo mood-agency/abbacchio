@@ -1,11 +1,11 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env bun
 /**
  * Test @abbacchio/transport winston integration from npm
  *
  * First install the package: npm install -g @abbacchio/transport winston
  * Or in any directory: npm install @abbacchio/transport winston
  *
- * Usage: npx tsx scripts/js/test-npm-package-winston.ts [options]
+ * Usage: bun scripts/js/test-npm-package-winston.ts [options]
  *   --count <n>       Number of logs per channel (default: 5)
  *   --delay <ms>      Delay between logs in ms (default: 100)
  *   --key <key>       Encryption key (optional)
@@ -14,7 +14,7 @@
  */
 
 import winston from 'winston';
-// @ts-expect-error - resolved by pnpm workspace
+// @ts-expect-error - resolved by bun workspace
 import { AbbacchioWinstonTransport } from '@abbacchio/transport/transports/winston';
 import {
   API_URL,

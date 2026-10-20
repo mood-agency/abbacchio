@@ -1,11 +1,11 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env bun
 /**
  * Test @abbacchio/transport pino integration from npm
  *
  * First install the package: npm install -g @abbacchio/transport pino
  * Or in any directory: npm install @abbacchio/transport pino
  *
- * Usage: npx tsx scripts/js/test-npm-package-pino.ts [options]
+ * Usage: bun scripts/js/test-npm-package-pino.ts [options]
  *   --count <n>       Number of logs per channel (default: 5)
  *   --delay <ms>      Delay between logs in ms (default: 100)
  *   --key <key>       Encryption key (optional)

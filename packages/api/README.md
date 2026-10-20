@@ -181,7 +181,7 @@ The server passes encrypted payloads through unchanged. Decryption happens in th
 
 ```bash
 # Install dependencies
-pnpm install
+bun install
 
 # Run with hot reload
 bun run dev
@@ -191,10 +191,10 @@ bun test
 bun test --watch
 
 # Build
-pnpm build
+bun run build
 
 # Type check
-pnpm tsc --noEmit
+bunx tsc --noEmit
 ```
 
 ## Architecture

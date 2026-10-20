@@ -6,7 +6,7 @@ Abbacchio is a real-time log viewer dashboard with HTTP ingestion. It works with
 
 ## Project Structure
 
-This is a **pnpm monorepo** with the following packages:
+This is a **bun workspaces monorepo** with the following packages:
 
 ```
 packages/
@@ -24,23 +24,23 @@ python/           # Python transport package (PyPI: abbacchio-transport)
 
 ```bash
 # Development
-pnpm dev              # Start API + dashboard concurrently
-pnpm dev:api          # Start only API server
-pnpm dev:dashboard    # Start only dashboard
-pnpm dev:tui          # Start terminal UI
-pnpm dev:desktop      # Start desktop app (Tauri)
+bun run dev              # Start API + dashboard concurrently
+bun run dev:api          # Start only API server
+bun run dev:dashboard    # Start only dashboard
+bun run dev:tui          # Start terminal UI
+bun run dev:desktop      # Start desktop app (Tauri)
 
 # Building
-pnpm build            # Build all packages
-pnpm build:api        # Build API only
-pnpm build:transport  # Build transport only
+bun run build            # Build all packages
+bun run build:api        # Build API only
+bun run build:transport  # Build transport only
 
 # Running
-pnpm start            # Start production API server
-pnpm tui              # Run TUI with arguments (e.g., pnpm tui -- --channel myapp)
+bun run start            # Start production API server
+bun run tui              # Run TUI with arguments (e.g., bun run tui --channel myapp)
 
 # Testing
-pnpm test             # Run all tests
+bun run test             # Run all tests
 ```
 
 ## Architecture
