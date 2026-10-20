@@ -8,7 +8,7 @@
 | `API_KEY`              | -                | Optional API key for authentication (enables `X-API-KEY` header auth) |
 | `CORS_ORIGIN`          | `*`              | CORS allowed origins (comma-separated for multiple) |
 | `MAX_LOGS_PER_CHANNEL` | `5000`           | Max logs retained **in the in-memory ring buffer** per channel. `0` = retain nothing (disk-only mode — see below). |
-| `MAX_CHANNELS`         | `10000`          | Max registered channels in memory (LRU eviction beyond this). |
+| `MAX_CHANNELS`         | `10000`          | Max registered channels in memory, applied separately to the log, metric, and trace buffers (LRU eviction beyond this). |
 | `CHANNEL_TTL`          | `86400000` (24h) | A channel with no activity for this long is dropped from the in-memory buffer. Does **not** delete its persisted SQLite rows. |
 | `SQLITE_PATH`          | `./data/logs.db` | Path to the SQLite database. Use `:memory:` for an ephemeral RAM database (wiped on restart). |
 | `SQLITE_MAX_LOGS`      | `100000`         | Max logs kept on disk. Older logs are pruned by rowid. `0` = unlimited. |

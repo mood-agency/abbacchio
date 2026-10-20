@@ -347,4 +347,16 @@ describe('POST /api/logs', () => {
     });
   });
 
+  describe('invalid bodies', () => {
+    it.each(['0', '"text"', 'null', 'not json'])('should return 400 (not 500) for body %s', async (raw) => {
+      const app = createTestApp();
+      const response = await app.request('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: raw,
+      });
+
+      expect(response.status).toBe(400);
+    });
+  });
 });

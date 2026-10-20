@@ -712,9 +712,12 @@ export class LogDatabase {
   /**
    * Get logs after a given ID using cursor-based pagination.
    * Uses the rowid to efficiently find logs inserted after the given ID.
+   * If the cursor row is gone (pruned by retention), every surviving row is
+   * newer than it, so the scan starts from the oldest remaining log instead of
+   * comparing against NULL (which would match nothing and stall pollers forever).
    */
   queryAfterId(afterId: string, channel?: string, limit = 500, levels?: string[], namespaces?: string[]): LogEntry[] {
-    const conditions = ['rowid > (SELECT rowid FROM logs WHERE id = $afterId)'];
+    const conditions = ['rowid > COALESCE((SELECT rowid FROM logs WHERE id = $afterId), 0)'];
     const params: Record<string, any> = { $afterId: afterId, $limit: limit };
 
     if (channel) {
@@ -852,6 +855,14 @@ export class LogDatabase {
 
       if (metricLimitResult && metricLimitResult.id) {
         this.db.prepare('DELETE FROM metrics WHERE id <= ?').run(metricLimitResult.id);
+      }
+
+      const traceLimitResult = this.db.prepare(
+        'SELECT rowid FROM traces ORDER BY rowid DESC LIMIT 1 OFFSET ?'
+      ).get(this.config.maxLogs) as { rowid: number } | undefined;
+
+      if (traceLimitResult && traceLimitResult.rowid) {
+        this.db.prepare('DELETE FROM traces WHERE rowid <= ?').run(traceLimitResult.rowid);
       }
     }
 

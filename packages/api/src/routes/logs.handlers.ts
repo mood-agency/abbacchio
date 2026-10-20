@@ -4,7 +4,7 @@ import { getLogBuffer, DEFAULT_CHANNEL } from '../lib/log-buffer.js';
 import { getMetricBuffer } from '../lib/metric-buffer.js';
 import { getTraceBuffer } from '../lib/trace-buffer.js';
 import { getDatabase } from '../lib/database.js';
-import { getValidatedBody } from '../middleware/validator.js';
+import { getValidatedBody, isLogObject } from '../middleware/validator.js';
 import type { IncomingLog, BatchLogRequest, LogEntry } from '../types.js';
 
 /**
@@ -58,10 +58,11 @@ export async function ingestLogs(c: Context) {
   const channel = getChannel(c);
 
   // Use pre-validated body if available (from validator middleware)
-  let body = getValidatedBody<BatchLogRequest | IncomingLog>(c);
-  if (!body) {
-    body = await c.req.json();
+  const raw: unknown = getValidatedBody(c) ?? await c.req.json().catch(() => null);
+  if (!isLogObject(raw)) {
+    return c.json({ error: 'Bad Request', message: 'Request body must be a JSON object' }, 400);
   }
+  const body = raw as BatchLogRequest | IncomingLog;
 
   const db = getDatabase();
   const identity = getSourceIdentity(c);

@@ -122,6 +122,26 @@ describe('validator middleware', () => {
     expect(body.error).toBe('Invalid JSON');
   });
 
+  it.each(['0', 'false', 'null', '"hi"', '[1,2]'])('should reject non-object body %s with 400', async (raw) => {
+    const res = await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: raw,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should reject a batch containing a non-object entry with 400', async () => {
+    const res = await app.request('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ logs: [{ msg: 'ok' }, 42] }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
   it('should reject oversized payload', async () => {
     const res = await app.request('/api/logs', {
       method: 'POST',

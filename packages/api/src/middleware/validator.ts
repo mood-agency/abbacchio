@@ -27,9 +27,23 @@ export interface ValidationResult {
 }
 
 /**
- * Validate a single log entry size
+ * True for a JSON object (not null, an array, or a primitive)
+ */
+export function isLogObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate a single log entry's shape and size
  */
 export function validateLogEntry(log: unknown, maxSize: number): ValidationResult {
+  if (!isLogObject(log)) {
+    return {
+      valid: false,
+      error: 'Log entry must be a JSON object',
+      statusCode: 400,
+    };
+  }
   const serialized = JSON.stringify(log);
   if (serialized.length > maxSize) {
     return {
@@ -143,7 +157,7 @@ export function createValidatorMiddleware(
       if (!result.valid) {
         const status = (result.statusCode || 413) as ContentfulStatusCode;
         return c.json(
-          { error: 'Payload Too Large', message: result.error },
+          { error: status === 413 ? 'Payload Too Large' : 'Bad Request', message: result.error },
           status
         );
       }

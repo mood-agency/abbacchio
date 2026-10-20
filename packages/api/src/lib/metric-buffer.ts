@@ -4,10 +4,12 @@ import { DEFAULT_CHANNEL } from './log-buffer.js';
 
 export interface MetricBufferConfig {
     maxDataPointsPerChannel: number;
+    maxChannels: number;
 }
 
 const DEFAULT_CONFIG: MetricBufferConfig = {
     maxDataPointsPerChannel: parseInt(process.env.MAX_METRICS || '5000', 10),
+    maxChannels: parseInt(process.env.MAX_CHANNELS || '10000', 10),
 };
 
 /**
@@ -23,10 +25,22 @@ export class MetricBuffer extends EventEmitter {
         this.config = { ...DEFAULT_CONFIG, ...config };
     }
 
+    /**
+     * Register a channel, evicting the least recently written one at the cap.
+     * Map keeps insertion order, so re-inserting on write keeps it LRU-ordered.
+     */
     private registerChannel(channel: string): void {
-        if (!this.channels.has(channel)) {
-            this.channels.set(channel, []);
+        const existing = this.channels.get(channel);
+        if (existing) {
+            this.channels.delete(channel);
+            this.channels.set(channel, existing);
+            return;
         }
+        if (this.channels.size >= this.config.maxChannels) {
+            const oldest = this.channels.keys().next().value;
+            if (oldest !== undefined) this.channels.delete(oldest);
+        }
+        this.channels.set(channel, []);
     }
 
     /**
@@ -39,8 +53,6 @@ export class MetricBuffer extends EventEmitter {
 
         for (const metric of metrics) {
             const channel = metric.channel || DEFAULT_CHANNEL;
-            this.registerChannel(channel);
-
             if (!metricsByChannel.has(channel)) {
                 metricsByChannel.set(channel, []);
             }
@@ -48,6 +60,7 @@ export class MetricBuffer extends EventEmitter {
         }
 
         for (const [channel, channelMetrics] of metricsByChannel) {
+            this.registerChannel(channel);
             const stored = this.channels.get(channel)!;
             stored.push(...channelMetrics);
 

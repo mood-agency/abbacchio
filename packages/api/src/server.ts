@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { bodyLimit } from 'hono/body-limit';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
@@ -65,14 +66,12 @@ app.use('/api/logs', createValidatorMiddleware());
 
 // Payload size limit for OTLP endpoints
 const MAX_OTLP_PAYLOAD = parseInt(process.env.MAX_PAYLOAD_SIZE || '1048576', 10);
-app.use('/v1/*', async (c, next) => {
-  if (c.req.method !== 'POST') return next();
-  const contentLength = c.req.header('content-length');
-  if (contentLength && parseInt(contentLength, 10) > MAX_OTLP_PAYLOAD) {
-    return c.json({ error: 'Payload Too Large' }, 413);
-  }
-  return next();
-});
+// bodyLimit enforces the cap while streaming, so it also catches chunked
+// requests that omit or understate Content-Length.
+app.use('/v1/*', bodyLimit({
+  maxSize: MAX_OTLP_PAYLOAD,
+  onError: (c) => c.json({ error: 'Payload Too Large' }, 413),
+}));
 
 // API key authentication (opt-in: set API_KEY env var to enable)
 if (API_KEY) {
