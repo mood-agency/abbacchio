@@ -30,7 +30,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "bun test src/tests"
   },
   "keywords": [
     "pino",
