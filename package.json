@@ -19,6 +19,7 @@
     "tui": "bun run --filter @abbacchio/tui dev --",
     "start": "bun run --filter @abbacchio/api start",
     "test": "bun run --filter '*' test",
+    "lint": "oxlint",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules",
     "bump": "node scripts/bump-version.js"
   },
@@ -37,9 +38,11 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@oxlint/plugins": "1.89.0",
     "@types/bunyan": "^1.8.11",
     "bunyan": "^1.8.15",
     "concurrently": "^9.2.1",
+    "oxlint": "1.89.0",
     "pino": "^10.3.1",
     "typescript": "^5.9.3",
     "winston": "^3.19.0"
