@@ -187,6 +187,7 @@ export class AbbacchioClient {
   private static BASE_BACKOFF_MS = 1000;
   private static MAX_BACKOFF_MS = 30000;
   private backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
+  private closed = false;
 
   // Throttled drop reporting.
   private droppedSinceWarn = 0;
@@ -252,8 +253,8 @@ export class AbbacchioClient {
   }
 
   /** Record a dropped record and emit a single warning at most every 5s. */
-  private noteDropped(): void {
-    this.droppedSinceWarn++;
+  private noteDropped(count = 1): void {
+    this.droppedSinceWarn += count;
     const now = Date.now();
     if (now - this.lastDropWarn > 5000) {
       // eslint-disable-next-line no-console
@@ -272,6 +273,36 @@ export class AbbacchioClient {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Put a rate-limited batch back in front of whatever arrived meanwhile,
+   * keeping the newest records within maxBufferSize. After close() the batch
+   * is dropped instead, since no timer will retry it.
+   */
+  private requeue<T>(batch: T[], current: T[]): T[] {
+    if (this.closed) {
+      this.noteDropped(batch.length);
+      return current;
+    }
+    const merged = batch.concat(current);
+    const excess = merged.length - this.maxBufferSize;
+    if (excess > 0) {
+      this.noteDropped(excess);
+      return merged.slice(excess);
+    }
+    return merged;
+  }
+
+  /**
+   * Arm a flush timer. Retries after a 429 are unref'd so a server that keeps
+   * rate-limiting cannot hold the host process open; ordinary flushes stay
+   * ref'd so a script that logs and exits still delivers its last batch.
+   */
+  private armTimer(fn: () => void, retry: boolean): ReturnType<typeof setTimeout> {
+    const timer = setTimeout(fn, this.interval);
+    if (retry) (timer as { unref?: () => void }).unref?.();
+    return timer;
   }
 
   /** Change the service name dynamically */
@@ -331,26 +362,37 @@ export class AbbacchioClient {
   /** Send logs immediately without batching */
   async send(logs: (LogRecord | unknown)[]): Promise<void> {
     if (!this.enabled) return;
-    await this.sendLogs(logs as LogRecord[]);
+    if (this.isPaused()) {
+      this.addBatch(logs);
+      return;
+    }
+    if (await this.sendLogs(logs as LogRecord[])) {
+      this.logBuffer = this.requeue(logs as LogRecord[], this.logBuffer);
+      if (!this.closed) this.scheduleLogFlush(true);
+    }
   }
 
-  private scheduleLogFlush(): void {
+  private scheduleLogFlush(retry = false): void {
     if (this.logTimer) return;
-    this.logTimer = setTimeout(() => {
+    this.logTimer = this.armTimer(() => {
       this.logTimer = null;
       this.flushLogs();
-    }, this.interval);
+    }, retry);
   }
 
-  async flushLogs(): Promise<void> {
+  async flushLogs(force = false): Promise<void> {
     if (this.logBuffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleLogFlush(); return; }
+    if (this.isPaused() && !force) { this.scheduleLogFlush(true); return; }
     const batch = this.logBuffer;
     this.logBuffer = [];
-    await this.sendLogs(batch);
+    if (await this.sendLogs(batch)) {
+      this.logBuffer = this.requeue(batch, this.logBuffer);
+      if (!this.closed) this.scheduleLogFlush(true);
+    }
   }
 
-  private async sendLogs(logs: LogRecord[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendLogs(logs: LogRecord[]): Promise<boolean> {
     const logRecords = logs.map((log) => {
       const { level, msg, message, time, ...extra } = log;
       const pinoLevel = typeof level === 'number' ? level : 30;
@@ -378,7 +420,7 @@ export class AbbacchioClient {
       }],
     };
 
-    await this.post('/v1/logs', payload);
+    return this.post('/v1/logs', payload);
   }
 
   // ─── Metrics ───────────────────────────────────────
@@ -396,23 +438,27 @@ export class AbbacchioClient {
     }
   }
 
-  private scheduleMetricFlush(): void {
+  private scheduleMetricFlush(retry = false): void {
     if (this.metricTimer) return;
-    this.metricTimer = setTimeout(() => {
+    this.metricTimer = this.armTimer(() => {
       this.metricTimer = null;
       this.flushMetrics();
-    }, this.interval);
+    }, retry);
   }
 
-  async flushMetrics(): Promise<void> {
+  async flushMetrics(force = false): Promise<void> {
     if (this.metricBuffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleMetricFlush(); return; }
+    if (this.isPaused() && !force) { this.scheduleMetricFlush(true); return; }
     const batch = this.metricBuffer;
     this.metricBuffer = [];
-    await this.sendMetrics(batch);
+    if (await this.sendMetrics(batch)) {
+      this.metricBuffer = this.requeue(batch, this.metricBuffer);
+      if (!this.closed) this.scheduleMetricFlush(true);
+    }
   }
 
-  private async sendMetrics(metrics: MetricRecord[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendMetrics(metrics: MetricRecord[]): Promise<boolean> {
     // Group by metric name to build proper OTLP structure
     const byName = new Map<string, MetricRecord[]>();
     for (const m of metrics) {
@@ -459,7 +505,7 @@ export class AbbacchioClient {
       }],
     };
 
-    await this.post('/v1/metrics', payload);
+    return this.post('/v1/metrics', payload);
   }
 
   // ─── Histograms ─────────────────────────────────────
@@ -479,23 +525,27 @@ export class AbbacchioClient {
     }
   }
 
-  private scheduleHistogramFlush(): void {
+  private scheduleHistogramFlush(retry = false): void {
     if (this.histogramTimer) return;
-    this.histogramTimer = setTimeout(() => {
+    this.histogramTimer = this.armTimer(() => {
       this.histogramTimer = null;
       this.flushHistograms();
-    }, this.interval);
+    }, retry);
   }
 
-  async flushHistograms(): Promise<void> {
+  async flushHistograms(force = false): Promise<void> {
     if (this.histogramBuffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleHistogramFlush(); return; }
+    if (this.isPaused() && !force) { this.scheduleHistogramFlush(true); return; }
     const batch = this.histogramBuffer;
     this.histogramBuffer = [];
-    await this.sendHistograms(batch);
+    if (await this.sendHistograms(batch)) {
+      this.histogramBuffer = this.requeue(batch, this.histogramBuffer);
+      if (!this.closed) this.scheduleHistogramFlush(true);
+    }
   }
 
-  private async sendHistograms(records: HistogramRecord[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendHistograms(records: HistogramRecord[]): Promise<boolean> {
     // Group by name+attributes key to aggregate observations into OTLP histogram data points
     const groups = new Map<string, { records: HistogramRecord[]; bounds: number[] }>();
     for (const r of records) {
@@ -564,7 +614,7 @@ export class AbbacchioClient {
       }],
     };
 
-    await this.post('/v1/metrics', payload);
+    return this.post('/v1/metrics', payload);
   }
 
   // ─── Traces ────────────────────────────────────────
@@ -582,23 +632,27 @@ export class AbbacchioClient {
     }
   }
 
-  private scheduleSpanFlush(): void {
+  private scheduleSpanFlush(retry = false): void {
     if (this.spanTimer) return;
-    this.spanTimer = setTimeout(() => {
+    this.spanTimer = this.armTimer(() => {
       this.spanTimer = null;
       this.flushSpans();
-    }, this.interval);
+    }, retry);
   }
 
-  async flushSpans(): Promise<void> {
+  async flushSpans(force = false): Promise<void> {
     if (this.spanBuffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleSpanFlush(); return; }
+    if (this.isPaused() && !force) { this.scheduleSpanFlush(true); return; }
     const batch = this.spanBuffer;
     this.spanBuffer = [];
-    await this.sendSpans(batch);
+    if (await this.sendSpans(batch)) {
+      this.spanBuffer = this.requeue(batch, this.spanBuffer);
+      if (!this.closed) this.scheduleSpanFlush(true);
+    }
   }
 
-  private async sendSpans(spans: SpanRecord[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendSpans(spans: SpanRecord[]): Promise<boolean> {
     const otlpSpans = spans.map((s) => ({
       traceId: s.traceId,
       spanId: s.spanId,
@@ -621,7 +675,7 @@ export class AbbacchioClient {
       }],
     };
 
-    await this.post('/v1/traces', payload);
+    return this.post('/v1/traces', payload);
   }
 
   // ─── Shared ────────────────────────────────────────
@@ -636,13 +690,22 @@ export class AbbacchioClient {
     ]);
   }
 
-  /** Close the client and flush any remaining data */
+  /**
+   * Close the client and flush any remaining data. Sends even while paused by
+   * a 429: a deferred timer would never fire once the host process exits.
+   */
   async close(): Promise<void> {
+    this.closed = true;
     if (this.logTimer) { clearTimeout(this.logTimer); this.logTimer = null; }
     if (this.metricTimer) { clearTimeout(this.metricTimer); this.metricTimer = null; }
     if (this.histogramTimer) { clearTimeout(this.histogramTimer); this.histogramTimer = null; }
     if (this.spanTimer) { clearTimeout(this.spanTimer); this.spanTimer = null; }
-    await this.flush();
+    await Promise.all([
+      this.flushLogs(true),
+      this.flushMetrics(true),
+      this.flushHistograms(true),
+      this.flushSpans(true),
+    ]);
   }
 
   private buildResourceAttributes(): OtlpKeyValue[] {
@@ -655,7 +718,8 @@ export class AbbacchioClient {
     return attrs;
   }
 
-  private async post(path: string, payload: unknown): Promise<void> {
+  /** Returns true when the server rate-limited the request (429). */
+  private async post(path: string, payload: unknown): Promise<boolean> {
     try {
       const body = JSON.stringify(payload);
 
@@ -681,12 +745,15 @@ export class AbbacchioClient {
           : this.backoffMs;
         this.pausedUntil = Date.now() + backoff;
         this.backoffMs = Math.min(this.backoffMs * 2, AbbacchioClient.MAX_BACKOFF_MS);
-      } else if (res.ok) {
+        return true;
+      }
+      if (res.ok) {
         this.backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
       }
     } catch {
       // Silently fail — don't break the app if the telemetry server is down
     }
+    return false;
   }
 }
 

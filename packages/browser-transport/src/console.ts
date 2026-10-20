@@ -78,6 +78,9 @@ function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
   if (value === null) return null;
   if (value === undefined) return undefined;
   if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
+  // JSON.stringify throws on BigInt, which would drop the whole log entry.
+  if (typeof value === 'bigint') return `${value}n`;
+  if (typeof value === 'symbol') return value.toString();
   if (typeof value !== 'object') return value;
 
   if (seen.has(value as object)) return '[Circular]';
@@ -212,6 +215,18 @@ function createInterceptor(method: keyof typeof originalConsole) {
   };
 }
 
+/**
+ * Network capture options that always ignore the client's own endpoint —
+ * otherwise each telemetry POST is captured as a log, which triggers another
+ * POST, and so on. Uses the client's resolved endpoint (which has a default)
+ * rather than options.endpoint, and keeps any user-supplied ignore patterns.
+ */
+function networkCaptureOptions() {
+  const ignoreNetworkUrls = [...(options.ignoreNetworkUrls ?? [])];
+  if (client) ignoreNetworkUrls.push(client.getEndpoint());
+  return { ...options, name: options.appName, ignoreNetworkUrls };
+}
+
 export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   if (isIntercepting) {
     options = { ...options, ...opts };
@@ -242,7 +257,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
     ) {
       stopNetworkCapture();
       if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
-        startNetworkCapture(options, (entry) => { if (client) client.add(entry); });
+        startNetworkCapture(networkCaptureOptions(), (entry) => { if (client) client.add(entry); });
       }
     }
     return;
@@ -268,10 +283,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   }
 
   if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
-    if (!options.ignoreNetworkUrls && options.endpoint) {
-      options.ignoreNetworkUrls = [options.endpoint];
-    }
-    startNetworkCapture({ ...options, name: options.appName }, (entry) => { if (client) client.add(entry); });
+    startNetworkCapture(networkCaptureOptions(), (entry) => { if (client) client.add(entry); });
   }
 }
 

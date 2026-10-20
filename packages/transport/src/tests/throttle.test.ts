@@ -97,4 +97,43 @@ describe('AbbacchioClient runaway-producer protections', () => {
 
     expect(calls.length).toBe(callsAfter429); // still paused — no new requests
   });
+
+  it('re-sends a batch that was rate-limited instead of dropping it', async () => {
+    const client = createClient({ endpoint: 'http://test:4002', batchSize: 1, maxPointsPerSecond: 0 });
+
+    nextStatus = 429;
+    nextHeaders = { 'Retry-After': '60' };
+    client.addMetric({ name: 'progress', type: 'gauge', value: 42 });
+    await client.flush();
+    expect(calls.length).toBe(1);
+
+    // close() must deliver the rate-limited point even though we are still paused.
+    nextStatus = 200;
+    await client.close();
+
+    expect(calls.length).toBe(2);
+    expect(countPoints()).toBe(2); // the 429'd attempt + the successful retry
+    const lastPoint = calls[1].body.resourceMetrics[0].scopeMetrics[0].metrics[0].gauge.dataPoints[0];
+    expect(lastPoint.asDouble ?? lastPoint.asInt).toBe(42);
+  });
+
+  it('close() sends buffered logs while paused instead of resolving early', async () => {
+    const client = createClient({ endpoint: 'http://test:4002', batchSize: 100, maxPointsPerSecond: 0 });
+
+    nextStatus = 429;
+    nextHeaders = { 'Retry-After': '60' };
+    client.add({ level: 30, msg: 'first' });
+    await client.flush();
+    expect(calls.length).toBe(1);
+
+    nextStatus = 200;
+    client.add({ level: 30, msg: 'second' });
+    await client.close();
+
+    const logCalls = calls.filter((c) => c.url.endsWith('/v1/logs'));
+    expect(logCalls.length).toBe(2);
+    const bodies = logCalls[1].body.resourceLogs[0].scopeLogs[0].logRecords.map((r: any) => r.body.stringValue);
+    expect(bodies).toEqual(['first', 'second']);
+  });
 });
+

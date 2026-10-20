@@ -69,6 +69,14 @@ export function AbbacchioProvider({
     loggerOptions.captureWebVitals,
   ]);
 
+  // loggerOptions/consoleOptions are fresh objects every render, so key the
+  // effect on their contents; depending on identity would tear down and rebuild
+  // the console client (and its unload listeners) on every parent re-render.
+  const consoleConfigKey = JSON.stringify(
+    { loggerOptions, consoleOptions },
+    (_key, val) => (val instanceof RegExp ? val.toString() : val),
+  );
+
   useEffect(() => {
     if (captureConsole) {
       interceptConsole({
@@ -79,7 +87,8 @@ export function AbbacchioProvider({
 
       return () => { stopInterceptConsole(); };
     }
-  }, [captureConsole, loggerOptions, consoleOptions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureConsole, consoleConfigKey]);
 
   useEffect(() => {
     return () => { logger.close(); };

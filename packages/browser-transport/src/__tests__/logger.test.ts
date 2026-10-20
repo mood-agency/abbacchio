@@ -10,7 +10,7 @@ const mockClientInstance = {
   flush: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
   configure: vi.fn(),
-  endpoint: 'http://localhost/api/logs',
+  getEndpoint: () => 'http://localhost/api/logs',
 };
 
 // Mock the client and network capture

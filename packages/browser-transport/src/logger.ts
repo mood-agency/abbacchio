@@ -69,9 +69,8 @@ export class Logger {
   /** Dynamically enable network capture with options */
   enableNetworkCapture(options: NetworkCaptureOptions): void {
     const opts = { ...options };
-    if (!opts.ignoreNetworkUrls && this.client['endpoint']) {
-      opts.ignoreNetworkUrls = [this.client['endpoint']];
-    }
+    // Always ignore our own endpoint, even alongside user patterns, to avoid self-capture.
+    opts.ignoreNetworkUrls = [...(opts.ignoreNetworkUrls ?? []), this.client.getEndpoint()];
     opts.name = opts.name || this.loggerName;
     startNetworkCapture(opts, (entry) => {
       this.client.add(entry);

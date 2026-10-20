@@ -9,7 +9,7 @@ const mockClientInstance = {
   flush: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
   configure: vi.fn(),
-  endpoint: 'http://localhost/api/logs',
+  getEndpoint: () => 'http://localhost/api/logs',
 };
 
 vi.mock('../client.js', () => {
@@ -175,5 +175,15 @@ describe('Console Interceptor', () => {
     expect(entry.caller.function).toBe('testLogLocation');
     expect(entry.caller.file).toMatch(/console\.test\.ts$/);
     expect(typeof entry.caller.line).toBe('number');
+  });
+
+  it('keeps log entries whose args contain BigInt', () => {
+    interceptConsole({ passthrough: false });
+    console.log('big', 10n, { nested: 5n });
+
+    expect(mockClientInstance.add).toHaveBeenCalledTimes(1);
+    const entry = mockClientInstance.add.mock.calls[0][0];
+    expect(entry.msg).toContain('10n');
+    expect(entry.nested).toBe('5n');
   });
 });

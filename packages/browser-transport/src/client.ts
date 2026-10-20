@@ -201,6 +201,7 @@ export class AbbacchioClient {
   private pausedUntil = 0;
   private static BASE_BACKOFF_MS = 1000;
   private static MAX_BACKOFF_MS = 30000;
+  private static KEEPALIVE_MAX_BYTES = 60_000;
   private backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
 
   // Throttled drop reporting.
@@ -214,6 +215,12 @@ export class AbbacchioClient {
   private metricTimer: ReturnType<typeof setTimeout> | null = null;
   private spanTimer: ReturnType<typeof setTimeout> | null = null;
   private isClosed = false;
+  // Set once the page starts unloading: sends switch to keepalive and ignore 429 pauses.
+  private unloading = false;
+  private readonly onUnload = (): void => {
+    this.unloading = true;
+    void this.flushAll(true);
+  };
 
   constructor(options: AbbacchioClientOptions = {}) {
     if (options.url && !options.endpoint) {
@@ -240,10 +247,13 @@ export class AbbacchioClient {
 
     // Flush on page unload
     if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', () => this.flush());
-      window.addEventListener('pagehide', () => this.flush());
+      window.addEventListener('beforeunload', this.onUnload);
+      window.addEventListener('pagehide', this.onUnload);
     }
   }
+
+  /** Base URL telemetry is sent to (network capture must ignore it to avoid self-capture). */
+  getEndpoint(): string { return this.endpoint; }
 
   enable(): void { this.enabled = true; }
   disable(): void { this.enabled = false; }
@@ -274,8 +284,8 @@ export class AbbacchioClient {
   }
 
   /** Record a dropped record and emit a single warning at most every 5s. */
-  private noteDropped(): void {
-    this.droppedSinceWarn++;
+  private noteDropped(count = 1): void {
+    this.droppedSinceWarn += count;
     const now = Date.now();
     if (now - this.lastDropWarn > 5000) {
       console.warn(
@@ -293,6 +303,25 @@ export class AbbacchioClient {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Put a rate-limited batch back in front of whatever arrived meanwhile,
+   * keeping the newest records within maxBufferSize. After close() the batch
+   * is dropped instead, since no timer will retry it.
+   */
+  private requeue<T>(batch: T[], current: T[]): T[] {
+    if (this.isClosed) {
+      this.noteDropped(batch.length);
+      return current;
+    }
+    const merged = batch.concat(current);
+    const excess = merged.length - this.maxBufferSize;
+    if (excess > 0) {
+      this.noteDropped(excess);
+      return merged.slice(excess);
+    }
+    return merged;
   }
 
   /** Add a log to the buffer and trigger send if needed */
@@ -318,16 +347,21 @@ export class AbbacchioClient {
 
   /** Flush all buffers (logs, metrics, traces) */
   async flush(): Promise<void> {
+    await this.flushAll(false);
+  }
+
+  /** `force` sends even while paused by a 429 (close/unload: no later retry). */
+  private async flushAll(force: boolean): Promise<void> {
     await Promise.all([
-      this.flushLogs(),
-      this.flushMetrics(),
-      this.flushSpans(),
+      this.flushLogs(force),
+      this.flushMetrics(force),
+      this.flushSpans(force),
     ]);
   }
 
-  async flushLogs(): Promise<void> {
+  async flushLogs(force = false): Promise<void> {
     if (this.buffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleSend(); return; }
+    if (this.isPaused() && !force) { this.scheduleSend(); return; }
 
     const toSend = this.buffer;
     this.buffer = [];
@@ -337,10 +371,14 @@ export class AbbacchioClient {
       this.timer = null;
     }
 
-    await this.sendLogs(toSend);
+    if (await this.sendLogs(toSend)) {
+      this.buffer = this.requeue(toSend, this.buffer);
+      if (!this.isClosed) this.scheduleSend();
+    }
   }
 
-  private async sendLogs(logs: LogEntry[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendLogs(logs: LogEntry[]): Promise<boolean> {
     try {
       const logRecords = logs.map((log) => {
         const { level, msg, message, time, name, ...extra } = log;
@@ -369,9 +407,10 @@ export class AbbacchioClient {
         }],
       };
 
-      await this.post('/v1/logs', payload);
+      return await this.post('/v1/logs', payload);
     } catch {
       // Silently fail
+      return false;
     }
   }
 
@@ -398,19 +437,23 @@ export class AbbacchioClient {
     }, this.flushInterval);
   }
 
-  async flushMetrics(): Promise<void> {
+  async flushMetrics(force = false): Promise<void> {
     if (this.metricBuffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleMetricFlush(); return; }
+    if (this.isPaused() && !force) { this.scheduleMetricFlush(); return; }
     const batch = this.metricBuffer;
     this.metricBuffer = [];
     if (this.metricTimer) {
       clearTimeout(this.metricTimer);
       this.metricTimer = null;
     }
-    await this.sendMetrics(batch);
+    if (await this.sendMetrics(batch)) {
+      this.metricBuffer = this.requeue(batch, this.metricBuffer);
+      if (!this.isClosed) this.scheduleMetricFlush();
+    }
   }
 
-  private async sendMetrics(metrics: MetricRecord[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendMetrics(metrics: MetricRecord[]): Promise<boolean> {
     try {
       const byName = new Map<string, MetricRecord[]>();
       for (const m of metrics) {
@@ -457,9 +500,10 @@ export class AbbacchioClient {
         }],
       };
 
-      await this.post('/v1/metrics', payload);
+      return await this.post('/v1/metrics', payload);
     } catch {
       // Silently fail
+      return false;
     }
   }
 
@@ -486,19 +530,23 @@ export class AbbacchioClient {
     }, this.flushInterval);
   }
 
-  async flushSpans(): Promise<void> {
+  async flushSpans(force = false): Promise<void> {
     if (this.spanBuffer.length === 0) return;
-    if (this.isPaused()) { this.scheduleSpanFlush(); return; }
+    if (this.isPaused() && !force) { this.scheduleSpanFlush(); return; }
     const batch = this.spanBuffer;
     this.spanBuffer = [];
     if (this.spanTimer) {
       clearTimeout(this.spanTimer);
       this.spanTimer = null;
     }
-    await this.sendSpans(batch);
+    if (await this.sendSpans(batch)) {
+      this.spanBuffer = this.requeue(batch, this.spanBuffer);
+      if (!this.isClosed) this.scheduleSpanFlush();
+    }
   }
 
-  private async sendSpans(spans: SpanRecord[]): Promise<void> {
+  /** Returns true when the server rate-limited the batch (429). */
+  private async sendSpans(spans: SpanRecord[]): Promise<boolean> {
     try {
       const otlpSpans = spans.map((s) => ({
         traceId: s.traceId,
@@ -522,9 +570,10 @@ export class AbbacchioClient {
         }],
       };
 
-      await this.post('/v1/traces', payload);
+      return await this.post('/v1/traces', payload);
     } catch {
       // Silently fail
+      return false;
     }
   }
 
@@ -532,6 +581,10 @@ export class AbbacchioClient {
 
   async close(): Promise<void> {
     this.isClosed = true;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.onUnload);
+      window.removeEventListener('pagehide', this.onUnload);
+    }
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -544,7 +597,7 @@ export class AbbacchioClient {
       clearTimeout(this.spanTimer);
       this.spanTimer = null;
     }
-    await this.flush();
+    await this.flushAll(true);
   }
 
   private buildResourceAttributes(): OtlpKeyValue[] {
@@ -557,7 +610,8 @@ export class AbbacchioClient {
     return attrs;
   }
 
-  private async post(path: string, payload: unknown): Promise<void> {
+  /** Returns true when the server rate-limited the request (429). */
+  private async post(path: string, payload: unknown): Promise<boolean> {
     const body = JSON.stringify(payload);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -571,6 +625,9 @@ export class AbbacchioClient {
       method: 'POST',
       headers,
       body,
+      // keepalive lets the request outlive the page, but browsers reject
+      // keepalive bodies over ~64KB, so larger final batches use a plain fetch.
+      keepalive: this.unloading && new TextEncoder().encode(body).length < AbbacchioClient.KEEPALIVE_MAX_BYTES,
     });
 
     if (res.status === 429) {
@@ -581,9 +638,12 @@ export class AbbacchioClient {
         : this.backoffMs;
       this.pausedUntil = Date.now() + backoff;
       this.backoffMs = Math.min(this.backoffMs * 2, AbbacchioClient.MAX_BACKOFF_MS);
-    } else if (res.ok) {
+      return true;
+    }
+    if (res.ok) {
       this.backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
     }
+    return false;
   }
 
   /** Update client configuration */
