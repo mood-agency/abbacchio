@@ -5,6 +5,7 @@ Core transport for sending logs to Abbacchio server.
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import queue
 import socket
@@ -41,6 +42,8 @@ LEVEL_MAP = {
     "error": 50,
     "fatal": 60,
     "critical": 60,
+    "exception": 50,  # structlog
+    "success": 30,  # loguru
     # Python stdlib numeric levels
     10: 20,  # DEBUG -> debug
     20: 30,  # INFO -> info
@@ -67,6 +70,9 @@ class AbbacchioTransport:
             (defaults to the hostname). Not cryptographically verified.
         instance_id: Self-declared unique instance id sent via the
             X-Instance-Id header (defaults to '<hostname>:<pid>').
+        max_queue_size: Max logs waiting to be sent. When the server is down
+            or slow, logs beyond this are dropped instead of growing memory
+            without bound (default: 10000).
     """
 
     def __init__(
@@ -79,6 +85,7 @@ class AbbacchioTransport:
         headers: dict[str, str] | None = None,
         source: str | None = None,
         instance_id: str | None = None,
+        max_queue_size: int = 10000,
     ):
         self.url = url
         self.channel = channel
@@ -96,7 +103,8 @@ class AbbacchioTransport:
         if headers:
             self._headers.update(headers)
 
-        self._queue: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=max_queue_size)
+        self.dropped = 0
         self._shutdown = threading.Event()
         self._client = httpx.Client(timeout=timeout)
 
@@ -109,8 +117,13 @@ class AbbacchioTransport:
 
     def send(self, log: dict[str, Any]) -> None:
         """Queue a log entry for sending."""
-        if not self._shutdown.is_set():
-            self._queue.put(log)
+        if self._shutdown.is_set():
+            return
+        try:
+            self._queue.put_nowait(log)
+        except queue.Full:
+            # Never block the caller's logging call on a slow/unreachable server.
+            self.dropped += 1
 
     def _worker_loop(self) -> None:
         """Background worker that batches and sends logs."""
@@ -136,7 +149,16 @@ class AbbacchioTransport:
                     batch = []
                     last_flush = time.monotonic()
 
-        # Final flush on shutdown
+        # Final flush on shutdown: drain whatever is still queued, not just the
+        # in-hand batch, so logs emitted right before exit are delivered.
+        while True:
+            try:
+                batch.append(self._queue.get_nowait())
+            except queue.Empty:
+                break
+            if len(batch) >= self.batch_size:
+                self._flush(batch)
+                batch = []
         if batch:
             self._flush(batch)
 
@@ -146,10 +168,12 @@ class AbbacchioTransport:
             return
 
         try:
-            # Wrap in {logs: [...]} to match expected API format
+            # Wrap in {logs: [...]} to match expected API format. default=str
+            # keeps one non-JSON value (datetime, object, ...) in some log's
+            # extra fields from failing the encode and dropping the whole batch.
             self._client.post(
                 self.url,
-                json={"logs": batch},
+                content=json.dumps({"logs": batch}, default=str),
                 headers=self._headers,
             )
         except Exception:

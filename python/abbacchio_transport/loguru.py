@@ -35,18 +35,6 @@ from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 if TYPE_CHECKING:
     from loguru import Record
 
-# Map loguru level names to numeric levels
-LEVEL_MAP = {
-    "TRACE": 10,
-    "DEBUG": 20,
-    "INFO": 30,
-    "SUCCESS": 30,  # Map SUCCESS to info
-    "WARNING": 40,
-    "ERROR": 50,
-    "CRITICAL": 60,
-}
-
-
 class AbbacchioSink:
     """
     Loguru sink that sends logs to Abbacchio server.
@@ -84,8 +72,9 @@ class AbbacchioSink:
         record: Record = message.record
 
         # Extract level
-        level_name = record["level"].name
-        level = LEVEL_MAP.get(level_name, 30)
+        # By name: create_log_entry treats ints as stdlib levels and would
+        # remap an already-converted number (INFO 30 -> warn).
+        level = record["level"].name
 
         # Build extra fields from record["extra"]
         extra = dict(record.get("extra", {}))

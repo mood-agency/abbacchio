@@ -37,20 +37,6 @@ from typing import Any, Callable
 
 from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 
-# Map structlog level names to numeric levels
-LEVEL_MAP = {
-    "trace": 10,
-    "debug": 20,
-    "info": 30,
-    "warning": 40,
-    "warn": 40,
-    "error": 50,
-    "fatal": 60,
-    "critical": 60,
-    "exception": 50,
-}
-
-
 class AbbacchioProcessor:
     """
     Structlog processor that sends logs to Abbacchio server.
@@ -112,7 +98,9 @@ class AbbacchioProcessor:
 
         # Create and send log entry
         entry = create_log_entry(
-            level=LEVEL_MAP.get(level, 30) if isinstance(level, str) else level,
+            # Names (and stdlib ints) are mapped by create_log_entry; mapping
+            # here too would shift every level up one (INFO 30 -> warn).
+            level=level,
             msg=str(msg),
             name=name,
             **extra,

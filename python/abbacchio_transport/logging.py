@@ -24,16 +24,6 @@ from typing import Any
 
 from abbacchio_transport.transport import AbbacchioTransport, create_log_entry
 
-# Map Python logging levels to Abbacchio levels
-LEVEL_MAP = {
-    logging.DEBUG: 20,      # debug
-    logging.INFO: 30,       # info
-    logging.WARNING: 40,    # warn
-    logging.ERROR: 50,      # error
-    logging.CRITICAL: 60,   # fatal
-}
-
-
 class AbbacchioHandler(logging.Handler):
     """
     Logging handler that sends logs to Abbacchio server.
@@ -77,8 +67,11 @@ class AbbacchioHandler(logging.Handler):
             name = extra.pop("log_name", None) or record.name
 
             # Create log entry
+            # Pass the level *name*: create_log_entry maps names to Abbacchio
+            # levels, but treats ints as stdlib levels and would remap an
+            # already-converted number (INFO 30 -> warn).
             entry = create_log_entry(
-                level=LEVEL_MAP.get(record.levelno, 30),
+                level=record.levelname,
                 msg=record.getMessage(),
                 name=name,
                 **extra,

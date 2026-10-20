@@ -18,7 +18,6 @@ class TestAbbacchioHandler:
         assert handler._transport.url == "http://test:4000/api/logs"
         handler.close()
 
-    @patch.object(AbbacchioHandler, "_transport", create=True)
     def test_emit_basic(self):
         handler = AbbacchioHandler()
         handler._transport = MagicMock()
@@ -38,10 +37,9 @@ class TestAbbacchioHandler:
         handler._transport.send.assert_called_once()
         call_args = handler._transport.send.call_args[0][0]
         assert call_args["msg"] == "test message"
-        assert call_args["namespace"] == "test-logger"
+        assert call_args["name"] == "test-logger"  # API maps name -> namespace
         assert call_args["level"] == 30  # INFO
 
-    @patch.object(AbbacchioHandler, "_transport", create=True)
     def test_emit_with_extra(self):
         handler = AbbacchioHandler()
         handler._transport = MagicMock()
