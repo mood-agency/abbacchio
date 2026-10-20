@@ -5,7 +5,6 @@
  * Usage: bun scripts/js/insert-test-logs-bunyan.ts [options]
  *   --count <n>       Number of logs per channel (default: 5)
  *   --delay <ms>      Delay between logs in ms (default: 100)
- *   --key <key>       Encryption key (optional)
  *   --name <name>     Log name/namespace (default: random)
  *   --channel <name>  Channel name(s), comma-separated (default: optimus,bumblebee,jazz)
  */
@@ -35,15 +34,14 @@ const levelMap: Record<string, number> = {
   fatal: bunyan.FATAL,
 };
 
-function createLogger(channel: string, name: string, secretKey?: string): bunyan {
+function createLogger(channel: string, name: string): bunyan {
   return bunyan.createLogger({
     name,
     streams: [
       { stream: process.stdout, level: 'trace' },
       bunyanStream({
-        url: API_URL,
-        channel,
-        ...(secretKey ? { secretKey } : {}),
+        endpoint: API_URL,
+        serviceName: channel,
         level: 'trace',
       }),
     ],
@@ -88,7 +86,7 @@ async function main() {
   const loggers = Object.fromEntries(
     options.channels.map((channel) => [
       channel,
-      createLogger(channel, options.name || randomElement(namespaces), options.key),
+      createLogger(channel, options.name || randomElement(namespaces)),
     ])
   );
 

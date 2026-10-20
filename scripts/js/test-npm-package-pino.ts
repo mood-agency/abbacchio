@@ -8,7 +8,6 @@
  * Usage: bun scripts/js/test-npm-package-pino.ts [options]
  *   --count <n>       Number of logs per channel (default: 5)
  *   --delay <ms>      Delay between logs in ms (default: 100)
- *   --key <key>       Encryption key (optional)
  *   --name <name>     Log name/namespace (default: random)
  *   --channel <name>  Channel name (default: npm-test)
  */
@@ -33,9 +32,8 @@ const logger = pino({
   transport: {
     target: '@abbacchio/transport/pino',
     options: {
-      url: API_URL,
-      channel: options.channels[0],
-      ...(options.key ? { secretKey: options.key } : {}),
+      endpoint: API_URL,
+      serviceName: options.channels[0],
     },
   },
 });

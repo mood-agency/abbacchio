@@ -4,7 +4,9 @@
 
 import { parseArgs } from 'node:util';
 
-export const API_URL = process.env.API_URL || 'http://localhost:4000/api/logs';
+// Transports POST OTLP to {endpoint}/v1/*, so only the origin matters; a
+// legacy value like http://host:4000/api/logs still works.
+export const API_URL = new URL(process.env.API_URL || 'http://localhost:4000').origin;
 
 export const defaultChannels = ['API', 'Worker1', 'Worker2','Worker3','Worker4','Worker5','Worker6','Worker7'] as const;
 
@@ -81,7 +83,6 @@ export function sleep(ms: number): Promise<void> {
 export interface ScriptOptions {
   count: number;
   delay: number;
-  key?: string;
   name?: string;
   channels: readonly string[];
 }
@@ -91,7 +92,6 @@ export function parseScriptArgs(defaultCh: readonly string[]): ScriptOptions {
     options: {
       count: { type: 'string', short: 'c', default: '5' },
       delay: { type: 'string', short: 'd', default: '100' },
-      key: { type: 'string', short: 'k' },
       name: { type: 'string', short: 'n' },
       channel: { type: 'string', short: 'C' },
     },
@@ -104,7 +104,6 @@ export function parseScriptArgs(defaultCh: readonly string[]): ScriptOptions {
   return {
     count: parseInt(values.count!, 10),
     delay: parseInt(values.delay!, 10),
-    key: values.key,
     name: values.name,
     channels,
   };
@@ -114,6 +113,5 @@ export function printConfig(options: ScriptOptions): void {
   console.log(`Inserting ${options.count} logs per channel (${options.channels.join(', ')})`);
   console.log(`Delay between logs: ${options.delay}ms`);
   console.log(`API URL: ${API_URL}`);
-  console.log(`Encryption: ${options.key ? 'enabled' : 'disabled'}`);
   console.log(`Name: ${options.name || 'random'}\n`);
 }

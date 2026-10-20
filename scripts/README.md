@@ -61,13 +61,12 @@ JavaScript scripts also support:
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--key` | `-k` | Encryption key (optional) |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_URL` | `http://localhost:4000/api/logs` | Abbacchio server URL |
+| `API_URL` | `http://localhost:4000` | Abbacchio server base URL |
 
 ## Examples
 
@@ -85,7 +84,7 @@ bun scripts/js/insert-test-logs-bunyan.ts -C app1,app2,app3
 python scripts/python/insert-test-logs-loguru.py -C app1,app2,app3
 
 # Use a different server
-API_URL=http://prod:4000/api/logs bun scripts/js/insert-test-logs-pino.ts
+API_URL=http://prod:4000 bun scripts/js/insert-test-logs-pino.ts
 ```
 
 ## See Also

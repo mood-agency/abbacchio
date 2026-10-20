@@ -5,7 +5,6 @@
  * Usage: bun scripts/js/insert-test-logs-winston.ts [options]
  *   --count <n>       Number of logs per channel (default: 5)
  *   --delay <ms>      Delay between logs in ms (default: 100)
- *   --key <key>       Encryption key (optional)
  *   --name <name>     Log name/namespace (default: random)
  *   --channel <name>  Channel name(s), comma-separated (default: optimus,bumblebee,jazz)
  */
@@ -35,7 +34,7 @@ const levelMap: Record<string, string> = {
   fatal: 'error', // Winston doesn't have fatal, use error
 };
 
-function createLogger(channel: string, secretKey?: string): winston.Logger {
+function createLogger(channel: string): winston.Logger {
   return winston.createLogger({
     level: 'silly', // Enable all levels
     format: winston.format.combine(
@@ -50,9 +49,8 @@ function createLogger(channel: string, secretKey?: string): winston.Logger {
         ),
       }),
       new AbbacchioWinstonTransport({
-        url: API_URL,
-        channel,
-        ...(secretKey ? { secretKey } : {}),
+        endpoint: API_URL,
+        serviceName: channel,
       }),
     ],
   });
@@ -77,7 +75,7 @@ async function main() {
 
   // Create loggers for each channel
   const loggers = Object.fromEntries(
-    options.channels.map((channel) => [channel, createLogger(channel, options.key)])
+    options.channels.map((channel) => [channel, createLogger(channel)])
   );
 
   for (let i = 0; i < options.count; i++) {

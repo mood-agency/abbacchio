@@ -78,7 +78,6 @@ bun scripts/js/test-npm-package-pino.ts --channel my-test-channel
 |--------|-------|---------|-------------|
 | `--count` | `-c` | 5 | Number of logs per channel |
 | `--delay` | `-d` | 100 | Delay between logs in ms |
-| `--key` | `-k` | - | Encryption key (optional) |
 | `--name` | `-n` | random | Log name/namespace |
 | `--channel` | `-C` | optimus,bumblebee,jazz | Channel name(s), comma-separated |
 
@@ -99,4 +98,4 @@ bun scripts/js/insert-test-logs-bunyan.ts --name auth --channel app1,app2
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_URL` | `http://localhost:4000/api/logs` | Abbacchio server URL |
+| `API_URL` | `http://localhost:4000` | Abbacchio server base URL |

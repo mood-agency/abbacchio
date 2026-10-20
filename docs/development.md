@@ -40,8 +40,8 @@ bun scripts/js/insert-test-logs-pino.ts [options]
 | --------- | ----- | ------- | ---------------------------- |
 | `--count` | `-c`  | `5`     | Number of logs per channel   |
 | `--delay` | `-d`  | `100`   | Delay between logs in ms     |
-| `--key`   | `-k`  | -       | Encryption key (optional)    |
 | `--name`  | `-n`  | random  | Log name/namespace           |
+| `--channel` | `-C` | 8 built-in | Channel name(s), comma-separated |
 
 **Examples:**
 
@@ -51,9 +51,6 @@ bun scripts/js/insert-test-logs-pino.ts
 
 # Send 20 logs per channel with 50ms delay
 bun scripts/js/insert-test-logs-pino.ts --count 20 --delay 50
-
-# Send encrypted logs
-bun scripts/js/insert-test-logs-pino.ts --key my-secret-key
 
 # Send logs with a specific namespace
 bun scripts/js/insert-test-logs-pino.ts --name my-service
