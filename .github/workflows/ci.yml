@@ -28,11 +28,16 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Desktop (Tauri) needs Rust + webkit; it is checked in build-tauri
       - name: Type check
-        run: pnpm -r run build
+        run: pnpm -r --filter '!@abbacchio/desktop' run build
 
   # ============================================
   # Build packages npm
@@ -50,6 +55,10 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -101,6 +110,10 @@ jobs:
         with:
           workspaces: packages/desktop/src-tauri -> target
           shared-key: tauri-linux-v2
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
