@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { LogEntry, MetricDataPoint, TraceSpan } from '../types';
+import { appendLogs } from '../lib/log-window';
 
 const API_BASE = '/api';
 const POLL_INTERVAL = 1000; // 1 second
@@ -98,6 +99,22 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     hasMoreOlderLogsRef.current = hasMoreOlderLogs;
   }, [hasMoreOlderLogs]);
 
+  // Append newer logs to the in-memory window (dedupe + cap) and keep the
+  // cursors in sync. When the cap drops the oldest logs, they are still on the
+  // server, so re-arm backward pagination from the new oldest entry.
+  const appendToWindow = useCallback((prev: LogEntry[], incoming: LogEntry[]) => {
+    const result = appendLogs(prev, incoming);
+    if (result.added > 0) {
+      lastLogIdRef.current = result.logs[result.logs.length - 1].id;
+    }
+    if (result.trimmed) {
+      oldestLogIdRef.current = result.logs[0].id;
+      hasMoreOlderLogsRef.current = true;
+      setHasMoreOlderLogs(true);
+    }
+    return result;
+  }, []);
+
   // Fetch channels list
   const fetchChannels = useCallback(async () => {
     try {
@@ -173,10 +190,11 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         lastLogIdRef.current = newLogs[newLogs.length - 1].id;
 
         if (!isIncremental) {
-          // Initial load — replace all (API returns newest 1000 in chronological order)
-          setLogs(newLogs);
-          // Track oldest log for backward pagination
+          // Initial load (newest 1000, chronological). Track oldest for backward
+          // pagination, then merge rather than replace: `prev` holds only logs
+          // that streamed in over SSE while this request was in flight.
           oldestLogIdRef.current = newLogs[0].id;
+          setLogs(prev => appendToWindow(newLogs, prev).logs);
           // Determine if there are older logs to load
           const total = data.total;
           if (total !== undefined) {
@@ -188,11 +206,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         } else {
           // Incremental — append, deduplicating by id
           setLogs(prev => {
-            const existingIds = new Set(prev.map(l => l.id));
-            const unique = newLogs.filter(l => !existingIds.has(l.id));
-            if (unique.length === 0) return prev;
-            setServerTotal(st => st !== null ? st + unique.length : null);
-            return [...prev, ...unique];
+            const { logs: next, added } = appendToWindow(prev, newLogs);
+            if (added > 0) setServerTotal(st => st !== null ? st + added : null);
+            return next;
           });
         }
       }
@@ -205,7 +221,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
     } finally {
       fetchInFlightRef.current = false;
     }
-  }, []);
+  }, [appendToWindow]);
 
   // Fetch server-side counts for active channel
   const fetchCounts = useCallback(async () => {
@@ -411,13 +427,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
             if (filteredLogs.length === 0) return;
             
             setLogs(prev => {
-              const existingIds = new Set(prev.map(l => l.id));
-              const unique = filteredLogs.filter(l => !existingIds.has(l.id));
-              if (unique.length === 0) return prev;
-              
-              setServerTotal(st => st !== null ? st + unique.length : null);
-              lastLogIdRef.current = unique[unique.length - 1].id;
-              return [...prev, ...unique];
+              const { logs: next, added } = appendToWindow(prev, filteredLogs);
+              if (added > 0) setServerTotal(st => st !== null ? st + added : null);
+              return next;
             });
           }
         } catch (err) {
@@ -440,6 +452,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       });
 
       es.onopen = () => {
+        // A fresh EventSource doesn't replay what was emitted while we were
+        // disconnected; backfill the gap from the last log we hold.
+        if (reconnectAttempts > 0) fetchLogs();
         reconnectAttempts = 0; // reset
       };
 
@@ -458,7 +473,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       if (es) es.close();
       clearTimeout(reconnectTimeout);
     };
-  }, [activeChannel, filtersKey]);
+  }, [activeChannel, filtersKey, appendToWindow, fetchLogs]);
 
   // Poll for other data (metrics, traces, counts, channels)
   useEffect(() => {
