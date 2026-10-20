@@ -60,6 +60,10 @@ interface MetricEntry {
   attributes: Record<string, unknown>;
 }
 
+const MAX_SQL_ROWS = 500;
+// Tool output is fed straight into the model's context; cap it.
+const MAX_RESPONSE_CHARS = 100_000;
+
 // Database helper
 function getDatabase(): Database.Database | null {
   if (!existsSync(DB_PATH)) {
@@ -180,7 +184,7 @@ const tools: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        sql: { type: 'string', description: 'The SQL SELECT statement to execute' },
+        sql: { type: 'string', description: `The SQL SELECT statement to execute (at most ${MAX_SQL_ROWS} rows are returned)` },
       },
       required: ['sql'],
     },
@@ -284,16 +288,24 @@ function getMetricData(name: string, channel?: string, limit = 100): MetricEntry
   } finally { db.close(); }
 }
 
-function querySql(sql: string): any[] {
+function querySql(sql: string): { rows: unknown[]; truncated: boolean } {
   const db = getDatabase();
-  if (!db) return [];
+  if (!db) return { rows: [], truncated: false };
   try {
-    // Basic safety check for write operations even if opened as readonly
-    const upperSql = sql.trim().toUpperCase();
-    if (!upperSql.startsWith('SELECT') && !upperSql.startsWith('WITH') && !upperSql.startsWith('PRAGMA')) {
-      throw new Error('Only read-only queries (SELECT, WITH, PRAGMA) are allowed.');
+    // Ask SQLite itself rather than trusting a keyword prefix: `readonly` is
+    // false for anything that writes (incl. WITH ... DELETE and mutating
+    // PRAGMAs), and `reader` is false for statements that return no rows.
+    // PRAGMA/ATTACH/DETACH are refused outright as they act on the connection.
+    const stmt = db.prepare(sql);
+    if (/^\s*(PRAGMA|ATTACH|DETACH)\b/i.test(sql) || !stmt.readonly || !stmt.reader) {
+      throw new Error('Only read-only SELECT queries are allowed.');
     }
-    return db.prepare(sql).all();
+    const rows: unknown[] = [];
+    for (const row of stmt.iterate()) {
+      if (rows.length === MAX_SQL_ROWS) return { rows, truncated: true };
+      rows.push(row);
+    }
+    return { rows, truncated: false };
   } finally { db.close(); }
 }
 
@@ -344,7 +356,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'analyze_error': result = analyzeError((args as any).error, (args as any).channel); break;
       default: return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     }
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    let text = JSON.stringify(result, null, 2);
+    if (text.length > MAX_RESPONSE_CHARS) {
+      text = `${text.slice(0, MAX_RESPONSE_CHARS)}\n... [truncated: response exceeded ${MAX_RESPONSE_CHARS} characters; narrow the query or lower the limit]`;
+    }
+    return { content: [{ type: 'text', text }] };
   } catch (err: any) {
     return { content: [{ type: 'text', text: `Error executing ${name}: ${err.message}` }], isError: true };
   }

@@ -25,6 +25,10 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
   const mountedRef = useRef(true);
   const lastIdRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // One request at a time: a slow response must not race the next tick and
+  // rewind lastIdRef. The generation discards responses from before a reconnect.
+  const inFlightRef = useRef(false);
+  const generationRef = useRef(0);
 
   // Store callbacks in refs to avoid reconnection on callback changes
   const onLogRef = useRef(onLog);
@@ -36,6 +40,9 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
   }, [onLog, onBatch]);
 
   const poll = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    const generation = generationRef.current;
     try {
       const params = new URLSearchParams({ channel });
       if (lastIdRef.current) {
@@ -47,12 +54,13 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
         throw new Error(`HTTP ${res.status}`);
       }
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || generation !== generationRef.current) return;
 
       setStatus('connected');
       setError(null);
 
       const data = await res.json() as { logs: LogEntry[] };
+      if (generation !== generationRef.current) return;
       const logs: LogEntry[] = data.logs || [];
 
       if (logs.length > 0) {
@@ -65,9 +73,11 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
         }
       }
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || generation !== generationRef.current) return;
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to connect');
+    } finally {
+      if (generation === generationRef.current) inFlightRef.current = false;
     }
   }, [apiUrl, channel]);
 
@@ -78,6 +88,8 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
     }
 
     lastIdRef.current = null;
+    generationRef.current++;
+    inFlightRef.current = false;
     setStatus('connecting');
     setError(null);
 

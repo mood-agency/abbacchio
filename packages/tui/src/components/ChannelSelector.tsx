@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import type { ChannelConfig } from '../lib/storage.js';
+import { sanitizeForTerminal } from '../lib/colors.js';
 
 interface ChannelSelectorProps {
   apiUrl: string;
@@ -127,7 +128,7 @@ export function ChannelSelector({
     .map(ch => {
       const hasKey = !!getKey(ch);
       const isCurrent = ch === currentChannel;
-      let label = ch;
+      let label = sanitizeForTerminal(ch);
       if (hasKey) label = `🔑 ${label}`;
       if (isCurrent) label = `${label} (current)`;
       return { label, value: ch };

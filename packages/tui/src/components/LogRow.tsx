@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { LogEntry } from '../types/index.js';
-import { getLevelBadge, formatTime, formatNamespace, highlightSearch, truncate } from '../lib/colors.js';
+import { getLevelBadge, formatTime, formatNamespace, highlightSearch, truncate, sanitizeForTerminal } from '../lib/colors.js';
 
 interface LogRowProps {
   log: LogEntry;
@@ -38,7 +38,8 @@ export function LogRow({ log, search, maxWidth = 120, selected = false }: LogRow
 
   // Truncate message first (before adding ANSI codes from search highlight)
   // Then apply search highlighting to the truncated result
-  const fullContent = dataStr ? `${message} ${dataStr}` : message;
+  // Sanitize before truncate/highlight: those add their own (trusted) ANSI codes.
+  const fullContent = sanitizeForTerminal(dataStr ? `${message} ${dataStr}` : message);
   const truncatedContent = truncate(fullContent, availableWidth);
 
   // Apply search highlighting after truncation to avoid ANSI code issues

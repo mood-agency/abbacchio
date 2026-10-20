@@ -47,12 +47,29 @@ export function formatTime(time: number): string {
   );
 }
 
+// ANSI/VT escape sequences: CSI (ESC [ ...), OSC (ESC ] ... BEL|ST), and
+// two-char ESC sequences. Matches the full sequence so no payload leaks through.
+// eslint-disable-next-line no-control-regex
+const ESCAPE_SEQUENCE = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)?|[@-Z\\-_])/g;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x1F\x7F-\x9F]/g;
+
+/**
+ * Make server-supplied text safe to print in a terminal. Log content is
+ * untrusted: escape sequences could clear the screen, retitle the window, or
+ * hide output. Escape sequences are removed; remaining control characters
+ * (newlines, tabs, CR, ...) become spaces so each log stays on one row.
+ */
+export function sanitizeForTerminal(text: string): string {
+  return text.replace(ESCAPE_SEQUENCE, '').replace(CONTROL_CHARS, ' ');
+}
+
 /**
  * Format namespace
  */
 export function formatNamespace(namespace?: string): string {
   if (!namespace) return '';
-  return chalk.magenta(`[${namespace}]`);
+  return chalk.magenta(`[${sanitizeForTerminal(namespace)}]`);
 }
 
 /**

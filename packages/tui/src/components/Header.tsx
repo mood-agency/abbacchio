@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { ConnectionStatus } from '../types/index.js';
-import { statusColors } from '../lib/colors.js';
+import { statusColors, sanitizeForTerminal } from '../lib/colors.js';
 
 interface HeaderProps {
   channel: string;
@@ -27,7 +27,7 @@ export function Header({ channel, status, logCount, filteredCount, paused }: Hea
         <Text bold color="cyan">Abbacchio</Text>
         <Text dimColor> | </Text>
         <Text>Channel: </Text>
-        <Text bold color="yellow">{channel}</Text>
+        <Text bold color="yellow">{sanitizeForTerminal(channel)}</Text>
       </Box>
 
       <Box>

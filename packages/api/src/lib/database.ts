@@ -653,8 +653,19 @@ export class LogDatabase {
       ? withoutTrailing
       : `${withoutTrailing} LIMIT 10000`;
 
+    // With :memory: the "readonly" handle is the writable connection, and the
+    // keyword checks above can't see past a CTE (WITH x AS (...) DELETE ...).
+    // query_only makes SQLite itself refuse writes; bun:sqlite is synchronous,
+    // so nothing else runs on this connection while the flag is on.
+    const sharesWriter = this.readonlyDb === this.db;
     const start = performance.now();
-    const rows = this.readonlyDb.prepare(finalSql).all() as Record<string, unknown>[];
+    let rows: Record<string, unknown>[];
+    if (sharesWriter) this.db.run('PRAGMA query_only = ON');
+    try {
+      rows = this.readonlyDb.prepare(finalSql).all() as Record<string, unknown>[];
+    } finally {
+      if (sharesWriter) this.db.run('PRAGMA query_only = OFF');
+    }
     const executionTimeMs = Math.round((performance.now() - start) * 100) / 100;
 
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];

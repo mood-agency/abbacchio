@@ -317,55 +317,80 @@ export async function executeSql(c: Context) {
  * Query params:
  *   - channel: filter by specific channel (optional, default: all channels)
  */
+// Each SSE client holds a connection, a keepalive timer, and two buffer
+// listeners for as long as it stays open; the rate limiter only counts the
+// initial request, so cap concurrent streams separately.
+let openStreams = 0;
+
+function maxSseConnections(): number {
+  return parseInt(process.env.MAX_SSE_CONNECTIONS || '200', 10);
+}
+
 export function streamLogs(c: Context) {
   const buffer = getLogBuffer();
   const channel = c.req.query('channel');
+  const maxStreams = maxSseConnections();
+
+  if (openStreams >= maxStreams) {
+    return c.json({ error: 'Too many open streams' }, 503);
+  }
+  // One 'logs' and one 'clear' listener per stream; keep Node's leak warning
+  // meaningful by sizing it to the cap rather than the default of 10.
+  if (buffer.getMaxListeners() < maxStreams + 10) {
+    buffer.setMaxListeners(maxStreams + 10);
+  }
+  openStreams++;
 
   return streamSSE(c, async (stream) => {
-    // Keep connection alive
-    const keepAlive = setInterval(() => {
-      stream.writeSSE({ event: 'ping', data: 'ping' }).catch(() => {});
-    }, 15000);
+    try {
+      // Keep connection alive
+      const keepAlive = setInterval(() => {
+        stream.writeSSE({ event: 'ping', data: 'ping' }).catch(() => {});
+      }, 15000);
 
-    const onLogs = async (logs: LogEntry[]) => {
-      // Filter by channel if requested
-      const filtered = channel ? logs.filter(l => l.channel === channel) : logs;
-      if (filtered.length > 0) {
-        try {
-          await stream.writeSSE({
-            event: 'logs',
-            data: JSON.stringify(filtered)
-          });
-        } catch (e) {
-          // Ignore write errors
+      const onLogs = async (logs: LogEntry[]) => {
+        // Filter by channel if requested
+        const filtered = channel ? logs.filter(l => l.channel === channel) : logs;
+        if (filtered.length > 0) {
+          try {
+            await stream.writeSSE({
+              event: 'logs',
+              data: JSON.stringify(filtered)
+            });
+          } catch (e) {
+            // Ignore write errors
+          }
         }
-      }
-    };
+      };
 
-    const onClear = async (clearedChannel?: string) => {
-      if (!channel || clearedChannel === channel || !clearedChannel) {
-        try {
-          await stream.writeSSE({
-            event: 'clear',
-            data: JSON.stringify({ channel: clearedChannel || 'all' })
-          });
-        } catch (e) {}
-      }
-    };
+      const onClear = async (clearedChannel?: string) => {
+        if (!channel || clearedChannel === channel || !clearedChannel) {
+          try {
+            await stream.writeSSE({
+              event: 'clear',
+              data: JSON.stringify({ channel: clearedChannel || 'all' })
+            });
+          } catch (e) {}
+        }
+      };
 
-    buffer.on('logs', onLogs);
-    buffer.on('clear', onClear);
+      buffer.on('logs', onLogs);
+      buffer.on('clear', onClear);
 
-    await stream.writeSSE({ event: 'connected', data: 'ok' });
-
-    // Wait until client disconnects
-    await new Promise<void>((resolve) => {
-      stream.onAbort(() => {
-        clearInterval(keepAlive);
-        buffer.off('logs', onLogs);
-        buffer.off('clear', onClear);
-        resolve();
+      // Wait until client disconnects
+      const closed = new Promise<void>((resolve) => {
+        stream.onAbort(() => {
+          clearInterval(keepAlive);
+          buffer.off('logs', onLogs);
+          buffer.off('clear', onClear);
+          resolve();
+        });
       });
-    });
+
+      await stream.writeSSE({ event: 'connected', data: 'ok' });
+      await closed;
+    } finally {
+      openStreams--;
+    }
   });
 }

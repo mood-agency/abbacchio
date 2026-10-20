@@ -10,6 +10,7 @@
 | `MAX_LOGS_PER_CHANNEL` | `5000`           | Max logs retained **in the in-memory ring buffer** per channel. `0` = retain nothing (disk-only mode — see below). |
 | `MAX_CHANNELS`         | `10000`          | Max registered channels in memory, applied separately to the log, metric, and trace buffers (LRU eviction beyond this). |
 | `CHANNEL_TTL`          | `86400000` (24h) | A channel with no activity for this long is dropped from the in-memory buffer. Does **not** delete its persisted SQLite rows. |
+| `MAX_SSE_CONNECTIONS` | `200`            | Max concurrent `/api/stream` (SSE) connections. Further connections get `503` until one closes. |
 | `SQLITE_PATH`          | `./data/logs.db` | Path to the SQLite database. Use `:memory:` for an ephemeral RAM database (wiped on restart). |
 | `SQLITE_MAX_LOGS`      | `100000`         | Max logs kept on disk. Older logs are pruned by rowid. `0` = unlimited. |
 | `SQLITE_TTL_MS`        | `0`              | Time-based retention in ms. If > 0, logs older than this are pruned. `0` = disabled (count-cap only). |
