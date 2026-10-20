@@ -17,7 +17,7 @@ describe('console network capture ignores its own endpoint', () => {
 
   it('ignores the default endpoint when none is passed', () => {
     interceptConsole({ captureFetch: true, passthrough: true });
-    expect(ignored()).toContain('http://localhost:4002');
+    expect(ignored()).toContain('http://localhost:4000');
   });
 
   it('keeps user ignore patterns and still adds the endpoint', () => {

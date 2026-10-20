@@ -78,7 +78,7 @@ function defaultBrowserInstanceId(): string | undefined {
 }
 
 export interface AbbacchioClientOptions {
-  /** Base URL of the OTLP server (e.g. "http://localhost:4002"). Logs go to {endpoint}/v1/logs */
+  /** Base URL of the OTLP server (e.g. "http://localhost:4000"). Logs go to {endpoint}/v1/logs */
   endpoint?: string;
   /** @deprecated Use `endpoint` instead */
   url?: string;
@@ -231,7 +231,7 @@ export class AbbacchioClient {
         this.endpoint = options.url;
       }
     } else {
-      this.endpoint = options.endpoint || 'http://localhost:4002';
+      this.endpoint = options.endpoint || 'http://localhost:4000';
     }
     this.serviceName = options.serviceName || 'default';
     this.source = options.source;

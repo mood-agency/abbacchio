@@ -29,7 +29,7 @@ Configure via global variable:
 ```html
 <script>
   window.__ABBACCHIO_CONFIG__ = {
-    endpoint: 'http://localhost:4002',
+    endpoint: 'http://localhost:4000',
     serviceName: 'my-app',
   }
 </script>
@@ -44,7 +44,7 @@ Configure via global variable:
 import { interceptConsole, stopInterceptConsole } from '@abbacchio/browser-transport'
 
 interceptConsole({
-  endpoint: 'http://localhost:4002',
+  endpoint: 'http://localhost:4000',
   serviceName: 'my-frontend',
   appName: 'my-app',
 })
@@ -62,7 +62,7 @@ stopInterceptConsole()
 import { createLogger } from '@abbacchio/browser-transport'
 
 const log = createLogger({
-  endpoint: 'http://localhost:4002',
+  endpoint: 'http://localhost:4000',
   serviceName: 'my-app',
   name: 'my-service',
 })
@@ -84,7 +84,7 @@ import { AbbacchioProvider, useLogger } from '@abbacchio/browser-transport/react
 function App() {
   return (
     <AbbacchioProvider
-      endpoint="http://localhost:4002"
+      endpoint="http://localhost:4000"
       serviceName="my-react-app"
       captureConsole
       captureWebVitals
@@ -110,7 +110,7 @@ Capture Core Web Vitals (LCP, INP, CLS, FCP, TTFB) using Google's [web-vitals](h
 import { createLogger } from '@abbacchio/browser-transport'
 
 const log = createLogger({
-  endpoint: 'http://localhost:4002',
+  endpoint: 'http://localhost:4000',
   serviceName: 'my-app',
   captureWebVitals: true,
 })
@@ -120,7 +120,7 @@ const log = createLogger({
 
 ```tsx
 <AbbacchioProvider
-  endpoint="http://localhost:4002"
+  endpoint="http://localhost:4000"
   serviceName="my-app"
   captureWebVitals
 >
@@ -178,7 +178,7 @@ Automatically capture HTTP requests and WebSockets.
 
 ```javascript
 const log = createLogger({
-  endpoint: 'http://localhost:4002',
+  endpoint: 'http://localhost:4000',
   serviceName: 'my-app',
   captureFetch: true,
   captureXhr: true,
@@ -304,7 +304,7 @@ The client supports sending custom metrics and traces via the OTLP protocol.
 ```javascript
 import { createLogger } from '@abbacchio/browser-transport'
 
-const log = createLogger({ endpoint: 'http://localhost:4002', serviceName: 'my-app' })
+const log = createLogger({ endpoint: 'http://localhost:4000', serviceName: 'my-app' })
 
 log.metric({
   name: 'page_load_time',
@@ -333,7 +333,7 @@ try {
 
 ```typescript
 interface LoggerOptions {
-  endpoint?: string       // OTLP server URL (default: 'http://localhost:4002')
+  endpoint?: string       // OTLP server URL (default: 'http://localhost:4000')
   serviceName?: string    // OTLP service.name attribute (default: 'default')
   name?: string           // Logger name (default: 'app')
   enabled?: boolean       // Send logs (default: true)
@@ -360,7 +360,7 @@ interface LoggerOptions {
 
 ```tsx
 <AbbacchioProvider
-  endpoint="http://localhost:4002"
+  endpoint="http://localhost:4000"
   serviceName="my-app"
   captureConsole={true}
   captureWebVitals={true}

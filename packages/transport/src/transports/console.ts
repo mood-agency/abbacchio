@@ -69,7 +69,7 @@ function createInterceptedMethod(
  * import { interceptConsole, restoreConsole } from "@abbacchio/transport/transports/console";
  *
  * interceptConsole({
- *   endpoint: "http://localhost:4002",
+ *   endpoint: "http://localhost:4000",
  *   serviceName: "my-app",
  *   passthrough: true,
  * });

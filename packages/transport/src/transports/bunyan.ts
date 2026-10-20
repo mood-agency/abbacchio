@@ -19,7 +19,7 @@ export interface BunyanStreamOptions extends AbbacchioClientOptions {
  *   streams: [
  *     { stream: process.stdout },
  *     bunyanStream({
- *       endpoint: "http://localhost:4002",
+ *       endpoint: "http://localhost:4000",
  *       serviceName: "my-app",
  *     }),
  *   ],

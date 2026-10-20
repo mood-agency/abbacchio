@@ -39,7 +39,7 @@ export interface AbbacchioProviderProps extends LoggerOptions {
  * function App() {
  *   return (
  *     <AbbacchioProvider
- *       endpoint="http://localhost:4002"
+ *       endpoint="http://localhost:4000"
  *       serviceName="my-react-app"
  *       captureConsole
  *     >

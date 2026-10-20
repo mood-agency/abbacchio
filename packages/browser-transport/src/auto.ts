@@ -17,7 +17,7 @@
  * ```html
  * <script>
  *   window.__ABBACCHIO_CONFIG__ = {
- *     endpoint: 'http://localhost:4002',
+ *     endpoint: 'http://localhost:4000',
  *     serviceName: 'my-app',
  *     appName: 'my-web-app',
  *   }
@@ -40,7 +40,7 @@ const config: ConsoleInterceptorOptions =
   (typeof window !== 'undefined' && window.__ABBACCHIO_CONFIG__) || {};
 
 interceptConsole({
-  endpoint: 'http://localhost:4002',
+  endpoint: 'http://localhost:4000',
   serviceName: 'browser',
   appName: 'auto',
   ...config,

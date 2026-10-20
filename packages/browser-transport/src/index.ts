@@ -6,7 +6,7 @@
  * import { createLogger } from '@abbacchio/browser-transport'
  *
  * const log = createLogger({
- *   endpoint: 'http://localhost:4002',
+ *   endpoint: 'http://localhost:4000',
  *   serviceName: 'my-app',
  * })
  *
@@ -19,7 +19,7 @@
  * import { interceptConsole } from '@abbacchio/browser-transport'
  *
  * interceptConsole({
- *   endpoint: 'http://localhost:4002',
+ *   endpoint: 'http://localhost:4000',
  *   serviceName: 'my-app',
  * })
  *
@@ -33,7 +33,7 @@
  *
  * function App() {
  *   return (
- *     <AbbacchioProvider endpoint="http://localhost:4002" serviceName="my-app" captureConsole>
+ *     <AbbacchioProvider endpoint="http://localhost:4000" serviceName="my-app" captureConsole>
  *       <MyApp />
  *     </AbbacchioProvider>
  *   )

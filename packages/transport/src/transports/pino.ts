@@ -30,7 +30,7 @@ export interface AbbacchioPinoStream extends Transform {
  *   transport: {
  *     target: "@abbacchio/transport/pino",
  *     options: {
- *       endpoint: "http://localhost:4002",
+ *       endpoint: "http://localhost:4000",
  *       serviceName: "my-app",
  *     },
  *   },
@@ -68,7 +68,7 @@ export { pinoTransport };
  * import { createPinoStream } from "@abbacchio/transport/transports/pino";
  *
  * const stream = createPinoStream({
- *   endpoint: "http://localhost:4002",
+ *   endpoint: "http://localhost:4000",
  *   serviceName: "my-app",
  * });
  *

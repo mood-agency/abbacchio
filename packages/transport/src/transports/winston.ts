@@ -18,7 +18,7 @@ export interface WinstonTransportOptions extends AbbacchioClientOptions {
  *   transports: [
  *     new winston.transports.Console(),
  *     new AbbacchioWinstonTransport({
- *       endpoint: "http://localhost:4002",
+ *       endpoint: "http://localhost:4000",
  *       serviceName: "my-app",
  *     }),
  *   ],
