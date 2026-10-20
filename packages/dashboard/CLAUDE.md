@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Abbacchio Dashboard** is the React frontend for the Abbacchio real-time log viewer. It connects to the API via HTTP polling, displays logs with filtering/search, and optionally persists logs in browser SQLite.
+**Abbacchio Dashboard** is the React frontend for the Abbacchio real-time log viewer. It loads logs from the API over HTTP, receives new ones over SSE, and displays logs, metrics, and traces with filtering/search.
 
 ## Monorepo Structure
 
@@ -24,62 +24,55 @@ pnpm build            # Build all packages
 npm run dev           # Vite dev server on port 4001
 npm run build         # tsc -b && vite build
 npm run preview       # Preview production build
+bun test tests        # Unit tests
 ```
 
 ## Architecture
 
 ### Key Design Decisions
 
-1. **Browser SQLite for Local Persistence**: Logs are stored in SQLite (sql.js) running in a Web Worker. All queries happen off-main-thread via `sqlite-worker.ts`.
+1. **Server is the source of truth**: The dashboard keeps no local database. `usePolling` holds a bounded in-memory window of the active channel's logs (`MAX_LOGS_IN_MEMORY` = 50k in `lib/log-window.ts`); anything older is re-fetched from the server with backward pagination.
 
-2. **Two-Hook Pattern**:
-   - `useChannelManager` manages HTTP polling, encryption, and channel state
-   - `useLogStore` handles log processing, batching, and SQLite writes
+2. **SSE for live logs, HTTP for everything else**: New logs arrive over `/api/stream`; on reconnect the hook backfills the gap with `?afterId=`. Metrics, traces, counts, and the channel list are polled every few seconds.
 
-3. **Client-Side Decryption**: Server passes encrypted payloads through unchanged. Decryption uses AES-256-GCM with user-provided key (`crypto.ts`).
+3. **Server-side filters**: Level/namespace filters are sent to the API (`levels=`, `namespaces=`) and re-applied client-side to streamed logs.
 
-4. **Batched Writes**: Incoming logs are batched (100ms interval) before SQLite insertion to reduce write overhead.
+4. **No decryption**: Encrypted entries are displayed as such; the dashboard has no decryption code.
 
 ### Core Files
 
 | File | Purpose |
 |------|---------|
-| `src/hooks/useChannelManager.ts` | HTTP polling, channel management, encryption |
-| `src/hooks/useLogStore.ts` | Log processing, batching, SQLite persistence |
-| `src/hooks/useChannelLogStream.ts` | Pagination, filtering, search |
-| `src/lib/sqlite-db.ts` | Worker message interface for SQLite operations |
-| `src/lib/sqlite-worker.ts` | Web Worker running sql.js with OPFS persistence |
-| `src/lib/crypto.ts` | AES-256-GCM decryption using Web Crypto API |
+| `src/hooks/usePolling.ts` | Initial load, SSE stream + reconnect backfill, backward pagination, metrics/traces/channels polling |
+| `src/lib/log-window.ts` | Append/dedupe/cap logic for the in-memory log window (unit-tested in `tests/`) |
+| `src/hooks/useFilterParams.ts` | Filter state synced to URL params |
+| `src/hooks/useSqlQuery.ts` | Runs ad-hoc SQL via `POST /api/sql` |
 | `src/components/LogViewer.tsx` | Main UI container |
 | `src/components/LogRow.tsx` | Individual log entry display |
 | `src/components/FilterBar.tsx` | Search and filter controls |
+| `src/components/MetricsViewer.tsx` / `TracesViewer.tsx` | Metrics and traces views |
 
 ### Data Flow
 
 ```
-HTTP polling /api/logs?afterId=X
-    ↓
-useChannelManager (poll → decrypt → batch)
-    ↓
-useLogStore (process → SQLite write)
-    ↓
-useChannelLogStream (SQL query with filters)
-    ↓
-LogViewer → LogRow (virtual scrolling via @tanstack/react-virtual)
+GET /api/logs (newest 1000)  ─┐
+GET /api/stream (SSE)        ─┼→ usePolling → bounded logs window → LogViewer → LogRow
+GET /api/logs?beforeId= (older)┘                    (virtual scrolling via @tanstack/react-virtual)
 ```
 
 ### URL Parameters
 
-The dashboard accepts query parameters for pre-configuration:
-- `?channel=myapp` - Filter to specific channel
-- `?key=secretkey` - Pre-set decryption key
+- `?channel=myapp` - Select a channel
+- `?paused=1` - Start with live updates paused
+- `?levels=`, `?namespaces=`, `?time=`, `?q=`, `?case=`, `?regex=` - Pre-set filters
+- `?view=` - Open a specific view
 
 ### Path Alias
 
 TypeScript is configured with `@/*` → `src/*` for imports:
 ```typescript
 import { LogEntry } from '@/types';
-import { useChannelLogStream } from '@/hooks/useChannelLogStream';
+import { usePolling } from '@/hooks/usePolling';
 ```
 
 ## Key Technologies
@@ -87,5 +80,4 @@ import { useChannelLogStream } from '@/hooks/useChannelLogStream';
 - **React 18** with functional components and hooks
 - **Vite** for development and build
 - **Tailwind CSS** + **Radix UI** for styling (components in `src/components/ui/`)
-- **sql.js** in Web Worker for browser SQLite
 - **@tanstack/react-virtual** for virtualized scrolling

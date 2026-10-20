@@ -2,7 +2,7 @@
 
 ## Overview
 
-Abbacchio is a real-time log viewer dashboard with HTTP ingestion. It works with any logging library (Pino, Winston, Bunyan, console) via HTTP transports. Logs are delivered in real-time via HTTP polling and displayed in a searchable, filterable UI.
+Abbacchio is a real-time log viewer dashboard with HTTP ingestion. It works with any logging library (Pino, Winston, Bunyan, console) via HTTP transports, and also accepts OTLP/HTTP JSON logs, metrics, and traces. New logs are pushed to the dashboard over SSE and displayed in a searchable, filterable UI.
 
 ## Project Structure
 
@@ -17,7 +17,7 @@ packages/
 ├── tui/          # Terminal UI for viewing logs (Ink + React)
 ├── desktop/      # Tauri desktop app wrapper
 ├── mcp/          # MCP server for Claude Code integration
-python/           # Python transport package (PyPI: abbacchio)
+python/           # Python transport package (PyPI: abbacchio-transport)
 ```
 
 ## Key Commands
@@ -46,10 +46,12 @@ pnpm test             # Run all tests
 ## Architecture
 
 ### Log Flow
-1. Application sends logs via HTTP POST to `/api/logs` (or `/api/logs/:channel`)
-2. API server stores logs in SQLite and in-memory buffer
-3. Dashboard/TUI polls `/api/logs` for new logs via HTTP polling
-4. Real-time delivery of new logs to all connected clients
+1. Applications send telemetry over HTTP:
+   - Node and browser transports send OTLP JSON to `/v1/logs`, `/v1/metrics`, `/v1/traces`
+   - The Python transport (and plain `curl`) POST to `/api/logs` (channel via `X-Channel` or `?channel=`)
+2. API server stores logs in SQLite and an in-memory buffer
+3. Dashboard loads the newest logs from `GET /api/logs`, receives new ones over SSE (`/api/stream`), and pages older ones with `?beforeId=`
+4. TUI polls `GET /api/logs?afterId=` every second
 
 ### Key Technologies
 - **API**: Hono (lightweight web framework), Bun runtime, SQLite (bun:sqlite)
@@ -59,14 +61,14 @@ pnpm test             # Run all tests
 - **Transports**: pino-abstract-transport pattern
 
 ### Encryption
-Optional end-to-end encryption using Web Crypto API (AES-GCM). Logs are encrypted client-side before sending and decrypted in the browser.
+The API passes `{ encrypted: ... }` payloads through unchanged. Only the TUI decrypts them today (`packages/tui/src/lib/crypto.ts`); the dashboard shows encrypted entries but has no decryption, and the Node/browser transports do not encrypt.
 
 ## Package Publishing
 
 - Main package publishes to npm as `abbacchio`
 - Transport package publishes as `@abbacchio/transport`
 - TUI publishes as `@abbacchio/tui`
-- Python package publishes to PyPI as `abbacchio`
+- Python package publishes to PyPI as `abbacchio-transport`
 
 ## Important Files
 
@@ -74,7 +76,8 @@ Optional end-to-end encryption using Web Crypto API (AES-GCM). Logs are encrypte
 - `packages/api/src/routes/logs.handlers.ts` - Log ingestion and retrieval handlers
 - `packages/api/src/lib/database.ts` - SQLite persistence layer
 - `packages/dashboard/src/App.tsx` - Dashboard main component
-- `packages/dashboard/src/hooks/useChannelManager.ts` - HTTP polling and channel management
+- `packages/dashboard/src/hooks/usePolling.ts` - Initial load, SSE stream, pagination, and channel management
+- `packages/transport/src/client.ts` - Shared OTLP client (batching, 429 backoff, buffer caps)
 - `packages/transport/src/transports/pino.ts` - Pino transport implementation
 
 ## Conventions

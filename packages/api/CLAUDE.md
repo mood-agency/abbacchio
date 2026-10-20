@@ -36,7 +36,7 @@ bun test --watch      # bun test watch mode
 
 2. **Channel-Based Isolation**: Logs are namespaced by channel to support multi-app scenarios.
 
-3. **End-to-End Encryption**: Server accepts `{ encrypted: "base64-string" }` payloads and passes them through unchanged. Decryption happens only in the dashboard with user-provided keys.
+3. **Encrypted payloads pass through**: Server accepts `{ encrypted: "base64-string" }` payloads and stores them unchanged. Only the TUI currently decrypts them.
 
 ### Core Components
 
@@ -45,16 +45,20 @@ bun test --watch      # bun test watch mode
 | `src/server.ts` | Entry point, Hono app setup, CORS, optional API key auth |
 | `src/lib/log-buffer.ts` | In-memory ring buffer for log polling |
 | `src/lib/database.ts` | SQLite persistence layer (bun:sqlite) |
-| `src/routes/logs.handlers.ts` | Route handlers: ingest, retrieve, channels, generate-key |
+| `src/routes/logs.handlers.ts` | Route handlers: ingest, retrieve (cursor pagination), counts, channels, stats, SQL, SSE stream |
 | `src/routes/otlp.handlers.ts` | OTLP/HTTP JSON handlers for logs, metrics, traces |
 | `src/types.ts` | LogEntry, IncomingLog, LOG_LEVELS definitions |
 
 ### Data Flow
 
 ```
-Logger → Transport → POST /api/logs → LogBuffer.addLog() + SQLite insert
-                                                    ↓
-Dashboard ← GET /api/logs?afterId=X ← LogBuffer query
+Node/browser transport → POST /v1/{logs,metrics,traces} (OTLP JSON) ─┐
+Python transport / curl → POST /api/logs ─────────────────────────────┤
+                                                                      ↓
+                                     LogBuffer.add() + SQLite insert (batched flush)
+                                                                      ↓
+Dashboard ← GET /api/logs (initial, ?beforeId=) + GET /api/stream (SSE)
+TUI       ← GET /api/logs?afterId=X (polling)
 ```
 
 ### Log Entry Structure
