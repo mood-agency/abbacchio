@@ -39,14 +39,14 @@ A workload is not a correctness test. Still run the project's tests (step 5) aft
 ## 3. Run it
 
 ```bash
-bunx @abbacchio/api bench --baseline HEAD --run "<workload command>"
+bunx abbacchio bench --baseline HEAD --run "<workload command>"
 # with dependencies to install in each checkout:
-bunx @abbacchio/api bench --baseline HEAD --setup "bun install --frozen-lockfile" --run "<workload command>"
+bunx abbacchio bench --baseline HEAD --setup "bun install --frozen-lockfile" --run "<workload command>"
 ```
 
 - `--baseline HEAD` compares your uncommitted changes with the last commit. On a branch, compare with where it started instead: `--baseline origin/main`.
 - `--setup` is only needed when the workload needs installed dependencies (`npm ci`, `pip install -e .`, ...). It runs once per checkout, and the baseline worktree starts without `node_modules` or a virtualenv. Leave it out otherwise.
-- `bunx @abbacchio/api bench --help` lists every option.
+- `bunx abbacchio bench --help` lists every option.
 - Keep the default `--runs 3`. Use `--runs 5` when the noise column is high.
 - Add `--json` when you need to read the numbers programmatically, or `--format markdown` for a table to paste into a PR.
 - Don't run other CPU-heavy work (test suites, builds) while it runs. It skews the measurement.

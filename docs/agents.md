@@ -32,7 +32,7 @@ This is a script that exercises those code paths a fixed number of times and exi
 Check it once by hand:
 
 ```bash
-bunx @abbacchio/api bench --baseline none --run "bun bench/load.ts"
+bunx abbacchio bench --baseline none --run "bun bench/load.ts"
 ```
 
 A table of spans with counts means everything is wired up. "No telemetry received" (exit code 3) means the program isn't exporting to `$OTEL_EXPORTER_OTLP_ENDPOINT`.
@@ -46,7 +46,7 @@ A table of spans with counts means everything is wired up. "No telemetry receive
 ```md
 ## Performance
 After changing request handling, parsing or queries, run the perf check and include its table in your report:
-`bunx @abbacchio/api bench --baseline HEAD --setup "bun install --frozen-lockfile" --run "bun $PWD/bench/load.ts"`
+`bunx abbacchio bench --baseline HEAD --setup "bun install --frozen-lockfile" --run "bun $PWD/bench/load.ts"`
 Exit 1 means a regression: investigate it before calling the task done.
 ```
 
@@ -71,7 +71,7 @@ perf:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set +e
-        bunx @abbacchio/api bench \
+        bunx abbacchio bench \
           --baseline "$BASE_SHA" \
           --setup "bun install --frozen-lockfile" \
           --run "bun $GITHUB_WORKSPACE/bench/load.ts" \
@@ -102,7 +102,7 @@ Comparing baseline-3f2a1c9 → candidate-3f2a1c9-dirty (p95, threshold ±10%, 3 
 To look at individual traces, not just aggregates, keep a long-running instance:
 
 ```bash
-bunx @abbacchio/api sandbox --env-file .abbacchio.env & source .abbacchio.env
+bunx abbacchio sandbox --env-file .abbacchio.env & source .abbacchio.env
 ```
 
 Then point the [MCP server](claude-code.md) at it (`SQLITE_PATH` from the sandbox banner, `ABBACCHIO_URL`). The agent can then use `search_spans`, `get_trace` and `compare_runs` against the same data.
