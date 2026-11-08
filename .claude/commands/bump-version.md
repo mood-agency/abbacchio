@@ -4,19 +4,15 @@ Synchronize and bump versions across all packages in the monorepo.
 
 ## Version Files
 
-Update the version in ALL of these files:
+Run `node scripts/bump-version.js <patch|minor|major|x.y.z>` from the repository root. It reads the current version from the root `package.json` and writes the new one to ALL of these files, so don't edit any of them by hand first:
 
 ### JavaScript/TypeScript packages (package.json)
 1. `package.json` (root)
 2. `packages/transport/package.json`
 3. `packages/browser-transport/package.json`
-4. `packages/api/package.json`
+4. `packages/api/package.json` (published as `abbacchio`)
 5. `packages/dashboard/package.json`
 6. `packages/tui/package.json`
-
-Run `node scripts/bump-version.js <patch|minor|major|x.y.z>`; it updates every file below.
-
-### JavaScript/TypeScript packages (package.json)
 7. `packages/desktop/package.json`
 8. `packages/mcp/package.json`
 
