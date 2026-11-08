@@ -1,8 +1,8 @@
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { beforeEach } from 'bun:test';
+import { afterAll, beforeEach } from 'bun:test';
 import { resetLogBuffer } from '../src/lib/log-buffer.js';
 import { resetIdPool } from '../src/lib/id-pool.js';
 import { resetRateLimiter } from '../src/middleware/rate-limiter.js';
@@ -26,4 +26,10 @@ beforeEach(() => {
   resetRateLimiter();
   resetMetricBuffer();
   resetTraceBuffer();
+});
+
+// Remove this run's temporary databases.
+afterAll(() => {
+  resetDatabase();
+  rmSync(testDir, { recursive: true, force: true });
 });

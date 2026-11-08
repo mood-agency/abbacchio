@@ -120,7 +120,7 @@ Performance numbers move between runs of the *same* code, by tens of percent on 
 - **It interleaves rounds.** Each build runs `--runs` times (default 3) in an alternating order, so slow drift on the machine (thermal throttling, caches, background load) affects both builds equally.
 - **It measures the noise.** For each span, the `noise` column is the largest spread of the chosen stat between rounds of the same build, as a share of its median. A change no larger than that is reported as `no change (within run-to-run noise)`, whatever `--threshold` says.
 
-A span is a `regression` only when the change exceeds both the threshold and the measured noise. If a span is often reported as noisy, give it more work per run (longer runs, more requests) or use more rounds. With `--runs 1` the noise is unknown and the report says so.
+A span is a `regression` only when the change exceeds both the threshold and the measured noise. The reverse case matters too. When a span's noise is larger than the threshold, its `no change` can't rule out a regression of that size, so it is shown as `no change (noisy)` and counted as **inconclusive** (`inconclusive` in the JSON). The exit code stays 0, but don't read it as a pass for that span. If a span is often reported as noisy, give it more work per run (longer runs, more requests) or use more rounds. With `--runs 1` the noise is unknown and the report says so.
 
 | Exit code | Meaning |
 |-----------|---------|

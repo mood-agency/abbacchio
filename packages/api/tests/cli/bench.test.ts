@@ -1,15 +1,31 @@
-import { describe, it, expect, beforeAll, afterEach } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'bun:test';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { Subprocess } from 'bun';
 import { Database } from 'bun:sqlite';
+
+/** Temporary directories created by this file, removed after its tests. */
+const tempDirs: string[] = [];
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+
+  tempDirs.push(dir);
+
+  return dir;
+}
+
+afterAll(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
 
 const cli = join(import.meta.dir, '../../src/cli.ts');
 
 /** Emits 20 spans named "checkout" whose duration comes from config.ts. */
 const EMIT = `
 import { DURATION_MS } from './config.ts';
+
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const now = BigInt(Date.now()) * 1_000_000n;
 const spans = Array.from({ length: 20 }, (_, i) => ({
@@ -53,7 +69,7 @@ function bench(...args: string[]) {
 }
 
 beforeAll(() => {
-  repo = mkdtempSync(join(tmpdir(), 'abbacchio-bench-test-'));
+  repo = tempDir('abbacchio-bench-test-');
   writeFileSync(join(repo, 'emit.ts'), EMIT);
   setDuration(10);
 
@@ -96,6 +112,13 @@ describe('abbacchio bench', () => {
     expect(r.stdout).toContain('no change');
   });
 
+  it('documents its options under --help', () => {
+    const r = run(['bun', cli, 'bench', '--help'], repo);
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('--baseline <ref>');
+  });
+
   it('saves stats and compares against them later', () => {
     const file = join(repo, 'baseline.json');
 
@@ -134,7 +157,7 @@ describe('bench rounds and noise', () => {
     // 10, 20, 10 (very noisy) and the candidate 13, 13, 13.
     // Lives outside the repository (passed by absolute path) so the baseline
     // worktree does not need to contain it, like packages/api/bench/load.ts.
-    const scratch = mkdtempSync(join(tmpdir(), 'abbacchio-counter-'));
+    const scratch = tempDir('abbacchio-counter-');
     const counter = join(scratch, 'n');
     const script = join(scratch, 'noisy.ts');
 
@@ -166,6 +189,9 @@ describe('bench rounds and noise', () => {
     expect(result.noisePct).toBeCloseTo(100, 6);
     expect(result.verdict).toBe('no_change');
     expect(result.notes.join(' ')).toContain('within run-to-run noise');
+    // ±100% noise is far above the 10% threshold, so this "no change" proves little.
+    expect(result.inconclusive).toBe(true);
+    expect(JSON.parse(r.stdout).inconclusive).toBe(1);
   });
 
   it('prints a Markdown report', () => {
@@ -184,7 +210,7 @@ describe('abbacchio sandbox and an inherited SQLITE_PATH', () => {
   afterEach(() => child?.kill());
 
   it('does not wipe a database it did not choose', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'abbacchio-keep-'));
+    const dir = tempDir('abbacchio-keep-');
     const db = join(dir, 'real.db');
 
     // Stands in for someone's real data.

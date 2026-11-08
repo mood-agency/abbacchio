@@ -83,6 +83,11 @@ export interface BenchResult extends CompareResult {
    * same build, as a percentage of its median. Null with fewer than 2 rounds.
    */
   noisePct: number | null;
+  /**
+   * "No change" that proves little: the noise is larger than the threshold, so
+   * a regression of up to that size would also have read as "no change".
+   */
+  inconclusive: boolean;
 }
 
 export interface BenchReport {
@@ -96,6 +101,8 @@ export interface BenchReport {
   improvements: number;
   unchanged: number;
   insufficient: number;
+  /** "No change" verdicts whose noise exceeds the threshold (see BenchResult.inconclusive). */
+  inconclusive: number;
   exitCode: number;
 }
 
@@ -327,7 +334,16 @@ function compareOne(
     result.notes.push('Single round: run-to-run noise is unknown. Use --runs 3 or more for a reliable verdict.');
   }
 
-  return { ...result, rounds, noisePct };
+  const inconclusive = result.verdict === 'no_change' && noisePct !== null && noisePct > opts.thresholdPct;
+
+  if (inconclusive) {
+    result.notes.push(
+      `Inconclusive: noise (±${noisePct.toFixed(1)}%) exceeds the threshold (±${opts.thresholdPct}%), so a regression that size would not show. ` +
+        'Make each span cover more work (e.g. time a batch of calls) or run more rounds.',
+    );
+  }
+
+  return { ...result, rounds, noisePct, inconclusive };
 }
 
 function summarize(opts: BenchOptions, baseline: string | null, candidate: string, results: BenchResult[]): BenchReport {
@@ -350,6 +366,7 @@ function summarize(opts: BenchOptions, baseline: string | null, candidate: strin
     regressions,
     improvements: count('improvement'),
     unchanged: count('no_change'),
+    inconclusive: results.filter((r) => r.inconclusive).length,
     insufficient,
     exitCode,
   };
@@ -409,7 +426,7 @@ export function formatReport(report: BenchReport): string {
       fmt(cand[r.stat], unit),
       pct === null ? '' : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`,
       r.noisePct === null ? '' : `±${r.noisePct.toFixed(1)}%`,
-      VERDICT_LABEL[r.verdict],
+      r.inconclusive ? 'no change (noisy)' : VERDICT_LABEL[r.verdict],
       `n=${base.count}/${cand.count}`,
     ];
   });
@@ -417,7 +434,9 @@ export function formatReport(report: BenchReport): string {
   const lines = formatTable([['name', 'baseline', 'candidate', 'change', 'noise', 'verdict', 'samples'], ...rows]);
 
   const notes = report.results.flatMap((r) => r.notes.map((n) => `  - ${r.name}: ${n}`));
-  const totals = `${report.regressions} regression(s), ${report.improvements} improvement(s), ${report.unchanged} unchanged, ${report.insufficient} without enough data`;
+
+  const totals = `${report.regressions} regression(s), ${report.improvements} improvement(s), ${report.unchanged} unchanged` +
+    `${report.inconclusive ? ` (${report.inconclusive} inconclusive: noise above threshold)` : ''}, ${report.insufficient} without enough data`;
 
   return [header, '', ...lines, '', totals, ...(notes.length ? ['', 'Notes:', ...notes] : [])].join('\n');
 }
@@ -563,7 +582,8 @@ export function formatMarkdown(report: BenchReport): string {
 
   const status = report.regressions > 0
     ? `**${report.regressions} regression(s)**`
-    : report.exitCode === EXIT_INSUFFICIENT ? '**Not enough data**' : '**No regressions**';
+    : report.exitCode === EXIT_INSUFFICIENT ? '**Not enough data**'
+      : report.inconclusive > 0 ? `**No regressions** (${report.inconclusive} inconclusive: noise above threshold)` : '**No regressions**';
 
   lines.push(
     `${status} · \`${report.baseline}\` → \`${report.candidate}\` · ${report.stat}, threshold ±${report.thresholdPct}%, ${report.rounds} round(s)`,
@@ -582,7 +602,7 @@ export function formatMarkdown(report: BenchReport): string {
 
     const noise = r.noisePct === null ? '' : `±${r.noisePct.toFixed(1)}%`;
 
-    lines.push(`| ${mdCell(name)} | ${fmt(base[r.stat], unit)} | ${fmt(cand[r.stat], unit)} | ${change} | ${noise} | ${VERDICT_MARK[r.verdict]} | ${base.count} / ${cand.count} |`);
+    lines.push(`| ${mdCell(name)} | ${fmt(base[r.stat], unit)} | ${fmt(cand[r.stat], unit)} | ${change} | ${noise} | ${r.inconclusive ? '🟡 no change (noisy)' : VERDICT_MARK[r.verdict]} | ${base.count} / ${cand.count} |`);
   }
 
   const notes = report.results.flatMap((r) => r.notes.map((n) => `- ${mdCell(r.name)}: ${n}`));
