@@ -44,7 +44,8 @@ Bench options:
       --against <file>  Use stats saved with --save as the baseline instead
       --save <file>     Save the candidate's stats (to use later with --against)
       --setup <cmd>     Run once in each checkout first (e.g. "bun install")
-      --runs <n>        Repeat the command n times per build (default: 1)
+      --runs <n>        Rounds: run each build n times, interleaved, to measure
+                        run-to-run noise (default: 3)
       --span <name>     Only compare these spans (repeatable; default: all)
       --metric <name>   Also compare this metric (repeatable)
       --stat <s>        mean|p50|p90|p95|p99|max (default: p95)
@@ -52,7 +53,8 @@ Bench options:
       --direction <d>   For metrics: lower|higher is better (default: lower)
       --min-samples <n> Observations needed per build (default: 5)
       --settle <ms>     Wait after the last run for exporters to flush (default: 1500)
-      --json            Print the report as JSON
+      --format <f>      text|json|markdown (default: text)
+      --json            Same as --format json
   Exit codes: 0 ok, 1 regression, 2 error, 3 not enough data
 
 Environment variables always win over sandbox defaults; flags win over both.
@@ -194,6 +196,7 @@ async function benchCommand(args: string[]): Promise<void> {
         'min-samples': { type: 'string' },
         settle: { type: 'string' },
         json: { type: 'boolean', default: false },
+        format: { type: 'string' },
         port: { type: 'string', short: 'p' },
       },
       strict: true,
@@ -203,7 +206,11 @@ async function benchCommand(args: string[]): Promise<void> {
     fail(err instanceof Error ? err.message : String(err));
   }
 
-  const { bench, formatReport, BenchError, EXIT_ERROR } = await import('./bench.js');
+  const { bench, formatReport, formatMarkdown, BenchError, EXIT_ERROR } = await import('./bench.js');
+
+  const format = values.json ? 'json' : (values.format ?? 'text');
+
+  if (format !== 'text' && format !== 'json' && format !== 'markdown') fail('--format must be text, json or markdown');
   const { isCompareDirection, isCompareStat } = await import('./lib/compare.js');
 
   if (!values.run) fail('bench needs --run "<command>"');
@@ -256,7 +263,7 @@ async function benchCommand(args: string[]): Promise<void> {
       baselineRef: baselineRef === 'none' ? undefined : baselineRef,
       against: values.against,
       save: values.save,
-      runs: parsePositiveInt(values.runs, '--runs', 1),
+      runs: parsePositiveInt(values.runs, '--runs', 3),
       spans: values.span,
       metrics: values.metric ?? [],
       stat,
@@ -264,13 +271,17 @@ async function benchCommand(args: string[]): Promise<void> {
       direction,
       minSamples: parsePositiveInt(values['min-samples'], '--min-samples', 5),
       settleMs: settle,
-      json: values.json,
+      json: format === 'json',
       cwd: process.cwd(),
       url,
       env: callerEnv,
     });
 
-    console.log(values.json ? JSON.stringify(report, null, 2) : formatReport(report));
+    const output = format === 'json'
+      ? JSON.stringify(report, null, 2)
+      : format === 'markdown' ? formatMarkdown(report) : formatReport(report);
+
+    console.log(output);
     code = report.exitCode;
   } catch (err) {
     if (!(err instanceof BenchError)) throw err;

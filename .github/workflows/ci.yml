@@ -88,6 +88,58 @@ jobs:
         run: bun run --filter @abbacchio/dashboard build
 
   # ============================================
+  # Performance vs the base branch (abbacchio bench)
+  # Fails on a regression beyond both the threshold and the measured
+  # run-to-run noise (±0.3-6% on GitHub runners); the table goes to the log
+  # and the job summary. "Not enough data" only warns.
+  # ============================================
+  perf:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # Runs the PR's install scripts and benchmark code: read-only token, and
+    # no credentials left in the checkout's git config.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the baseline commit is checked out in a worktree
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compare API performance with the base branch
+        env:
+          # The base commit the PR's merge commit was built on (not the moving
+          # branch tip), passed via env rather than expanded into the script.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set +e
+          bun packages/api/src/cli.ts bench \
+            --baseline "$BASE_SHA" \
+            --setup "bun install --frozen-lockfile" \
+            --run "bun $GITHUB_WORKSPACE/packages/api/bench/load.ts" \
+            --runs 3 \
+            --format markdown > perf.md
+          code=$?
+          set -e
+          cat perf.md                       # in the log too, not only the summary
+          cat perf.md >> "$GITHUB_STEP_SUMMARY"
+          regressed=$(grep '🔴' perf.md | cut -d'|' -f2 | sed 's/^ *//; s/ *$//' | paste -sd ',' - | sed 's/,/, /g')
+          case $code in
+            0) echo "No performance regressions." ;;
+            1) echo "::error title=Performance::Regression vs ${BASE_REF} (${BASE_SHA:0:7}): ${regressed}. See the job summary."; exit 1 ;;
+            3) echo "::warning title=Performance::Not enough data to compare; see the job summary." ;;
+            *) echo "::error title=Performance::abbacchio bench failed (exit $code)"; exit "$code" ;;
+          esac
+
+  # ============================================
   # Build Tauri (solo verificar que compila)
   # ============================================
   build-tauri:

@@ -93,26 +93,34 @@ Response (abridged):
 `abbacchio bench` does the whole loop, and its exit code makes it usable from CI or an agent:
 
 1. It starts a private, in-memory Abbacchio.
-2. It runs your command against the baseline (a git ref, checked out in a temporary `git worktree`; your working tree is never touched).
-3. It runs the same command against your working tree.
-4. It compares every span and prints a verdict.
+2. It runs your command against the baseline (a git ref, checked out in a temporary `git worktree`; your working tree is never touched) and against your working tree, alternating them in rounds (baseline, candidate, candidate, baseline, ...).
+3. It compares every span and prints a verdict that accounts for run-to-run noise.
 
 ```bash
 # Working tree vs HEAD (the default baseline)
 bunx @abbacchio/api bench --run "bun run load-test"
 
-# vs another ref, installing dependencies in each checkout, 3 runs per build
-bunx @abbacchio/api bench --baseline origin/main --setup "bun install" --runs 3 --run "bun run load-test"
+# vs another ref, installing dependencies in each checkout, 5 rounds per build
+bunx @abbacchio/api bench --baseline origin/main --setup "bun install" --runs 5 --run "bun run load-test"
 ```
 
 ```
-Comparing baseline-cb73cd8 → candidate-cb73cd8-dirty (p95, threshold ±10%)
+Comparing baseline-cb73cd8 → candidate-cb73cd8-dirty (p95, threshold ±10%, 3 round(s))
 
-  name       baseline   candidate   change    verdict      samples
-  checkout   10.2 ms    30.2 ms     +196.1%   REGRESSION   n=20/20
+  name       baseline   candidate   change    noise   verdict      samples
+  checkout   10.2 ms    30.2 ms     +196.1%   ±2.0%   REGRESSION   n=60/60
 
 1 regression(s), 0 improvement(s), 0 unchanged, 0 without enough data
 ```
+
+### Noise
+
+Performance numbers move between runs of the *same* code, by tens of percent on shared machines such as CI runners and sandboxes. A fixed threshold alone produces false regressions, so `bench` does two things about it:
+
+- **It interleaves rounds.** Each build runs `--runs` times (default 3) in an alternating order, so slow drift on the machine (thermal throttling, caches, background load) affects both builds equally.
+- **It measures the noise.** For each span, the `noise` column is the largest spread of the chosen stat between rounds of the same build, as a share of its median. A change no larger than that is reported as `no change (within run-to-run noise)`, whatever `--threshold` says.
+
+A span is a `regression` only when the change exceeds both the threshold and the measured noise. If a span is often reported as noisy, give it more work per run (longer runs, more requests) or use more rounds. With `--runs 1` the noise is unknown and the report says so.
 
 | Exit code | Meaning |
 |-----------|---------|
@@ -130,12 +138,51 @@ The command runs with `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCO
 | `--against <file>` | | Compare with stats saved earlier with `--save` instead of running a baseline |
 | `--save <file>` | | Save the working tree's stats, e.g. on `main`, for a later `--against` |
 | `--setup <cmd>` | | Run once in each checkout first (the baseline worktree starts without `node_modules`) |
-| `--runs <n>` | `1` | Repeat the command per build for more samples |
+| `--runs <n>` | `3` | Rounds: run each build n times, interleaved, to measure run-to-run noise |
 | `--span <name>` | all spans | Only compare these spans (repeatable) |
 | `--metric <name>` | | Also compare this metric (repeatable). `--direction` applies to metrics |
 | `--stat`, `--threshold`, `--min-samples` | `p95`, `10`, `5` | As for `/api/compare` |
 | `--settle <ms>` | `1500` | Wait after the last run so batched exporters can flush |
-| `--json` | | Machine-readable report |
+| `--format <f>` | `text` | `text`, `json` or `markdown` (a table for `$GITHUB_STEP_SUMMARY` or a PR comment). `--json` is short for `--format json` |
+
+### In CI
+
+This repository's own CI runs a `perf` job on every pull request. It benchmarks the API (`packages/api/bench/load.ts`: OTLP and `/api/logs` ingestion, plus queries over a fixed dataset) against the base branch:
+
+```yaml
+perf:
+  if: github.event_name == 'pull_request'
+  runs-on: ubuntu-latest
+  permissions:
+    contents: read                # it runs the PR's code
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0            # the baseline commit is checked out in a worktree
+        persist-credentials: false
+    - uses: oven-sh/setup-bun@v2
+    - run: bun install --frozen-lockfile
+    - env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}   # what the merge commit is built on
+      run: |
+        set +e
+        bun packages/api/src/cli.ts bench \
+          --baseline "$BASE_SHA" \
+          --setup "bun install --frozen-lockfile" \
+          --run "bun $GITHUB_WORKSPACE/packages/api/bench/load.ts" \
+          --format markdown > perf.md
+        code=$?
+        cat perf.md >> "$GITHUB_STEP_SUMMARY"
+        case $code in
+          0) ;;                                                     # no regression
+          3) echo "::warning title=Performance::Not enough data" ;;  # warn only
+          *) exit "$code" ;;                                        # 1 regression, 2 error
+        esac
+```
+
+The baseline is the PR's recorded base commit, not `origin/<base>`, so the comparison matches the merge commit being tested even if the base branch moves while the job runs. See `.github/workflows/ci.yml` for the full job, which also prints the table to the log and names regressed workloads in the annotation.
+
+The load script is passed by absolute path from the candidate checkout, so the baseline doesn't need to contain it. It starts the API server of whichever checkout it runs in. The job fails on a regression and names the regressed workloads in an error annotation. The table goes to the job log and the job summary. On GitHub runners the measured run-to-run noise is about ±0.3–6%, so a 10% threshold is meaningful there. "Not enough data" only warns. If a regression is intentional (the cost of a feature), say so in the PR; once it merges, the base branch is the new baseline.
 
 ### Keeping a baseline across sandboxes
 
