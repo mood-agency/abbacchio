@@ -87,6 +87,8 @@ export interface TraceSpan {
   startTimeMs: number;
   /** End time in Unix Epoch milliseconds (converted from nanos at ingestion) */
   endTimeMs: number;
+  /** Exact duration in milliseconds, fractional (computed from the nanosecond timestamps) */
+  durationMs?: number;
   /** Channel/app identifier */
   channel: string;
   attributes: Record<string, string | number | boolean>;

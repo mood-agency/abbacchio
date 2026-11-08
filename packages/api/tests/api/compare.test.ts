@@ -121,6 +121,24 @@ describe('GET /api/compare', () => {
     expect(r.notes.some((n: string) => n.includes('Error rate rose'))).toBe(true);
   });
 
+  it('measures sub-millisecond spans exactly (not truncated to whole ms)', async () => {
+    const app = createTestApp();
+
+    await post(app, '/v1/traces', spanRequest('fast', range(20, () => 0.2)));
+    await post(app, '/v1/traces', spanRequest('slow', range(20, () => 0.45)));
+
+    const res = await app.request('/api/compare?source=span&name=GET%20/users&baselineVersion=fast&candidateVersion=slow&stat=mean');
+    const r = await res.json();
+
+    expect(r.baseline.stats.mean).toBeCloseTo(0.2, 6);
+    expect(r.candidate.stats.mean).toBeCloseTo(0.45, 6);
+    expect(r.verdict).toBe('regression');
+
+    const traces = await (await app.request('/api/traces?channel=bench-app')).json();
+
+    expect(traces.traces[0].durationMs).toBeCloseTo(0.2, 6);
+  });
+
   it('reports no change within the threshold', async () => {
     const app = createTestApp();
     await post(app, '/v1/traces', spanRequest('a', range(20, () => 100)));

@@ -17,6 +17,8 @@ OTEL_RESOURCE_ATTRIBUTES="service.version=$(git rev-parse --short HEAD)" \
 node app.js
 ```
 
+`@abbacchio/transport` (Node) reads `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_EXPORTER_OTLP_HEADERS` too, so the same variables work without code changes. Explicit options such as `resourceAttributes: { 'service.version': '...' }` take precedence. `traceWithMemory` measures durations with a monotonic nanosecond clock. The browser transport can't read environment variables, so pass `resourceAttributes` there.
+
 These resource attributes are kept. Point-level attributes with the same key win.
 
 | Attribute | Use |
@@ -81,7 +83,7 @@ Response (abridged):
 
 ### How values are computed
 
-- **Spans**: one observation per span (`end - start`, in ms), plus the fraction of spans with status `ERROR`. Span times are stored with millisecond precision, so for operations well under 1 ms use a histogram metric instead.
+- **Spans**: one observation per span, plus the fraction of spans with status `ERROR`. The duration is computed from the nanosecond OTLP timestamps and stored as fractional milliseconds, so sub-millisecond operations compare correctly. Spans stored before this change fall back to whole-millisecond `end - start`.
 - **Gauge / Sum metrics**: one observation per data point.
 - **Histogram metrics**: points are merged. The mean is exact (Σsum / Σcount). Percentiles are estimated from the bucket boundaries, so pick bucket bounds that bracket the latencies you care about.
 - Each run reads at most the 200,000 most recent observations.

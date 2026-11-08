@@ -47,6 +47,7 @@ interface SpanEntry {
   name: string;
   startTimeMs: number;
   endTimeMs: number;
+  durationMs: number;
   channel: string;
   attributes: Record<string, unknown>;
   statusCode?: number;
@@ -106,6 +107,10 @@ function rowToSpanEntry(row: any): SpanEntry {
     endTimeMs: row.end_time_ms !== undefined
       ? Number(row.end_time_ms)
       : Math.floor(Number(BigInt(String(row.end_time_unix_nano || '0')) / 1_000_000n)),
+    // Exact fractional duration when the API server stored it.
+    durationMs: row.duration_ms ?? (row.end_time_ms !== undefined
+      ? Number(row.end_time_ms) - Number(row.start_time_ms)
+      : Number(BigInt(String(row.end_time_unix_nano || '0')) - BigInt(String(row.start_time_unix_nano || '0'))) / 1_000_000),
     channel: row.channel,
     attributes: JSON.parse(row.attributes || '{}'),
     statusCode: row.status_code !== null ? row.status_code : undefined,

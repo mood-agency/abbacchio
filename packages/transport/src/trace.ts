@@ -29,6 +29,15 @@ export interface TraceOptions {
   attributes?: Record<string, unknown>;
 }
 
+/** Monotonic nanoseconds: process.hrtime in Node/Bun, performance.now() elsewhere. */
+function monotonicNanos(): bigint {
+  if (typeof process !== 'undefined' && typeof process.hrtime?.bigint === 'function') {
+    return process.hrtime.bigint();
+  }
+
+  return BigInt(Math.round(performance.now() * 1_000_000));
+}
+
 /**
  * Executes an operation, capturing execution time and memory delta.
  * Records the operation as an OTLP Span via the provided AbbacchioClient.
@@ -44,8 +53,10 @@ export async function traceWithMemory<T>(
   const baseAttributes = typeof options !== 'string' ? options.attributes : undefined;
 
   const startMemory = getMemoryUsageBytes();
-  const startTime = Date.now();
-  const startNano = BigInt(startTime) * 1_000_000n;
+  // Wall clock for the span's position in time; monotonic clock for its
+  // duration, so sub-millisecond operations are measured precisely.
+  const startNano = BigInt(Date.now()) * 1_000_000n;
+  const startMono = monotonicNanos();
 
   let hasError = false;
   let errorMessage: string | undefined;
@@ -58,9 +69,9 @@ export async function traceWithMemory<T>(
     throw error;
   } finally {
     const endMemory = getMemoryUsageBytes();
-    const endTime = Date.now();
-    const endNano = BigInt(endTime) * 1_000_000n;
-    const durationMs = endTime - startTime;
+    const durationNano = monotonicNanos() - startMono;
+    const endNano = startNano + durationNano;
+    const durationMs = Number(durationNano) / 1_000_000;
     const memoryDelta = endMemory - startMemory;
 
     const span: SpanRecord = {

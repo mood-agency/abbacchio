@@ -6,13 +6,30 @@ Abbacchio supports multiple logging libraries through dedicated transports.
 
 All transports share these common options:
 
-| Option      | Type   | Default                          | Description                            |
-| ----------- | ------ | -------------------------------- | -------------------------------------- |
-| `url`       | string | `http://localhost:4000/api/logs` | Abbacchio server URL                   |
-| `channel`   | string | `default`                        | Channel name for multi-app support     |
-| `batchSize` | number | `10`                             | Send batch when this many logs accumulate |
-| `interval`  | number | `1000`                           | Send batch after this many ms          |
-| `headers`   | object | `{}`                             | Additional HTTP headers                |
+| Option               | Type    | Default                                                | Description |
+| -------------------- | ------- | ------------------------------------------------------ | ----------- |
+| `endpoint`           | string  | `$OTEL_EXPORTER_OTLP_ENDPOINT` or `http://localhost:4000` | Server base URL. OTLP goes to `{endpoint}/v1/{logs,metrics,traces}` |
+| `serviceName`        | string  | `$OTEL_SERVICE_NAME` or `default`                     | `service.name`, used as the channel |
+| `resourceAttributes` | object  | from `$OTEL_RESOURCE_ATTRIBUTES`                      | Extra resource attributes, e.g. `{ 'service.version': '1.2.3' }` |
+| `headers`            | object  | from `$OTEL_EXPORTER_OTLP_HEADERS`                    | Additional HTTP headers |
+| `batchSize`          | number  | `10`                                                   | Send a batch when this many records accumulate |
+| `interval`           | number  | `1000`                                                 | Send a batch after this many ms |
+| `enabled`            | boolean | `true` (`false` if `OTEL_SDK_DISABLED=true`)           | Whether to send anything |
+| `readEnv`            | boolean | `true`                                                 | Read the `OTEL_*` variables below as defaults |
+| `url`                | string  |                                                        | Deprecated: use `endpoint` |
+
+### Standard OpenTelemetry environment variables
+
+The Node transports fill any option you leave unset from the standard OTel SDK variables, so a program can be pointed at Abbacchio (for example `abbacchio sandbox --env-file`) and tagged with a version without code changes:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4000
+export OTEL_SERVICE_NAME=shop
+export OTEL_RESOURCE_ATTRIBUTES="service.version=$(git rev-parse --short HEAD),deployment.environment=ci"
+export OTEL_EXPORTER_OTLP_HEADERS="x-api-key=..."   # only if the server requires a key
+```
+
+Explicit options win over the environment. `resourceAttributes` and `headers` are merged, and on conflicts the options win. Set `readEnv: false` to ignore the environment entirely. The browser transport has no environment, so configure it with options.
 
 ## Pino
 

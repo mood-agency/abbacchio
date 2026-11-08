@@ -310,6 +310,8 @@ export function parseOtlpTraces(request: OTLPExportTraceServiceRequest, defaultC
                     name: span.name,
                     startTimeMs: Number(startNano / 1_000_000n),
                     endTimeMs: Number(endNano / 1_000_000n),
+                    // Exact (sub-millisecond) duration; start/end above are truncated to ms.
+                    durationMs: endNano >= startNano ? Number(endNano - startNano) / 1_000_000 : 0,
                     channel,
                     attributes: { ...resourceAttributes, ...parseAttributes(span.attributes) },
                     status: span.status ? {

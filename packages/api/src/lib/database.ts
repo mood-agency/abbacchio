@@ -437,6 +437,9 @@ export class LogDatabase {
       )
     `);
 
+    // Migration: exact fractional duration (start/end_time_ms are truncated to whole ms).
+    this.addColumnIfMissing('traces', 'duration_ms', 'REAL');
+
     this.db.run('CREATE INDEX IF NOT EXISTS idx_traces_channel ON traces(channel, start_time_ms DESC)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_traces_trace_id ON traces(trace_id)');
   }
@@ -453,8 +456,8 @@ export class LogDatabase {
     `);
 
     this.insertSpanStmt = this.db.prepare(`
-      INSERT OR REPLACE INTO traces (trace_id, span_id, parent_span_id, name, start_time_ms, end_time_ms, channel, attributes, status_code, status_message)
-      VALUES ($traceId, $spanId, $parentSpanId, $name, $startTimeMs, $endTimeMs, $channel, $attributes, $statusCode, $statusMessage)
+      INSERT OR REPLACE INTO traces (trace_id, span_id, parent_span_id, name, start_time_ms, end_time_ms, duration_ms, channel, attributes, status_code, status_message)
+      VALUES ($traceId, $spanId, $parentSpanId, $name, $startTimeMs, $endTimeMs, $durationMs, $channel, $attributes, $statusCode, $statusMessage)
     `);
   }
 
@@ -556,6 +559,7 @@ export class LogDatabase {
           $name: s.name,
           $startTimeMs: s.startTimeMs,
           $endTimeMs: s.endTimeMs,
+          $durationMs: s.durationMs ?? null,
           $channel: s.channel,
           $attributes: JSON.stringify(s.attributes),
           $statusCode: s.status?.code ?? null,
@@ -743,6 +747,7 @@ export class LogDatabase {
       name: row.name,
       startTimeMs: row.start_time_ms,
       endTimeMs: row.end_time_ms,
+      durationMs: row.duration_ms ?? row.end_time_ms - row.start_time_ms,
       channel: row.channel,
       attributes: JSON.parse(row.attributes),
       status: row.status_code !== null ? {
@@ -790,7 +795,7 @@ export class LogDatabase {
 
     // SAFETY: the row shape matches the SELECT column list.
     const rows = this.db.prepare(
-      `SELECT end_time_ms - start_time_ms AS duration, status_code FROM traces WHERE ${sql} ORDER BY start_time_ms DESC LIMIT ?`
+      `SELECT COALESCE(duration_ms, end_time_ms - start_time_ms) AS duration, status_code FROM traces WHERE ${sql} ORDER BY start_time_ms DESC LIMIT ?`
     ).all(...params, limit + 1) as SpanSampleRow[];
 
     const truncated = rows.length > limit;

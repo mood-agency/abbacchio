@@ -1,4 +1,5 @@
 import os from "node:os";
+import { readOtelEnv } from "./otel-env.js";
 
 /** Best-effort default emitter identity for a Node/Bun process. */
 function defaultIdentity(): { source: string | undefined; instanceId: string | undefined } {
@@ -74,11 +75,17 @@ interface OtlpKeyValue {
 }
 
 export interface AbbacchioClientOptions {
-  /** Base URL of the OTLP server (e.g. "http://localhost:4000"). Logs go to {endpoint}/v1/logs */
+  /**
+   * Base URL of the OTLP server (e.g. "http://localhost:4000"). Logs go to {endpoint}/v1/logs.
+   * Defaults to $OTEL_EXPORTER_OTLP_ENDPOINT, then http://localhost:4000.
+   */
   endpoint?: string;
   /** @deprecated Use `endpoint` instead. If set, used as the full URL for log ingestion. */
   url?: string;
-  /** Service name — maps to OTLP resource attribute `service.name`. Defaults to 'default' */
+  /**
+   * Service name — maps to OTLP resource attribute `service.name` (the Abbacchio channel).
+   * Defaults to $OTEL_SERVICE_NAME, then `service.name` in $OTEL_RESOURCE_ATTRIBUTES, then 'default'.
+   */
   serviceName?: string;
   /**
    * Self-declared emitter label sent on every request via the `X-Source` header.
@@ -90,14 +97,23 @@ export interface AbbacchioClientOptions {
    * Defaults to `<hostname>:<pid>`.
    */
   instanceId?: string;
-  /** Additional OTLP resource attributes */
+  /**
+   * Additional OTLP resource attributes, e.g. `{ 'service.version': '1.2.3' }`.
+   * Merged over $OTEL_RESOURCE_ATTRIBUTES (these win on conflicts).
+   */
   resourceAttributes?: Record<string, string>;
   /** Number of log records to batch before sending. Defaults to 10 */
   batchSize?: number;
   /** Interval in ms between flushes. Defaults to 1000 */
   interval?: number;
-  /** Additional headers to send with requests */
+  /** Additional headers to send with requests. Merged over $OTEL_EXPORTER_OTLP_HEADERS. */
   headers?: Record<string, string>;
+  /**
+   * Read the standard OTEL_* environment variables (OTEL_EXPORTER_OTLP_ENDPOINT,
+   * OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS,
+   * OTEL_SDK_DISABLED) as defaults for the options above. Defaults to true.
+   */
+  readEnv?: boolean;
   /** Whether to send data to the server. Defaults to true */
   enabled?: boolean;
   /**
@@ -216,6 +232,9 @@ export class AbbacchioClient {
   private spanTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: AbbacchioClientOptions = {}) {
+    // Standard OTEL_* environment variables fill in whatever the options leave unset.
+    const env = options.readEnv === false ? undefined : readOtelEnv();
+
     // Support legacy `url` option: if it looks like a full URL with path, strip the path
     if (options.url && !options.endpoint) {
       try {
@@ -225,18 +244,18 @@ export class AbbacchioClient {
         this.endpoint = options.url;
       }
     } else {
-      this.endpoint = options.endpoint || 'http://localhost:4000';
+      this.endpoint = options.endpoint || env?.endpoint || 'http://localhost:4000';
     }
 
-    this.serviceName = options.serviceName || 'default';
+    this.serviceName = options.serviceName || env?.serviceName || 'default';
     const fallback = defaultIdentity();
     this.source = options.source ?? fallback.source;
     this.instanceId = options.instanceId ?? fallback.instanceId;
-    this.resourceAttributes = options.resourceAttributes || {};
+    this.resourceAttributes = { ...env?.resourceAttributes, ...options.resourceAttributes };
     this.batchSize = options.batchSize || 10;
     this.interval = options.interval || 1000;
-    this.headers = options.headers || {};
-    this.enabled = options.enabled ?? true;
+    this.headers = { ...env?.headers, ...options.headers };
+    this.enabled = options.enabled ?? !env?.disabled;
     this.maxBufferSize = options.maxBufferSize ?? 10000;
     this.maxPointsPerSecond = options.maxPointsPerSecond ?? 2000;
     this.intakeTokens = this.maxPointsPerSecond;
