@@ -55,6 +55,7 @@ function getChannelFromResource(resource: OTLPResource | undefined, defaultChann
     }
 
     const serviceNameAttr = resource.attributes.find((attr) => attr.key === 'service.name');
+
     if (serviceNameAttr && serviceNameAttr.value && serviceNameAttr.value.stringValue) {
         return serviceNameAttr.value.stringValue;
     }
@@ -72,12 +73,16 @@ function getIdentityFromResource(resource: OTLPResource | undefined): { source?:
     if (!resource || !Array.isArray(resource.attributes)) return {};
     let source: string | undefined;
     let instanceId: string | undefined;
+
     for (const attr of resource.attributes) {
         const val = attr.value?.stringValue;
+
         if (!val) continue;
+
         if (attr.key === 'service.instance.id') instanceId = val;
         else if (attr.key === 'service.source') source = val;
     }
+
     return { source, instanceId };
 }
 
@@ -100,6 +105,7 @@ export const RESOURCE_ATTRIBUTE_ALLOWLIST = [
 function getResourceAttributes(resource: OTLPResource | undefined): Record<string, string | number | boolean> {
     if (!resource || !Array.isArray(resource.attributes)) return {};
     const allowed = new Set<string>(RESOURCE_ATTRIBUTE_ALLOWLIST);
+
     return parseAttributes(resource.attributes.filter((attr) => allowed.has(attr.key)));
 }
 
@@ -108,10 +114,12 @@ function getResourceAttributes(resource: OTLPResource | undefined): Record<strin
  */
 function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | number | boolean> {
     const result: Record<string, string | number | boolean> = {};
+
     if (!Array.isArray(attributes)) return result;
 
     for (const attr of attributes) {
         const val = attr.value;
+
         if (!val) continue;
 
         if (val.stringValue !== undefined) result[attr.key] = val.stringValue;
@@ -119,6 +127,7 @@ function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | n
         else if (val.doubleValue !== undefined) result[attr.key] = val.doubleValue;
         else if (val.boolValue !== undefined) result[attr.key] = val.boolValue;
     }
+
     return result;
 }
 
@@ -127,6 +136,7 @@ function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | n
  */
 function severityNumberToPinoLevel(severityNumber?: number): number {
     if (!severityNumber) return 30; // Default info
+
     // OTel SeverityNumber:
     // 1-4: TRACE -> Pino 10
     // 5-8: DEBUG -> Pino 20
@@ -135,10 +145,15 @@ function severityNumberToPinoLevel(severityNumber?: number): number {
     // 17-20: ERROR -> Pino 50
     // 21-24: FATAL -> Pino 60
     if (severityNumber <= 4) return 10;
+
     if (severityNumber <= 8) return 20;
+
     if (severityNumber <= 12) return 30;
+
     if (severityNumber <= 16) return 40;
+
     if (severityNumber <= 20) return 50;
+
     return 60;
 }
 

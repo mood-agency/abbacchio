@@ -79,6 +79,7 @@ export class AbbacchioBunyanStream extends Writable {
 
 export function bunyanStream(opts?: BunyanStreamOptions): { stream: AbbacchioBunyanStream; level?: number | string; type: "raw" } {
   const stream = new AbbacchioBunyanStream(opts);
+
   return {
     stream,
     level: opts?.level,

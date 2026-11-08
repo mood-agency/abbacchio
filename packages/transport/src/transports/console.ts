@@ -31,7 +31,9 @@ function formatArgs(args: unknown[]): string {
   return args
     .map((arg) => {
       if (typeof arg === "string") return arg;
+
       if (arg instanceof Error) return `${arg.name}: ${arg.message}\n${arg.stack}`;
+
       try {
         return JSON.stringify(arg);
       } catch {
@@ -53,6 +55,7 @@ function createInterceptedMethod(
       time: Date.now(),
       method,
     };
+
     client.add(log);
 
     if (passthrough) {

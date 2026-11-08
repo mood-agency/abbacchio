@@ -107,6 +107,7 @@ export const FilterBar = memo(forwardRef<HTMLInputElement, FilterBarProps>(funct
   // Debounce URL param updates
   const handleSearchChange = (value: string) => {
     setLocalSearch(value);
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setSearchQuery(value);

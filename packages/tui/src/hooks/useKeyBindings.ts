@@ -40,10 +40,13 @@ export function useKeyBindings(options: KeyBindingsOptions): void {
       // Navigation
       if (key.upArrow || input === 'k') {
         onScrollUp();
+
         return;
       }
+
       if (key.downArrow || input === 'j') {
         onScrollDown();
+
         return;
       }
 
@@ -115,6 +118,7 @@ export function useKeyBindings(options: KeyBindingsOptions): void {
           if (key.escape) {
             onLevelFilter(null);
           }
+
           break;
       }
     },

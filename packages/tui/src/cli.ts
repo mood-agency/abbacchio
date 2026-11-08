@@ -63,6 +63,7 @@ if (!cli.flags.channel) {
 // Validate level if provided
 if (cli.flags.level) {
   const validLevels: LogLevelLabel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+
   if (!validLevels.includes(cli.flags.level as LogLevelLabel)) {
     console.error(`Error: Invalid level "${cli.flags.level}". Must be one of: ${validLevels.join(', ')}\n`);
     process.exit(1);

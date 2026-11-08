@@ -114,6 +114,7 @@ export function createOtlpMetricRequest(overrides: {
   };
 
   const metricType = overrides.type || 'sum';
+
   const metric: Record<string, unknown> = {
     name: overrides.metricName || 'http.requests',
     description: overrides.description || 'Total HTTP requests',

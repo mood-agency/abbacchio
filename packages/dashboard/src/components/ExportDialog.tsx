@@ -74,6 +74,7 @@ export function ExportDialog({
           {formatOptions.map((option) => {
             const Icon = option.icon;
             const isSelected = selectedFormat === option.value;
+
             return (
               <button
                 key={option.value}

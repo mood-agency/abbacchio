@@ -44,6 +44,7 @@ export function getSourceIdentity(c: Context): SourceIdentity {
 export function stampIdentity(logs: IncomingLog[], identity: SourceIdentity): void {
   for (const log of logs) {
     if (identity.source !== undefined) log.source = identity.source;
+
     if (identity.instanceId !== undefined) log.instanceId = identity.instanceId;
     log.sourceVerified = identity.verified;
   }
@@ -59,9 +60,11 @@ export async function ingestLogs(c: Context) {
 
   // Use pre-validated body if available (from validator middleware)
   const raw: unknown = getValidatedBody(c) ?? await c.req.json().catch(() => null);
+
   if (!isLogObject(raw)) {
     return c.json({ error: 'Bad Request', message: 'Request body must be a JSON object' }, 400);
   }
+
   const body = raw as BatchLogRequest | IncomingLog;
 
   const db = getDatabase();
@@ -73,6 +76,7 @@ export async function ingestLogs(c: Context) {
     stampIdentity(batchBody.logs, identity);
     const entries = buffer.addBatch(batchBody.logs, channel);
     db.insertBatch(entries);
+
     return c.json({ received: entries.length, channel }, 201);
   }
 
@@ -81,6 +85,7 @@ export async function ingestLogs(c: Context) {
   stampIdentity([log], identity);
   const entry = buffer.add(log, channel);
   db.insert(entry);
+
   return c.json({ received: 1, channel }, 201);
 }
 
@@ -95,6 +100,7 @@ export function clearLogs(c: Context) {
   const channel = c.req.query('channel');
   buffer.clear(channel);
   db.clear(channel || undefined);
+
   return c.json({ success: true, channel: channel || 'all' });
 }
 
@@ -126,6 +132,7 @@ export function getLogs(c: Context) {
     // Skip in-memory buffer when server-side filters are active (buffer can't filter)
     if (!hasServerFilters) {
       const logs = buffer.getSince(afterId, channel || undefined);
+
       if (logs !== null) {
         return c.json({
           logs,
@@ -134,8 +141,10 @@ export function getLogs(c: Context) {
         });
       }
     }
+
     db.flush();
     const dbLogs = db.queryAfterId(afterId, channel || undefined, limit, levels, namespaces);
+
     return c.json({
       logs: dbLogs,
       count: dbLogs.length,
@@ -147,6 +156,7 @@ export function getLogs(c: Context) {
   if (beforeId) {
     db.flush();
     const { logs, hasMore } = db.queryBeforeId(beforeId, channel || undefined, limit || 500, levels, namespaces);
+
     return c.json({
       logs,
       count: logs.length,
@@ -158,6 +168,7 @@ export function getLogs(c: Context) {
   // --- Initial load: fetch NEWEST logs, return in chronological order ---
   db.flush();
   const search = c.req.query('search') || undefined;
+
   const result = db.query({
     channel: channel || undefined,
     order: 'desc',
@@ -188,6 +199,7 @@ export function getLogCounts(c: Context) {
   const channel = c.req.query('channel');
   db.flush();
   const counts = db.getCounts(channel || undefined);
+
   return c.json(counts);
 }
 
@@ -198,9 +210,11 @@ export function getLogCounts(c: Context) {
  */
 export function deleteChannel(c: Context) {
   const name = c.req.query('name');
+
   if (!name) {
     return c.json({ error: 'Missing "name" query parameter' }, 400);
   }
+
   if (name === DEFAULT_CHANNEL) {
     return c.json({ error: 'Cannot delete the default channel' }, 400);
   }
@@ -240,6 +254,7 @@ export function getMetrics(c: Context) {
   const metricBuffer = getMetricBuffer();
   const channel = c.req.query('channel') || DEFAULT_CHANNEL;
   const metrics = metricBuffer.getAll(channel);
+
   return c.json({
     metrics,
     count: metrics.length,
@@ -256,6 +271,7 @@ export function getTraces(c: Context) {
   const traceBuffer = getTraceBuffer();
   const channel = c.req.query('channel') || DEFAULT_CHANNEL;
   const traces = traceBuffer.getAll(channel);
+
   return c.json({
     traces,
     count: traces.length,
@@ -296,18 +312,23 @@ export async function executeSql(c: Context) {
     }
 
     const result = db.executeSql(sql);
+
     return c.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
     if (process.env.NODE_ENV === 'production') {
       const safeMessages = new Set([
         'Only SELECT queries are allowed',
         'Only a single statement is allowed',
         'Query contains disallowed keyword',
       ]);
+
       const safe = safeMessages.has(message);
+
       return c.json({ error: safe ? message : 'Query execution failed' }, 400);
     }
+
     return c.json({ error: message }, 400);
   }
 }
@@ -334,11 +355,13 @@ export function streamLogs(c: Context) {
   if (openStreams >= maxStreams) {
     return c.json({ error: 'Too many open streams' }, 503);
   }
+
   // One 'logs' and one 'clear' listener per stream; keep Node's leak warning
   // meaningful by sizing it to the cap rather than the default of 10.
   if (buffer.getMaxListeners() < maxStreams + 10) {
     buffer.setMaxListeners(maxStreams + 10);
   }
+
   openStreams++;
 
   return streamSSE(c, async (stream) => {
@@ -351,6 +374,7 @@ export function streamLogs(c: Context) {
       const onLogs = async (logs: LogEntry[]) => {
         // Filter by channel if requested
         const filtered = channel ? logs.filter(l => l.channel === channel) : logs;
+
         if (filtered.length > 0) {
           try {
             await stream.writeSSE({

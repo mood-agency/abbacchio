@@ -44,11 +44,14 @@ describe('GET /api/stream connection cap', () => {
     await a.body!.cancel();
     // onAbort runs asynchronously after the cancel propagates.
     let next: Response | undefined;
+
     for (let i = 0; i < 50; i++) {
       await Bun.sleep(10);
       next = await app.request('/api/stream');
+
       if (next.status === 200) break;
     }
+
     expect(next!.status).toBe(200);
 
     await b.body!.cancel();

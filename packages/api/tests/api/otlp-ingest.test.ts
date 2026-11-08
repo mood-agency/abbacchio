@@ -190,6 +190,7 @@ describe('POST /v1/metrics (OTLP)', () => {
 
   it('should store metrics in the metric buffer', async () => {
     const app = createTestApp();
+
     const request = createOtlpMetricRequest({
       serviceName: 'metrics-app',
       metricName: 'http.requests.total',
@@ -213,6 +214,7 @@ describe('POST /v1/metrics (OTLP)', () => {
 
   it('should store gauge metrics', async () => {
     const app = createTestApp();
+
     const request = createOtlpMetricRequest({
       serviceName: 'gauge-app',
       metricName: 'system.memory',
@@ -277,6 +279,7 @@ describe('POST /v1/traces (OTLP)', () => {
 
   it('should store spans in the trace buffer', async () => {
     const app = createTestApp();
+
     const request = createOtlpTraceRequest({
       serviceName: 'tracing-app',
       traceId: 'trace-xyz',
@@ -300,6 +303,7 @@ describe('POST /v1/traces (OTLP)', () => {
 
   it('should store span attributes', async () => {
     const app = createTestApp();
+
     const request = createOtlpTraceRequest({
       serviceName: 'attr-app',
       attributes: [

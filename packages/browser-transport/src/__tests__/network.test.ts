@@ -93,6 +93,7 @@ describe('Network Capture (Monkey Patching)', () => {
           }, 10);
         }
       }
+
       (globalThis as any).XMLHttpRequest = MockXHR;
 
       startNetworkCapture({ captureXhr: true }, logSpy);

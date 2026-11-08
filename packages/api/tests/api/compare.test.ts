@@ -20,6 +20,7 @@ function spanRequest(version: string, durationsMs: number[], name = 'GET /users'
       scopeSpans: [{
         spans: durationsMs.map((d, i) => {
           const start = BASE_NANO + BigInt(i) * 1_000_000_000n;
+
           return {
             traceId: `${version}-trace-${i}`,
             spanId: `${version}-span-${i}`,
@@ -65,6 +66,7 @@ async function post(app: ReturnType<typeof createTestApp>, path: string, body: u
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+
   expect(res.status).toBe(200);
 }
 
@@ -107,6 +109,7 @@ describe('GET /api/compare', () => {
     const res = await app.request(
       '/api/compare?source=span&name=GET%20/users&channel=bench-app&baselineVersion=1.0.0&candidateVersion=1.1.0',
     );
+
     expect(res.status).toBe(200);
     const r = await res.json();
     expect(r.verdict).toBe('regression');
@@ -136,6 +139,7 @@ describe('GET /api/compare', () => {
     const res = await app.request(
       '/api/compare?source=metric&name=http.server.duration&baselineVersion=1.0.0&candidateVersion=1.1.0&stat=mean',
     );
+
     const r = await res.json();
     expect(r.baseline.stats.count).toBe(100);
     expect(r.baseline.stats.mean).toBe(30);
@@ -163,6 +167,7 @@ describe('GET /api/compare', () => {
 
   it('validates parameters', async () => {
     const app = createTestApp();
+
     const cases = [
       '/api/compare?name=x&baselineVersion=a&candidateVersion=b',
       '/api/compare?source=span&baselineVersion=a&candidateVersion=b',
@@ -172,6 +177,7 @@ describe('GET /api/compare', () => {
       '/api/compare?source=span&name=x&baselineVersion=a&candidateVersion=b&threshold=abc',
       '/api/compare?source=span&name=x&baselineVersion=a&candidateVersion=b&direction=up',
     ];
+
     for (const path of cases) {
       const res = await app.request(path);
       expect(res.status).toBe(400);

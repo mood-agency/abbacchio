@@ -66,6 +66,7 @@ function highlightBash(code: string): ReactNode {
           </span>
         );
       }
+
       // Add the string
       parts.push(
         <span key={key++} style={{ color: 'rgb(173, 219, 103)' }}>
@@ -95,19 +96,23 @@ function highlightBash(code: string): ReactNode {
 function highlightBashTokens(text: string): ReactNode {
   // Highlight commands and flags
   const tokens = text.split(/(\s+)/);
+
   return tokens.map((token, i) => {
     // Flags like -X, -H, -d
     if (/^-[a-zA-Z]/.test(token)) {
       return <span key={i} style={{ color: 'rgb(127, 219, 202)' }}>{token}</span>;
     }
+
     // Commands like curl, npm
     if (/^(curl|npm|install|pnpm|yarn)$/.test(token)) {
       return <span key={i} style={{ color: 'rgb(130, 170, 255)' }}>{token}</span>;
     }
+
     // URLs
     if (token.includes('http://') || token.includes('https://')) {
       return <span key={i} style={{ color: 'rgb(255, 203, 139)' }}>{token}</span>;
     }
+
     return <span key={i}>{token}</span>;
   });
 }

@@ -94,9 +94,11 @@ export function startPerfCapture(
               `longtask ${entry.duration.toFixed(1)}ms`,
               'perf.longtask',
             );
+
             log.duration = entry.duration;
             log.startTime = entry.startTime;
             log.entryType = entry.entryType;
+
             if (entry.attribution && entry.attribution.length > 0) {
               log.attribution = entry.attribution.map((a) => ({
                 name: a.name,
@@ -107,6 +109,7 @@ export function startPerfCapture(
                 containerSrc: a.containerSrc,
               }));
             }
+
             onEntry(log);
           } catch { /* never throw */ }
         }
@@ -126,15 +129,21 @@ export function startPerfCapture(
               `slow '${entry.name}' handler ${entry.duration.toFixed(1)}ms`,
               'perf.event',
             );
+
             log.duration = entry.duration;
             log.eventName = entry.name;
             log.startTime = entry.startTime;
+
             if (entry.processingStart !== undefined) log.processingStart = entry.processingStart;
+
             if (entry.processingEnd !== undefined) log.processingEnd = entry.processingEnd;
+
             if (entry.cancelable !== undefined) log.cancelable = entry.cancelable;
+
             if (entry.target?.tagName) {
               log.target = `${entry.target.tagName.toLowerCase()}${entry.target.id ? '#' + entry.target.id : ''}`;
             }
+
             onEntry(log);
           } catch { /* never throw */ }
         }
@@ -152,6 +161,7 @@ export function startPerfCapture(
     memoryIntervalId = setInterval(async () => {
       try {
         const perf = performance as any;
+
         if (perf.memory) {
           // Chromium non-standard API
           const log = baseEntry(options, 30, 'memory consumption snapshot', 'perf.memory');
@@ -181,12 +191,16 @@ export function startPerfCapture(
 export function stopPerfCapture(): void {
   if (longTaskObserver) {
     try { longTaskObserver.disconnect(); } catch { /* ignore */ }
+
     longTaskObserver = null;
   }
+
   if (eventObserver) {
     try { eventObserver.disconnect(); } catch { /* ignore */ }
+
     eventObserver = null;
   }
+
   if (memoryIntervalId !== null) {
     clearInterval(memoryIntervalId);
     memoryIntervalId = null;

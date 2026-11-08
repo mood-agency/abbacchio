@@ -7,6 +7,7 @@ describe('default endpoint', () => {
     // @ts-expect-error — mock global fetch
     globalThis.fetch = mock(async (url: string) => {
       urls.push(url);
+
       return new Response('{}', { status: 200 });
     });
 

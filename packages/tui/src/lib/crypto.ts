@@ -23,10 +23,12 @@ export function decrypt(encryptedData: string, secretKey: string): string {
   // Extract components
   const salt = combined.subarray(0, SALT_LENGTH);
   const iv = combined.subarray(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
+
   const authTag = combined.subarray(
     SALT_LENGTH + IV_LENGTH,
     SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH
   );
+
   const ciphertext = combined.subarray(SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH);
 
   const key = deriveKey(secretKey, salt);
@@ -46,6 +48,7 @@ export function decrypt(encryptedData: string, secretKey: string): string {
  */
 export function decryptLog<T = unknown>(encryptedLog: { encrypted: string }, secretKey: string): T {
   const jsonStr = decrypt(encryptedLog.encrypted, secretKey);
+
   return JSON.parse(jsonStr);
 }
 

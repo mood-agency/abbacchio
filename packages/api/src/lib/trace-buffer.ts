@@ -31,15 +31,20 @@ export class TraceBuffer extends EventEmitter {
      */
     private registerChannel(channel: string): void {
         const existing = this.channels.get(channel);
+
         if (existing) {
             this.channels.delete(channel);
             this.channels.set(channel, existing);
+
             return;
         }
+
         if (this.channels.size >= this.config.maxChannels) {
             const oldest = this.channels.keys().next().value;
+
             if (oldest !== undefined) this.channels.delete(oldest);
         }
+
         this.channels.set(channel, []);
     }
 
@@ -53,9 +58,11 @@ export class TraceBuffer extends EventEmitter {
 
         for (const span of spans) {
             const channel = span.channel || DEFAULT_CHANNEL;
+
             if (!spansByChannel.has(channel)) {
                 spansByChannel.set(channel, []);
             }
+
             spansByChannel.get(channel)!.push(span);
         }
 
@@ -99,6 +106,7 @@ export function getTraceBuffer(): TraceBuffer {
     if (!instance) {
         instance = new TraceBuffer();
     }
+
     return instance;
 }
 
@@ -106,5 +114,6 @@ export function resetTraceBuffer(): void {
     if (instance) {
         instance.removeAllListeners();
     }
+
     instance = null;
 }

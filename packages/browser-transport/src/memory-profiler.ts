@@ -112,6 +112,7 @@ function clampInteger(
   max: number,
 ): number {
   if (!Number.isFinite(value)) return fallback;
+
   return Math.min(max, Math.max(min, Math.floor(value!)));
 }
 
@@ -137,6 +138,7 @@ function createSessionId(): string {
   } catch {
     // Fall through to the non-cryptographic identifier below.
   }
+
   return `mem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -158,6 +160,7 @@ export function collectMemoryProfilerSample(
   options: MemoryProfilerSampleContext = {},
 ): MemoryProfilerSample {
   const memory = getChromeMemory(performance);
+
   const dom: MemoryDomSample = {
     elements: document.getElementsByTagName('*').length,
     canvases: document.getElementsByTagName('canvas').length,
@@ -190,6 +193,7 @@ export function serializeMemoryProfilerSamples(
   samples: readonly MemoryProfilerSample[],
 ): string {
   if (samples.length === 0) return '';
+
   return `${samples.map((sample) => JSON.stringify(sample)).join('\n')}\n`;
 }
 
@@ -223,10 +227,12 @@ function flattenNumericValues(
       if (Number.isFinite(value)) target.push({ name, value });
       continue;
     }
+
     if (typeof value === 'boolean') {
       target.push({ name, value: value ? 1 : 0 });
       continue;
     }
+
     // Arrays are skipped on purpose: per-entry names would make metric
     // cardinality grow without bound. Use the JSONL export for that detail.
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -250,9 +256,11 @@ export function toMemoryProfilerMetrics(
   if (sample.heap.usedBytes !== null) {
     points.push({ name: `${prefix}.heap.used_bytes`, value: sample.heap.usedBytes });
   }
+
   if (sample.heap.totalBytes !== null) {
     points.push({ name: `${prefix}.heap.total_bytes`, value: sample.heap.totalBytes });
   }
+
   if (sample.heap.limitBytes !== null) {
     points.push({ name: `${prefix}.heap.limit_bytes`, value: sample.heap.limitBytes });
   }
@@ -269,6 +277,7 @@ export function toMemoryProfilerMetrics(
     kind: sample.kind,
     sequence: String(sample.sequence),
   };
+
   if (sample.label !== null) attributes.label = sample.label;
 
   return points.map((point) => ({ ...point, attributes }));
@@ -300,6 +309,7 @@ export class MemoryProfiler {
       1,
       MAX_SAMPLE_CAPACITY,
     );
+
     if (options.reset !== false) this.clear();
 
     // Each start() begins a new run. Samples kept by `reset: false` keep the
@@ -309,6 +319,7 @@ export class MemoryProfiler {
     this.startedAt = new Date(this.startedAtMs).toISOString();
     this.pushSample('sample', options.label ?? 'start');
     this.timer = setInterval(() => this.pushSample('sample', null), this.intervalMs);
+
     return this.status();
   }
 
@@ -317,6 +328,7 @@ export class MemoryProfiler {
       clearInterval(this.timer);
       this.timer = null;
     }
+
     return this.status();
   }
 
@@ -374,6 +386,7 @@ export class MemoryProfiler {
       this.startedAtMs = Date.now();
       this.startedAt = new Date(this.startedAtMs).toISOString();
     }
+
     const sample = collectMemoryProfilerSample(
       this.sequence++,
       this.startedAtMs,
@@ -382,7 +395,9 @@ export class MemoryProfiler {
       Date.now(),
       { ...this.options, sessionId: this.sessionId },
     );
+
     this.samples.push(sample);
+
     if (this.samples.length > this.maxSamples) {
       this.samples.splice(0, this.samples.length - this.maxSamples);
     }
@@ -396,6 +411,7 @@ export class MemoryProfiler {
         // Intentionally ignored; the sink owns its own error reporting.
       }
     }
+
     return copySample(sample);
   }
 }
@@ -409,6 +425,7 @@ export function installMemoryProfiler(
   previous?.dispose?.();
 
   const profiler = new MemoryProfiler(options);
+
   const api: MemoryProfilerApi = {
     start: (startOptions) => profiler.start(startOptions),
     stop: () => profiler.stop(),
@@ -420,17 +437,21 @@ export function installMemoryProfiler(
     download: (filename) => profiler.download(filename),
     dispose: () => {
       profiler.dispose();
+
       if (globals[globalName] === api) delete globals[globalName];
     },
   };
 
   globals[globalName] = api;
+
   if (options.readyMessage !== false) {
     console.info(
       options.readyMessage ??
         `[abbacchio:memory] Profiler ready. Start with ${globalName}.start()`,
     );
   }
+
   options.hot?.dispose(() => api.dispose());
+
   return api;
 }

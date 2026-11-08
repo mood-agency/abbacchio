@@ -33,6 +33,7 @@ export function formatLogsAsJson(logs: LogEntry[]): string {
     data: Object.keys(log.data).length > 0 ? log.data : undefined,
     channel: log.channel,
   }));
+
   return JSON.stringify(cleanLogs, null, 2);
 }
 
@@ -45,6 +46,7 @@ function escapeCsvValue(value: string): string {
   if (value.includes('"') || value.includes(',') || value.includes('\n') || value.includes('\r')) {
     return `"${value.replace(/"/g, '""')}"`;
   }
+
   return value;
 }
 
@@ -60,6 +62,7 @@ function escapeSqlValue(value: string): string {
  */
 export function formatLogsAsCsv(logs: LogEntry[]): string {
   const headers = ['timestamp', 'level', 'namespace', 'channel', 'message', 'data'];
+
   const rows = logs.map(log => [
     new Date(log.time).toISOString(),
     log.levelLabel,
@@ -84,6 +87,7 @@ export function formatLogsAsSql(logs: LogEntry[], tableName: string = 'logs'): s
     const namespace = log.namespace ? `'${escapeSqlValue(log.namespace)}'` : 'NULL';
     const channel = escapeSqlValue(log.channel);
     const msg = escapeSqlValue(log.msg);
+
     const data = Object.keys(log.data).length > 0
       ? `'${escapeSqlValue(JSON.stringify(log.data))}'`
       : 'NULL';

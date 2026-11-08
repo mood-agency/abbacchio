@@ -19,6 +19,7 @@ export function LogList({ logs, search, scrollOffset, onScrollChange, autoScroll
     width: stdout?.columns || 80,
     height: stdout?.rows || 24,
   });
+
   const [, forceUpdate] = useState(0);
 
   // Update dimensions on resize (debounced)
@@ -39,8 +40,10 @@ export function LogList({ logs, search, scrollOffset, onScrollChange, autoScroll
     };
 
     stdout?.on('resize', handleResize);
+
     return () => {
       stdout?.off('resize', handleResize);
+
       if (resizeTimeout) clearTimeout(resizeTimeout);
     };
   }, [stdout]);
@@ -64,6 +67,7 @@ export function LogList({ logs, search, scrollOffset, onScrollChange, autoScroll
       const maxOffset = Math.max(0, logs.length - visibleHeight);
       onScrollChangeRef.current(maxOffset);
     }
+
     prevLogsLength.current = logs.length;
   }, [logs.length, autoScroll, visibleHeight]);
 

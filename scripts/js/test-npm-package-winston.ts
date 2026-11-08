@@ -79,6 +79,7 @@ async function main() {
       const level = randomElement(levelNames);
       const winstonLevel = levelMap[level] || 'info';
       const message = randomElement(messages);
+
       const extraData = {
         ...randomElement(extras),
         namespace: options.name || randomElement(namespaces),

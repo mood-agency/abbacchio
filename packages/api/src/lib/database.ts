@@ -130,12 +130,16 @@ export interface DbStats {
 
 function buildFtsQuery(input: string): string {
   const trimmed = input.trim();
+
   if (!trimmed) return '';
   const tokens = trimmed.split(/\s+/).filter(Boolean);
+
   return tokens
     .map(t => {
       const sanitized = t.replace(/["'*(){}[\]^~\\:+\-!,;.]/g, '');
+
       if (!sanitized) return '';
+
       return '"' + sanitized + '"' + '*';
     })
     .filter(Boolean)
@@ -153,16 +157,20 @@ function addLevelAndNamespaceConditions(
     conditions.push(`level_label IN (${placeholders.join(', ')})`);
     levels.forEach((lbl, i) => { params[`$lvl${i}`] = lbl; });
   }
+
   if (namespaces && namespaces.length > 0) {
     const hasNone = namespaces.includes('(none)');
     const named = namespaces.filter(n => n !== '(none)');
     const parts: string[] = [];
+
     if (hasNone) parts.push('namespace IS NULL');
+
     if (named.length > 0) {
       const placeholders = named.map((_, i) => `$ns${i}`);
       parts.push(`namespace IN (${placeholders.join(', ')})`);
       named.forEach((ns, i) => { params[`$ns${i}`] = ns; });
     }
+
     conditions.push(`(${parts.join(' OR ')})`);
   }
 }
@@ -216,6 +224,7 @@ export class LogDatabase {
     }
 
     this.db = new Database(this.config.path);
+
     if (this.config.path === ':memory:') {
       this.readonlyDb = this.db;
     } else {
@@ -230,6 +239,7 @@ export class LogDatabase {
       this.db.run('PRAGMA journal_mode = MEMORY');
       this.db.run('PRAGMA synchronous = OFF');
     }
+
     // RAM footprint pragmas (env-tunable; lower these to use less memory).
     // cache_size is in KiB when negative; mmap_size in bytes. Set either to 0 to disable.
     const cacheSize = parseInt(process.env.SQLITE_CACHE_SIZE || '-64000', 10); // 64MB cache
@@ -245,6 +255,7 @@ export class LogDatabase {
     if (this.config.path !== ':memory:') {
       const current = (this.db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
       this.db.run('PRAGMA auto_vacuum = INCREMENTAL');
+
       if (current !== 2) {
         // 2 = INCREMENTAL. Rebuild existing DB to apply it (cheap on a fresh/empty file).
         this.db.run('VACUUM');
@@ -266,6 +277,7 @@ export class LogDatabase {
    */
   private addColumnIfMissing(table: string, column: string, definition: string): void {
     const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+
     if (cols.some((c) => c.name === column)) return;
     this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
@@ -414,11 +426,13 @@ export class LogDatabase {
 
   insert(entry: LogEntry): void {
     this.logQueue.push(entry);
+
     if (this.logQueue.length >= this.maxBufferSize) this.flush();
   }
 
   insertBatch(entries: LogEntry[]): void {
     this.logQueue.push(...entries);
+
     if (this.logQueue.length >= this.maxBufferSize) this.flush();
   }
 
@@ -426,11 +440,13 @@ export class LogDatabase {
 
   queueMetric(metric: MetricDataPoint): void {
     this.metricQueue.push(metric);
+
     if (this.metricQueue.length >= this.maxBufferSize) this.flush();
   }
 
   queueMetricBatch(metrics: MetricDataPoint[]): void {
     this.metricQueue.push(...metrics);
+
     if (this.metricQueue.length >= this.maxBufferSize) this.flush();
   }
 
@@ -438,11 +454,13 @@ export class LogDatabase {
 
   queueSpan(span: TraceSpan): void {
     this.spanQueue.push(span);
+
     if (this.spanQueue.length >= this.maxBufferSize) this.flush();
   }
 
   queueSpanBatch(spans: TraceSpan[]): void {
     this.spanQueue.push(...spans);
+
     if (this.spanQueue.length >= this.maxBufferSize) this.flush();
   }
 
@@ -528,29 +546,36 @@ export class LogDatabase {
       conditions.push('logs.channel = $channel');
       params.$channel = opts.channel;
     }
+
     if (opts.level !== undefined) {
       conditions.push('logs.level >= $level');
       params.$level = opts.level;
     }
+
     addLevelAndNamespaceConditions(conditions, params, opts.levels, opts.namespaces);
+
     if (opts.search) {
       const ftsQuery = buildFtsQuery(opts.search);
+
       if (ftsQuery) {
         useFts = true;
         conditions.push('logs_fts MATCH $ftsSearch');
         params.$ftsSearch = ftsQuery;
       }
     }
+
     if (opts.since !== undefined) {
       conditions.push('logs.time >= $since');
       params.$since = opts.since;
     }
+
     if (opts.until !== undefined) {
       conditions.push('logs.time <= $until');
       params.$until = opts.until;
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
     const from = useFts
       ? 'logs JOIN logs_fts ON logs.rowid = logs_fts.rowid'
       : 'logs';
@@ -579,18 +604,22 @@ export class LogDatabase {
       conditions.push('channel = $channel');
       params.$channel = opts.channel;
     }
+
     if (opts.name) {
       conditions.push('name = $name');
       params.$name = opts.name;
     }
+
     if (opts.type) {
       conditions.push('type = $type');
       params.$type = opts.type;
     }
+
     if (opts.since !== undefined) {
       conditions.push('time_unix_nano >= $since');
       params.$since = opts.since;
     }
+
     if (opts.until !== undefined) {
       conditions.push('time_unix_nano <= $until');
       params.$until = opts.until;
@@ -616,9 +645,13 @@ export class LogDatabase {
         value: row.value,
         attributes: JSON.parse(row.attributes),
       };
+
       if (row.count !== null && row.count !== undefined) metric.count = row.count;
+
       if (row.bucket_counts) metric.bucketCounts = JSON.parse(row.bucket_counts);
+
       if (row.explicit_bounds) metric.explicitBounds = JSON.parse(row.explicit_bounds);
+
       return metric;
     });
 
@@ -637,18 +670,22 @@ export class LogDatabase {
       conditions.push('channel = $channel');
       params.$channel = opts.channel;
     }
+
     if (opts.traceId) {
       conditions.push('trace_id = $traceId');
       params.$traceId = opts.traceId;
     }
+
     if (opts.name) {
       conditions.push('name LIKE $name');
       params.$name = `%${opts.name}%`;
     }
+
     if (opts.since !== undefined) {
       conditions.push('start_time_ms >= $since');
       params.$since = opts.since;
     }
+
     if (opts.until !== undefined) {
       conditions.push('start_time_ms <= $until');
       params.$until = opts.until;
@@ -686,22 +723,27 @@ export class LogDatabase {
   private runConditions(name: string, sel: RunSelector, timeColumn: string, timeScale: number): { sql: string; params: Array<string | number> } {
     const conditions: string[] = ['name = ?'];
     const params: Array<string | number> = [name];
+
     if (sel.channel) {
       conditions.push('channel = ?');
       params.push(sel.channel);
     }
+
     if (sel.version) {
       conditions.push(`${VERSION_EXPR} = ?`);
       params.push(sel.version);
     }
+
     if (sel.since !== undefined) {
       conditions.push(`${timeColumn} >= ?`);
       params.push(sel.since * timeScale);
     }
+
     if (sel.until !== undefined) {
       conditions.push(`${timeColumn} <= ?`);
       params.push(sel.until * timeScale);
     }
+
     return { sql: conditions.join(' AND '), params };
   }
 
@@ -709,10 +751,13 @@ export class LogDatabase {
   selectSpanSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): { samples: SpanSample[]; truncated: boolean } {
     this.flush();
     const { sql, params } = this.runConditions(name, sel, 'start_time_ms', 1);
+
     const rows = this.db.prepare(
       `SELECT end_time_ms - start_time_ms AS duration, status_code FROM traces WHERE ${sql} ORDER BY start_time_ms DESC LIMIT ?`
     ).all(...params, limit + 1) as Array<{ duration: number; status_code: number | null }>;
+
     const truncated = rows.length > limit;
+
     return {
       samples: rows.slice(0, limit).map((r) => ({ durationMs: r.duration, error: r.status_code === 2 })),
       truncated,
@@ -723,10 +768,13 @@ export class LogDatabase {
   selectMetricSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): { samples: MetricSample[]; truncated: boolean } {
     this.flush();
     const { sql, params } = this.runConditions(name, sel, 'time_unix_nano', 1_000_000);
+
     const rows = this.db.prepare(
       `SELECT type, unit, value, count, bucket_counts, explicit_bounds FROM metrics WHERE ${sql} ORDER BY time_unix_nano DESC LIMIT ?`
     ).all(...params, limit + 1) as any[];
+
     const truncated = rows.length > limit;
+
     return {
       samples: rows.slice(0, limit).map((r) => ({
         type: r.type,
@@ -746,6 +794,7 @@ export class LogDatabase {
     const channelFilter = channel ? 'AND channel = ?' : '';
     const params = channel ? [channel, channel, channel] : [];
     const logVersion = `json_extract(data, '$."service.version"')`;
+
     const rows = this.db.prepare(`
       SELECT channel, version, SUM(spans) AS spans, SUM(points) AS metricPoints, SUM(logs) AS logs,
              MIN(first_seen) AS firstSeen, MAX(last_seen) AS lastSeen
@@ -764,6 +813,7 @@ export class LogDatabase {
       GROUP BY channel, version
       ORDER BY lastSeen DESC
     `).all(...params) as any[];
+
     return rows.map((r) => ({
       channel: r.channel,
       version: String(r.version),
@@ -787,6 +837,7 @@ export class LogDatabase {
 
     // Reject multi-statement payloads (single trailing semicolon is OK).
     const withoutTrailing = stripped.replace(/;\s*$/, '');
+
     if (withoutTrailing.includes(';')) {
       throw new Error('Only a single statement is allowed');
     }
@@ -809,12 +860,15 @@ export class LogDatabase {
     const sharesWriter = this.readonlyDb === this.db;
     const start = performance.now();
     let rows: Record<string, unknown>[];
+
     if (sharesWriter) this.db.run('PRAGMA query_only = ON');
+
     try {
       rows = this.readonlyDb.prepare(finalSql).all() as Record<string, unknown>[];
     } finally {
       if (sharesWriter) this.db.run('PRAGMA query_only = OFF');
     }
+
     const executionTimeMs = Math.round((performance.now() - start) * 100) / 100;
 
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
@@ -824,12 +878,15 @@ export class LogDatabase {
     let truncated = false;
     let totalBytes = 0;
     const capped: Record<string, unknown>[] = [];
+
     for (const row of rows) {
       totalBytes += JSON.stringify(row).length;
+
       if (totalBytes > MAX_RESPONSE_BYTES) {
         truncated = true;
         break;
       }
+
       capped.push(row);
     }
 
@@ -854,12 +911,14 @@ export class LogDatabase {
 
     const levels: Record<string, number> = {};
     let total = 0;
+
     for (const row of levelRows) {
       levels[row.level_label] = row.count;
       total += row.count;
     }
 
     const namespaces: Record<string, number> = {};
+
     for (const row of nsRows) {
       namespaces[row.ns] = row.count;
     }
@@ -884,9 +943,11 @@ export class LogDatabase {
       conditions.push('channel = $channel');
       params.$channel = channel;
     }
+
     addLevelAndNamespaceConditions(conditions, params, levels, namespaces);
 
     const where = `WHERE ${conditions.join(' AND ')}`;
+
     const rows = this.db.prepare(
       `SELECT * FROM logs ${where} ORDER BY time ASC LIMIT $limit`
     ).all(params) as any[];
@@ -906,9 +967,11 @@ export class LogDatabase {
       conditions.push('channel = $channel');
       params.$channel = channel;
     }
+
     addLevelAndNamespaceConditions(conditions, params, levels, namespaces);
 
     const where = `WHERE ${conditions.join(' AND ')}`;
+
     const rows = this.db.prepare(
       `SELECT * FROM logs ${where} ORDER BY rowid DESC LIMIT $limit`
     ).all(params) as any[];
@@ -926,6 +989,7 @@ export class LogDatabase {
 
   queryById(id: string): { time: number; channel: string } | null {
     const row = this.db.prepare('SELECT time, channel FROM logs WHERE id = ?').get(id) as { time: number; channel: string } | null;
+
     return row || null;
   }
 
@@ -933,6 +997,7 @@ export class LogDatabase {
 
   getChannels(): string[] {
     const rows = this.db.prepare('SELECT DISTINCT channel FROM logs ORDER BY channel').all() as Array<{ channel: string }>;
+
     return rows.map((r) => r.channel);
   }
 
@@ -945,6 +1010,7 @@ export class LogDatabase {
     `).all() as Array<{ channel: string; count: number; lastActivity: number }>;
 
     let dbSizeBytes = 0;
+
     try {
       dbSizeBytes = statSync(this.config.path).size;
     } catch {
@@ -982,6 +1048,7 @@ export class LogDatabase {
       this.db.prepare('DELETE FROM metrics WHERE channel = ?').run(channel);
       this.db.prepare('DELETE FROM traces WHERE channel = ?').run(channel);
     });
+
     runTransaction();
   }
 
@@ -1052,6 +1119,7 @@ export function getDatabase(): LogDatabase {
   if (!instance) {
     instance = new LogDatabase();
   }
+
   return instance;
 }
 
@@ -1059,5 +1127,6 @@ export function resetDatabase(): void {
   if (instance) {
     instance.close();
   }
+
   instance = null;
 }

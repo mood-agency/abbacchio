@@ -40,9 +40,11 @@ const VERSION_FILES = [
 
 function parseVersion(version) {
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
+
   if (!match) {
     throw new Error(`Invalid version format: ${version}`);
   }
+
   return {
     major: parseInt(match[1], 10),
     minor: parseInt(match[2], 10),
@@ -52,6 +54,7 @@ function parseVersion(version) {
 
 function bumpVersion(current, type) {
   const v = parseVersion(current);
+
   switch (type) {
     case "major":
       return `${v.major + 1}.0.0`;
@@ -62,6 +65,7 @@ function bumpVersion(current, type) {
     default:
       // Assume it's a specific version
       parseVersion(type); // Validate format
+
       return type;
   }
 }
@@ -70,6 +74,7 @@ function getCurrentVersion() {
   const packageJson = JSON.parse(
     readFileSync(join(rootDir, "package.json"), "utf8")
   );
+
   return packageJson.version;
 }
 
@@ -127,6 +132,7 @@ Examples:
       } else if (file.type === "toml") {
         updateTomlFile(file.path, newVersion);
       }
+
       console.log(`  ✓ ${file.path}`);
     } catch (error) {
       console.log(`  ✗ ${file.path} - ${error.message}`);

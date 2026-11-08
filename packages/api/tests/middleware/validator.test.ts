@@ -35,6 +35,7 @@ describe('validateBatch', () => {
       [{ level: 30, msg: 'test1' }, { level: 30, msg: 'test2' }],
       config
     );
+
     expect(result.valid).toBe(true);
   });
 
@@ -58,6 +59,7 @@ describe('validateBatch', () => {
       { level: 30, msg: 'normal' },
       { level: 30, msg: 'x'.repeat(1000) },
     ];
+
     const result = validateBatch(logs, config);
 
     expect(result.valid).toBe(false);
@@ -81,6 +83,7 @@ describe('validator middleware', () => {
     );
     app.post('/api/logs', (c) => {
       const body = getValidatedBody(c);
+
       return c.json({ received: true, body });
     });
     app.get('/api/other', (c) => c.json({ ok: true }));

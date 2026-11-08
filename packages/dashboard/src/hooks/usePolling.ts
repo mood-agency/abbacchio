@@ -104,14 +104,17 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // server, so re-arm backward pagination from the new oldest entry.
   const appendToWindow = useCallback((prev: LogEntry[], incoming: LogEntry[]) => {
     const result = appendLogs(prev, incoming);
+
     if (result.added > 0) {
       lastLogIdRef.current = result.logs[result.logs.length - 1].id;
     }
+
     if (result.trimmed) {
       oldestLogIdRef.current = result.logs[0].id;
       hasMoreOlderLogsRef.current = true;
       setHasMoreOlderLogs(true);
     }
+
     return result;
   }, []);
 
@@ -122,6 +125,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         fetch(`${API_BASE}/channels`),
         fetch(`${API_BASE}/stats`),
       ]);
+
       if (!res.ok) return;
       const data = await res.json();
       const channelNames: string[] = data.channels || [];
@@ -131,6 +135,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
 
       const newChannels: Channel[] = channelNames.map(name => {
         const info = channelInfos.find((c: { name: string }) => c.name === name);
+
         return { name, logCount: info?.logCount || 0 };
       });
 
@@ -152,6 +157,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // which would cause the polling effect to restart and trigger full re-fetches.
   const fetchLogs = useCallback(async (isInitialLoad = false) => {
     const channel = activeChannelRef.current;
+
     if (!channel || isPausedRef.current) return;
 
     // Polling calls must wait until the initial load completes to avoid
@@ -167,18 +173,23 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       fetchInFlightRef.current = true;
 
       const params = new URLSearchParams({ channel });
+
       if (isIncremental) {
         params.set('afterId', lastLogIdRef.current!);
       }
+
       const filters = serverFiltersRef.current;
+
       if (filters?.levels && filters.levels.length > 0) {
         params.set('levels', filters.levels.join(','));
       }
+
       if (filters?.namespaces && filters.namespaces.length > 0) {
         params.set('namespaces', filters.namespaces.join(','));
       }
 
       const res = await fetch(`${API_BASE}/logs?${params}`);
+
       if (!res.ok) return;
       const data = await res.json();
       const newLogs: LogEntry[] = data.logs || [];
@@ -197,6 +208,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
           setLogs(prev => appendToWindow(newLogs, prev).logs);
           // Determine if there are older logs to load
           const total = data.total;
+
           if (total !== undefined) {
             setServerTotal(total);
             const hasMore = newLogs.length < total;
@@ -207,7 +219,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
           // Incremental — append, deduplicating by id
           setLogs(prev => {
             const { logs: next, added } = appendToWindow(prev, newLogs);
+
             if (added > 0) setServerTotal(st => st !== null ? st + added : null);
+
             return next;
           });
         }
@@ -226,11 +240,15 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Fetch server-side counts for active channel
   const fetchCounts = useCallback(async () => {
     const channel = activeChannelRef.current;
+
     if (!channel) return;
+
     try {
       const res = await fetch(`${API_BASE}/logs/counts?channel=${encodeURIComponent(channel)}`);
+
       if (!res.ok) return;
       const data = await res.json();
+
       if (channel !== activeChannelRef.current) return;
       setServerTotal(data.total ?? null);
       setServerLevelCounts(data.levels ?? null);
@@ -243,9 +261,12 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Fetch metrics for active channel
   const fetchMetrics = useCallback(async () => {
     const channel = activeChannelRef.current;
+
     if (!channel) return;
+
     try {
       const res = await fetch(`${API_BASE}/metrics?channel=${encodeURIComponent(channel)}`);
+
       if (!res.ok) return;
       const data = await res.json();
       setMetrics(data.metrics || []);
@@ -260,9 +281,12 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Fetch traces for active channel
   const fetchTraces = useCallback(async () => {
     const channel = activeChannelRef.current;
+
     if (!channel) return;
+
     try {
       const res = await fetch(`${API_BASE}/traces?channel=${encodeURIComponent(channel)}`);
+
       if (!res.ok) return;
       const data = await res.json();
       const newTraces: TraceSpan[] = data.traces || [];
@@ -271,6 +295,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       const key = newTraces.length > 0
         ? `${newTraces.length}:${newTraces[0].spanId}:${newTraces[newTraces.length - 1].spanId}`
         : '0';
+
       if (key !== lastTraceKeyRef.current) {
         lastTraceKeyRef.current = key;
         setTraces(newTraces);
@@ -283,6 +308,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Load older logs (backward pagination)
   const loadOlderLogs = useCallback(async () => {
     const channel = activeChannelRef.current;
+
     if (!channel || !oldestLogIdRef.current || loadOlderInFlightRef.current || !hasMoreOlderLogsRef.current) return;
 
     try {
@@ -294,15 +320,19 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         beforeId: oldestLogIdRef.current,
         limit: '500',
       });
+
       const filters = serverFiltersRef.current;
+
       if (filters?.levels && filters.levels.length > 0) {
         params.set('levels', filters.levels.join(','));
       }
+
       if (filters?.namespaces && filters.namespaces.length > 0) {
         params.set('namespaces', filters.namespaces.join(','));
       }
 
       const res = await fetch(`${API_BASE}/logs?${params}`);
+
       if (!res.ok) return;
       const data = await res.json();
       const olderLogs: LogEntry[] = data.logs || [];
@@ -318,7 +348,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
         setLogs(prev => {
           const existingIds = new Set(prev.map(l => l.id));
           const unique = olderLogs.filter(l => !existingIds.has(l.id));
+
           if (unique.length === 0) return prev;
+
           return [...unique, ...prev];
         });
       }
@@ -356,6 +388,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Stable key to detect filter changes
   const filtersKey = useMemo(() => {
     if (!serverFilters) return '';
+
     return [
       (serverFilters.levels || []).sort().join(','),
       (serverFilters.namespaces || []).sort().join(','),
@@ -386,6 +419,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   useEffect(() => {
     if (!activeChannel) {
       setIsLoading(false);
+
       return;
     }
 
@@ -393,12 +427,14 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       await Promise.all([fetchLogs(true), fetchMetrics(), fetchTraces(), fetchCounts()]);
       setIsLoading(false);
     };
+
     loadInitial();
   }, [activeChannel]); // fetchLogs/fetchMetrics/fetchTraces/fetchCounts are stable (no deps)
 
   // SSE Connection for logs
   useEffect(() => {
     const channel = activeChannel;
+
     if (!channel) return;
     
     let reconnectTimeout: ReturnType<typeof setTimeout>;
@@ -413,14 +449,19 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       
       es.addEventListener('logs', (e) => {
         if (isPausedRef.current) return;
+
         try {
           const newLogs: LogEntry[] = JSON.parse(e.data);
+
           if (newLogs.length > 0) {
             // Apply server-side filters on client side for the stream
             const filters = serverFiltersRef.current;
+
             const filteredLogs = newLogs.filter(log => {
                if (filters?.levels && filters.levels.length > 0 && !filters.levels.includes(log.levelLabel)) return false;
+
                if (filters?.namespaces && filters.namespaces.length > 0 && log.namespace && !filters.namespaces.includes(log.namespace)) return false;
+
                return true;
             });
             
@@ -428,7 +469,9 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
             
             setLogs(prev => {
               const { logs: next, added } = appendToWindow(prev, filteredLogs);
+
               if (added > 0) setServerTotal(st => st !== null ? st + added : null);
+
               return next;
             });
           }
@@ -440,6 +483,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
       es.addEventListener('clear', (e) => {
         try {
           const data = JSON.parse(e.data);
+
           if (data.channel === channel || data.channel === 'all') {
              setLogs([]);
              setServerTotal(0);
@@ -479,6 +523,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   useEffect(() => {
     // Poll channels periodically
     const channelInterval = setInterval(fetchChannels, POLL_INTERVAL * 5);
+
     // Poll metrics/traces/counts less frequently
     const dataInterval = setInterval(() => {
       fetchMetrics();
@@ -498,6 +543,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   // Clear logs
   const clearLogs = useCallback(async (channel?: string) => {
     const params = channel ? `?channel=${encodeURIComponent(channel)}` : '';
+
     try {
       await fetch(`${API_BASE}/logs${params}`, { method: 'DELETE' });
       setLogs([]);
@@ -514,6 +560,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
   const deleteChannel = useCallback(async (name: string) => {
     try {
       const res = await fetch(`${API_BASE}/channels?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+
       if (!res.ok) throw new Error('Failed to delete channel');
 
       setChannels(prev => prev.filter(ch => ch.name !== name));

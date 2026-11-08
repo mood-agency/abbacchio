@@ -65,6 +65,7 @@ interface MetricEntry {
 }
 
 const MAX_SQL_ROWS = 500;
+
 // Tool output is fed straight into the model's context; cap it.
 const MAX_RESPONSE_CHARS = 100_000;
 
@@ -73,6 +74,7 @@ function getDatabase(): Database.Database | null {
   if (!existsSync(DB_PATH)) {
     return null;
   }
+
   return new Database(DB_PATH, { readonly: true });
 }
 
@@ -257,23 +259,30 @@ const tools: Tool[] = [
 /** Column that orders spans by start time: `start_time_ms` (API server) or `start_time_unix_nano` (legacy). */
 function spanTimeColumn(db: Database.Database): string {
   const cols = db.prepare('PRAGMA table_info(traces)').all() as Array<{ name: string }>;
+
   return cols.some((c) => c.name === 'start_time_ms') ? 'start_time_ms' : 'start_time_unix_nano';
 }
 
 async function callApi(path: string, params: Record<string, unknown>): Promise<unknown> {
   const qs = new URLSearchParams();
+
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   }
+
   const url = `${API_URL}${path}${qs.size ? `?${qs}` : ''}`;
   let res: Response;
+
   try {
     res = await fetch(url, { headers: API_KEY ? { 'X-API-KEY': API_KEY } : {} });
   } catch (err: any) {
     throw new Error(`Could not reach the Abbacchio API at ${API_URL} (${err.message}). Start it or set ABBACCHIO_URL.`);
   }
+
   const body = await res.json().catch(() => ({}));
+
   if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status} from ${path}`);
+
   return body;
 }
 
@@ -296,19 +305,25 @@ function compareRuns(args: any): Promise<unknown> {
     minSamples: args.minSamples,
   });
 }
+
 function searchLogs(params: any): LogEntry[] {
   const db = getDatabase();
+
   if (!db) return [];
+
   try {
     let sql = 'SELECT * FROM logs WHERE 1=1';
     const sqlParams: any[] = [];
 
     if (params.channel) { sql += ' AND channel = ?'; sqlParams.push(params.channel); }
+
     if (params.traceId) { sql += ' AND trace_id = ?'; sqlParams.push(params.traceId); }
+
     if (params.level) {
       const levelMap: Record<string, number> = { trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60 };
       sql += ' AND level >= ?'; sqlParams.push(levelMap[params.level] || 30);
     }
+
     if (params.query) {
       if (params.query.length > 16 && /^[0-9a-fA-F]+$/.test(params.query)) {
         sql += ' AND (trace_id = ? OR msg LIKE ?)';
@@ -328,82 +343,109 @@ function searchLogs(params: any): LogEntry[] {
 
 function getTrace(traceId: string): { spans: SpanEntry[]; logs: LogEntry[] } {
   const db = getDatabase();
+
   if (!db) return { spans: [], logs: [] };
+
   try {
     const spans = (db.prepare(`SELECT * FROM traces WHERE trace_id = ? ORDER BY ${spanTimeColumn(db)}`).all(traceId) as any[]).map(rowToSpanEntry);
     const logs = (db.prepare('SELECT * FROM logs WHERE trace_id = ? ORDER BY time').all(traceId) as any[]).map(rowToLogEntry);
+
     return { spans, logs };
   } finally { db.close(); }
 }
 
 function searchSpans(params: any): SpanEntry[] {
   const db = getDatabase();
+
   if (!db) return [];
+
   try {
     let sql = 'SELECT * FROM traces WHERE 1=1';
     const sqlParams: any[] = [];
+
     if (params.name) { sql += ' AND name LIKE ?'; sqlParams.push(`%${params.name}%`); }
+
     if (params.channel) { sql += ' AND channel = ?'; sqlParams.push(params.channel); }
+
     if (params.errorOnly) { sql += ' AND status_code = 2'; } // 2 = Error in OTLP
 
     sql += ` ORDER BY ${spanTimeColumn(db)} DESC LIMIT ?`;
     sqlParams.push(params.limit || 50);
+
     return (db.prepare(sql).all(...sqlParams) as any[]).map(rowToSpanEntry);
   } finally { db.close(); }
 }
 
 function listMetrics(channel?: string): any[] {
   const db = getDatabase();
+
   if (!db) return [];
+
   try {
     let sql = 'SELECT DISTINCT name, type, unit, channel FROM metrics';
+
     if (channel) return db.prepare(sql + ' WHERE channel = ?').all(channel);
+
     return db.prepare(sql).all();
   } finally { db.close(); }
 }
 
 function getMetricData(name: string, channel?: string, limit = 100): MetricEntry[] {
   const db = getDatabase();
+
   if (!db) return [];
+
   try {
     let sql = 'SELECT * FROM metrics WHERE name = ?';
     const params: any[] = [name];
+
     if (channel) { sql += ' AND channel = ?'; params.push(channel); }
+
     sql += ' ORDER BY time_unix_nano DESC LIMIT ?';
     params.push(limit);
+
     return (db.prepare(sql).all(...params) as any[]).map(rowToMetricEntry);
   } finally { db.close(); }
 }
 
 function querySql(sql: string): { rows: unknown[]; truncated: boolean } {
   const db = getDatabase();
+
   if (!db) return { rows: [], truncated: false };
+
   try {
     // Ask SQLite itself rather than trusting a keyword prefix: `readonly` is
     // false for anything that writes (incl. WITH ... DELETE and mutating
     // PRAGMAs), and `reader` is false for statements that return no rows.
     // PRAGMA/ATTACH/DETACH are refused outright as they act on the connection.
     const stmt = db.prepare(sql);
+
     if (/^\s*(PRAGMA|ATTACH|DETACH)\b/i.test(sql) || !stmt.readonly || !stmt.reader) {
       throw new Error('Only read-only SELECT queries are allowed.');
     }
+
     const rows: unknown[] = [];
+
     for (const row of stmt.iterate()) {
       if (rows.length === MAX_SQL_ROWS) return { rows, truncated: true };
       rows.push(row);
     }
+
     return { rows, truncated: false };
   } finally { db.close(); }
 }
 
 function getChannels(): any[] {
   const db = getDatabase();
+
   if (!db) return [];
+
   try {
     const logs = db.prepare('SELECT DISTINCT channel FROM logs').all() as any[];
     const traces = db.prepare('SELECT DISTINCT channel FROM traces').all() as any[];
     const metrics = db.prepare('SELECT DISTINCT channel FROM metrics').all() as any[];
     const all = new Set([...logs, ...traces, ...metrics].map(r => r.channel));
+
     return Array.from(all).map(channel => ({ channel }));
   } finally { db.close(); }
 }
@@ -411,11 +453,14 @@ function getChannels(): any[] {
 function analyzeError(error: string, channel?: string): any {
   const keywords = error.split(/[\s\n:,()[\]{}]+/).filter(w => w.length > 3).slice(0, 5);
   const logs: LogEntry[] = [];
+
   for (const kw of keywords) {
     logs.push(...searchLogs({ query: kw, channel, limit: 10 }));
   }
+
   const seen = new Set();
   const dedupedLogs = logs.filter(l => seen.has(l.id) ? false : seen.add(l.id)).sort((a, b) => b.time - a.time);
+
   return { relatedLogs: dedupedLogs.slice(0, 20), summary: `Found ${dedupedLogs.length} logs for keywords ${keywords.join(', ')}` };
 }
 
@@ -433,6 +478,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const result = name === 'compare_runs'
         ? await compareRuns(args ?? {})
         : await callApi('/api/versions', { channel: (args as any)?.channel });
+
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err: any) {
       return { content: [{ type: 'text', text: `Error executing ${name}: ${err.message}` }], isError: true };
@@ -444,6 +490,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   let result: any;
+
   try {
     switch (name) {
       case 'search_logs': result = searchLogs(args); break;
@@ -456,10 +503,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'analyze_error': result = analyzeError((args as any).error, (args as any).channel); break;
       default: return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     }
+
     let text = JSON.stringify(result, null, 2);
+
     if (text.length > MAX_RESPONSE_CHARS) {
       text = `${text.slice(0, MAX_RESPONSE_CHARS)}\n... [truncated: response exceeded ${MAX_RESPONSE_CHARS} characters; narrow the query or lower the limit]`;
     }
+
     return { content: [{ type: 'text', text }] };
   } catch (err: any) {
     return { content: [{ type: 'text', text: `Error executing ${name}: ${err.message}` }], isError: true };

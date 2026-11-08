@@ -26,5 +26,6 @@
 // Dynamic import the ESM module
 module.exports = async function(opts) {
   const { default: pinoTransport } = await import('./dist/transports/pino.js');
+
   return pinoTransport(opts);
 };

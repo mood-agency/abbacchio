@@ -10,9 +10,12 @@
 import type { MetricSample, RunSelector, SpanSample } from './database.js';
 
 export type CompareSource = 'span' | 'metric';
+
 export type CompareStat = 'mean' | 'p50' | 'p90' | 'p95' | 'p99' | 'max';
+
 /** Which way is "better": `lower` for latencies/memory, `higher` for throughput. */
 export type CompareDirection = 'lower' | 'higher';
+
 export type CompareVerdict = 'regression' | 'improvement' | 'no_change' | 'insufficient_data';
 
 export const COMPARE_STATS: readonly CompareStat[] = ['mean', 'p50', 'p90', 'p95', 'p99', 'max'];
@@ -77,10 +80,12 @@ export interface CompareResult {
 /** Linear-interpolated percentile of an ascending-sorted array (q in [0, 1]). */
 export function percentile(sorted: number[], q: number): number | null {
   if (sorted.length === 0) return null;
+
   if (sorted.length === 1) return sorted[0];
   const pos = (sorted.length - 1) * q;
   const lo = Math.floor(pos);
   const hi = Math.ceil(pos);
+
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
 }
 
@@ -91,9 +96,11 @@ function emptyStats(unit: string | null): RunStats {
 /** Summary statistics over raw observations. */
 export function summarizeValues(values: number[], unit: string | null = null): RunStats {
   const finite = values.filter((v) => Number.isFinite(v));
+
   if (finite.length === 0) return emptyStats(unit);
   const sorted = [...finite].sort((a, b) => a - b);
   const sum = sorted.reduce((acc, v) => acc + v, 0);
+
   return {
     count: sorted.length,
     mean: sum / sorted.length,
@@ -115,27 +122,35 @@ export function summarizeValues(values: number[], unit: string | null = null): R
  */
 export function histogramPercentile(bucketCounts: number[], bounds: number[], q: number): number | null {
   const total = bucketCounts.reduce((acc, c) => acc + c, 0);
+
   if (total === 0) return null;
   const rank = q * total;
   let cumulative = 0;
+
   for (let i = 0; i < bucketCounts.length; i++) {
     const c = bucketCounts[i];
+
     if (c === 0) continue;
+
     if (cumulative + c >= rank) {
       if (i >= bounds.length) return bounds.length > 0 ? bounds[bounds.length - 1] : null;
       const upper = bounds[i];
       const lower = i === 0 ? Math.min(0, upper) : bounds[i - 1];
       const fraction = (rank - cumulative) / c;
+
       return lower + (upper - lower) * fraction;
     }
+
     cumulative += c;
   }
+
   return bounds.length > 0 ? bounds[bounds.length - 1] : null;
 }
 
 export function summarizeSpans(samples: SpanSample[]): RunStats {
   const stats = summarizeValues(samples.map((s) => s.durationMs), 'ms');
   stats.errorRate = samples.length === 0 ? 0 : samples.filter((s) => s.error).length / samples.length;
+
   return stats;
 }
 
@@ -147,12 +162,15 @@ export function summarizeSpans(samples: SpanSample[]): RunStats {
  */
 export function summarizeMetric(samples: MetricSample[], notes: string[] = []): RunStats {
   const unit = samples.find((s) => s.unit)?.unit ?? null;
+
   if (samples.length === 0) return emptyStats(unit);
 
   const histograms = samples.filter((s) => s.type === 'Histogram');
+
   if (histograms.length === 0) {
     return summarizeValues(samples.map((s) => s.value), unit);
   }
+
   if (histograms.length !== samples.length) {
     notes.push('Metric mixes Histogram and non-Histogram points; only Histogram points were used.');
   }
@@ -164,30 +182,39 @@ export function summarizeMetric(samples: MetricSample[], notes: string[] = []): 
   stats.mean = totalCount > 0 ? totalSum / totalCount : null;
 
   const withBuckets = histograms.filter((s) => s.bucketCounts && s.explicitBounds);
+
   if (withBuckets.length === 0) {
     notes.push('Histogram points carry no buckets; only the mean is available.');
+
     return stats;
   }
+
   const bounds = withBuckets[0].explicitBounds!;
   const key = JSON.stringify(bounds);
+
   if (withBuckets.length !== histograms.length || withBuckets.some((s) => JSON.stringify(s.explicitBounds) !== key)) {
     notes.push('Histogram points have differing or missing bucket bounds; percentiles are not available.');
+
     return stats;
   }
 
   const merged: number[] = Array.from({ length: bounds.length + 1 }, () => 0);
+
   for (const s of withBuckets) {
     s.bucketCounts!.forEach((c, i) => {
       if (i < merged.length) merged[i] += c;
     });
   }
+
   stats.p50 = histogramPercentile(merged, bounds, 0.5);
   stats.p90 = histogramPercentile(merged, bounds, 0.9);
   stats.p95 = histogramPercentile(merged, bounds, 0.95);
   stats.p99 = histogramPercentile(merged, bounds, 0.99);
   const lastNonEmpty = merged.reduce((last, c, i) => (c > 0 ? i : last), -1);
+
   if (lastNonEmpty >= 0) stats.max = lastNonEmpty < bounds.length ? bounds[lastNonEmpty] : null;
   notes.push('Histogram percentiles are estimated from bucket boundaries.');
+
   return stats;
 }
 
@@ -197,14 +224,17 @@ export function delta(baseline: number | null, candidate: number | null): StatDe
   if (baseline === null || candidate === null) {
     return { baseline, candidate, absolute: null, percent: null };
   }
+
   const absolute = candidate - baseline;
   const percent = baseline === 0 ? null : (absolute / Math.abs(baseline)) * 100;
+
   return { baseline, candidate, absolute, percent };
 }
 
 function fmt(n: number | null, unit: string | null): string {
   if (n === null) return 'n/a';
   const rounded = Math.abs(n) >= 100 ? n.toFixed(0) : Math.abs(n) >= 1 ? n.toFixed(2) : n.toPrecision(3);
+
   return unit ? `${rounded} ${unit}` : rounded;
 }
 
@@ -214,14 +244,18 @@ export function decideVerdict(
   thresholdPct: number,
 ): CompareVerdict {
   if (d.baseline === null || d.candidate === null || d.absolute === null) return 'insufficient_data';
+
   if (d.percent === null) {
     // Baseline is exactly 0: any change is infinite in percent terms.
     if (d.absolute === 0) return 'no_change';
     const worse = direction === 'lower' ? d.absolute > 0 : d.absolute < 0;
+
     return worse ? 'regression' : 'improvement';
   }
+
   if (Math.abs(d.percent) <= thresholdPct) return 'no_change';
   const worse = direction === 'lower' ? d.percent > 0 : d.percent < 0;
+
   return worse ? 'regression' : 'improvement';
 }
 
@@ -243,6 +277,7 @@ export function compareStats(
 
   if (baselineStats.errorRate !== undefined && candidateStats.errorRate !== undefined) {
     deltas.errorRate = delta(baselineStats.errorRate, candidateStats.errorRate);
+
     if (candidateStats.errorRate > baselineStats.errorRate) {
       notes.push(
         `Error rate rose from ${(baselineStats.errorRate * 100).toFixed(1)}% to ${(candidateStats.errorRate * 100).toFixed(1)}%.`,
@@ -251,6 +286,7 @@ export function compareStats(
   }
 
   let verdict: CompareVerdict;
+
   if (baselineStats.count < minSamples || candidateStats.count < minSamples) {
     verdict = 'insufficient_data';
     notes.push(
@@ -263,6 +299,7 @@ export function compareStats(
   const d = deltas[stat];
   const unit = candidateStats.unit ?? baselineStats.unit;
   const pct = d.percent === null ? '' : ` (${d.percent >= 0 ? '+' : ''}${d.percent.toFixed(1)}%)`;
+
   const summary =
     verdict === 'insufficient_data'
       ? `${opts.name}: not enough data to compare ${stat}.`
@@ -293,21 +330,28 @@ export interface CompareDataSource {
 
 export function compareRuns(db: CompareDataSource, opts: CompareOptions): CompareResult {
   const notes: string[] = [];
+
   const summarize = (sel: RunSelector, label: string): RunStats => {
     if (opts.source === 'span') {
       const { samples, truncated } = db.selectSpanSamples(opts.name, sel);
+
       if (truncated) notes.push(`${label} run was truncated to the ${samples.length} most recent spans.`);
+
       return summarizeSpans(samples);
     }
+
     const { samples, truncated } = db.selectMetricSamples(opts.name, sel);
+
     if (truncated) notes.push(`${label} run was truncated to the ${samples.length} most recent data points.`);
     const metricNotes: string[] = [];
     const stats = summarizeMetric(samples, metricNotes);
     notes.push(...metricNotes.map((n) => `${label}: ${n}`));
+
     return stats;
   };
 
   const baselineStats = summarize(opts.baseline, 'Baseline');
   const candidateStats = summarize(opts.candidate, 'Candidate');
+
   return compareStats(opts, baselineStats, candidateStats, notes);
 }

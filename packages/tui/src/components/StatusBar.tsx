@@ -49,6 +49,7 @@ export function StatusBar({ levelFilter, search }: StatusBarProps): React.ReactE
         {LEVEL_SHORTCUTS.map(({ key, level, label }) => {
           const color = getLevelColor(label);
           const isActive = levelFilter === level;
+
           return (
             <Text key={key}>
               <Text dimColor={!isActive}>{key}:</Text>

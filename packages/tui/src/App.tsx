@@ -38,6 +38,7 @@ export function App({ options }: AppProps): React.ReactElement {
   useEffect(() => {
     if (options.key && channelConfig.isInitialized && currentChannel) {
       const storedKey = channelConfig.getKey(currentChannel);
+
       if (!storedKey && options.key) {
         channelConfig.updateKey(currentChannel, options.key);
       }
@@ -61,6 +62,7 @@ export function App({ options }: AppProps): React.ReactElement {
   const handleChannelSelect = useCallback((channel: string, key: string) => {
     // Update channel config (stores key if changed)
     channelConfig.setCurrentChannel(channel);
+
     if (key !== channelConfig.getKey(channel)) {
       channelConfig.updateKey(channel, key);
     }
@@ -83,6 +85,7 @@ export function App({ options }: AppProps): React.ReactElement {
 
   const handleTogglePause = useCallback(() => {
     store.togglePause();
+
     if (!store.paused) {
       setAutoScroll(true);
     }
@@ -100,9 +103,11 @@ export function App({ options }: AppProps): React.ReactElement {
   const handleScrollDown = useCallback(() => {
     setScrollOffset(o => {
       const maxOffset = Math.max(0, store.filteredLogs.length - 10);
+
       if (o >= maxOffset - 1) {
         setAutoScroll(true);
       }
+
       return Math.min(maxOffset, o + 1);
     });
   }, [store.filteredLogs.length]);

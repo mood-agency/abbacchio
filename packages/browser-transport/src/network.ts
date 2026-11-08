@@ -36,9 +36,12 @@ let logCallback: ((entry: LogEntry) => void) | null = null;
 
 function shouldIgnore(url: string): boolean {
   if (!url || !options.ignoreNetworkUrls) return false;
+
   return options.ignoreNetworkUrls.some((pattern) => {
     if (typeof pattern === 'string') return url.includes(pattern);
+
     if (pattern instanceof RegExp) return pattern.test(url);
+
     return false;
   });
 }
@@ -55,9 +58,11 @@ function createBaseEntry(action: string, level = 30): LogEntry {
   if (options.includeUrl !== false && typeof window !== 'undefined') {
     entry.url = window.location.href;
   }
+
   if (options.includeUserAgent && typeof navigator !== 'undefined') {
     entry.userAgent = navigator.userAgent;
   }
+
   return entry;
 }
 
@@ -78,11 +83,13 @@ function patchFetch() {
     if (options.includeBody && args[1]?.body) {
       entry.network.requestBody = args[1].body;
     }
+
     if (options.includeHeaders && args[1]?.headers) {
       entry.network.requestHeaders = args[1].headers;
     }
 
     const startTime = Date.now();
+
     try {
       const response = await originalFetch!.apply(this, args);
       entry.network.status = response.status;
@@ -90,11 +97,13 @@ function patchFetch() {
       entry.level = response.status >= 400 ? 40 : 30; // Warn on 4xx/5xx
       
       if (logCallback) logCallback(entry);
+
       return response;
     } catch (err) {
       entry.level = 50; // Error
       entry.network.duration = Date.now() - startTime;
       entry.error = err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : { message: String(err) };
+
       if (logCallback) logCallback(entry);
       throw err;
     }
@@ -133,9 +142,11 @@ function patchXHR() {
         entry.network!.status = this.status;
         entry.network!.duration = Date.now() - reqData.startTime;
         entry.level = this.status >= 400 ? 40 : 30;
+
         if (logCallback) logCallback(entry);
       });
     }
+
     return originalSend.apply(this, args as any);
   };
 }
@@ -148,40 +159,50 @@ function patchWebSocket() {
       super(url, protocols);
       
       const wsUrl = url.toString();
+
       if (shouldIgnore(wsUrl)) return;
 
       const connectEntry = createBaseEntry(`websocket connect ${wsUrl}`);
       connectEntry.network = { url: wsUrl, type: 'websocket', event: 'connect' };
+
       if (logCallback) logCallback(connectEntry);
 
       this.addEventListener('close', (e) => {
         const closeEntry = createBaseEntry(`websocket disconnect ${wsUrl}`);
         closeEntry.network = { url: wsUrl, type: 'websocket', event: 'disconnect', status: e.code };
+
         if (logCallback) logCallback(closeEntry);
       });
 
       this.addEventListener('error', () => {
         const errEntry = createBaseEntry(`websocket error ${wsUrl}`, 50);
         errEntry.network = { url: wsUrl, type: 'websocket', event: 'error' };
+
         if (logCallback) logCallback(errEntry);
       });
 
       this.addEventListener('message', (e) => {
         const msgEntry = createBaseEntry(`websocket message in ${wsUrl}`);
         msgEntry.network = { url: wsUrl, type: 'websocket', event: 'message_in' };
+
         if (options.includeBody) msgEntry.network.payload = e.data;
+
         if (logCallback) logCallback(msgEntry);
       });
     }
 
     send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
       const wsUrl = this.url;
+
       if (!shouldIgnore(wsUrl)) {
         const sendEntry = createBaseEntry(`websocket message out ${wsUrl}`);
         sendEntry.network = { url: wsUrl, type: 'websocket', event: 'message_out' };
+
         if (options.includeBody) sendEntry.network.payload = data;
+
         if (logCallback) logCallback(sendEntry);
       }
+
       super.send(data);
     }
   }
@@ -196,7 +217,9 @@ export function startNetworkCapture(
   if (typeof window === 'undefined') return;
 
   if (!originalFetch) originalFetch = window.fetch;
+
   if (!originalXHR) originalXHR = window.XMLHttpRequest;
+
   if (!originalWebSocket) originalWebSocket = window.WebSocket;
 
   stopNetworkCapture();
@@ -206,7 +229,9 @@ export function startNetworkCapture(
   isCapturing = true;
 
   if (opts.captureFetch) patchFetch();
+
   if (opts.captureXhr && originalXHR) patchXHR();
+
   if (opts.captureWebSockets && originalWebSocket) patchWebSocket();
 }
 
@@ -214,7 +239,9 @@ export function stopNetworkCapture(): void {
   if (typeof window === 'undefined' || !isCapturing) return;
 
   if (originalFetch) window.fetch = originalFetch;
+
   if (originalXHR) window.XMLHttpRequest = originalXHR;
+
   if (originalWebSocket) window.WebSocket = originalWebSocket;
 
   isCapturing = false;

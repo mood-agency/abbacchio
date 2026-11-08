@@ -8,6 +8,7 @@ export const LOG_LEVELS = {
 } as const;
 
 export type LogLevelNumber = keyof typeof LOG_LEVELS;
+
 export type LogLevelLabel = (typeof LOG_LEVELS)[LogLevelNumber];
 
 export interface LogEntry {

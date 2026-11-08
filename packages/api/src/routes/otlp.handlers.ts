@@ -37,6 +37,7 @@ export async function ingestOtlpLogs(c: Context) {
         return c.json({}, 200);
     } catch (err) {
         console.error('[OTLP logs] Failed to parse request:', err instanceof Error ? err.message : 'Unknown error');
+
         return c.json({ error: 'Invalid OTLP JSON' }, 400);
     }
 }
@@ -60,6 +61,7 @@ export async function ingestOtlpMetrics(c: Context) {
         return c.json({}, 200);
     } catch (err) {
         console.error('[OTLP metrics] Failed to parse request:', err instanceof Error ? err.message : 'Unknown error');
+
         return c.json({ error: 'Invalid OTLP JSON' }, 400);
     }
 }
@@ -83,6 +85,7 @@ export async function ingestOtlpTraces(c: Context) {
         return c.json({}, 200);
     } catch (err) {
         console.error('[OTLP traces] Failed to parse request:', err instanceof Error ? err.message : 'Unknown error');
+
         return c.json({ error: 'Invalid OTLP JSON' }, 400);
     }
 }

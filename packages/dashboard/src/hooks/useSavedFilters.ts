@@ -22,12 +22,14 @@ const STORAGE_KEY = 'abbacchio-saved-filters';
 function loadSavedFilters(): SavedFiltersPerChannel {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
+
     if (stored) {
       return JSON.parse(stored);
     }
   } catch (error) {
     console.error('Failed to load saved filters:', error);
   }
+
   return {};
 }
 
@@ -74,11 +76,14 @@ export function useSavedFilters(channelId: string | null): UseSavedFiltersResult
 
       setAllFilters((prev) => {
         const channelFilters = prev[channelId] || [];
+
         const updated = {
           ...prev,
           [channelId]: [...channelFilters, newFilter],
         };
+
         persistSavedFilters(updated);
+
         return updated;
       });
     },
@@ -91,11 +96,14 @@ export function useSavedFilters(channelId: string | null): UseSavedFiltersResult
 
       setAllFilters((prev) => {
         const channelFilters = prev[channelId] || [];
+
         const updated = {
           ...prev,
           [channelId]: channelFilters.filter((f) => f.id !== filterId),
         };
+
         persistSavedFilters(updated);
+
         return updated;
       });
     },

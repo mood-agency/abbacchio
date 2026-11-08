@@ -4,17 +4,21 @@ export function getMemoryUsageBytes(): number {
   if (typeof process !== 'undefined' && process.memoryUsage) {
     return process.memoryUsage().heapUsed;
   }
+
   if (typeof performance !== 'undefined' && (performance as any).memory) {
     return (performance as any).memory.usedJSHeapSize;
   }
+
   return 0;
 }
 
 function randomHex(bytes: number): string {
   let out = '';
+
   for (let i = 0; i < bytes; i++) {
     out += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
   }
+
   return out;
 }
 

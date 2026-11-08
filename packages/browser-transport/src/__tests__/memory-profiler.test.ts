@@ -24,6 +24,7 @@ describe('memory profiler', () => {
     const api = (globalThis as typeof globalThis & {
       __testMemory?: { dispose(): void };
     }).__testMemory;
+
     api?.dispose();
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -32,10 +33,12 @@ describe('memory profiler', () => {
 
   it('collects heap, generic DOM, custom selectors, and copied values', () => {
     const source = { nested: { frames: 2 } };
+
     const sample = collectMemoryProfilerSample(3, 500, 'mark', 'browser-open', 1_500, {
       domSelectors: { rows: '.application-row' },
       collectValues: () => source,
     });
+
     source.nested.frames = 99;
 
     expect(sample).toMatchObject({
@@ -57,6 +60,7 @@ describe('memory profiler', () => {
   it('bounds retained samples and returns defensive copies', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-24T12:00:00.000Z'));
+
     const profiler = new MemoryProfiler({
       collectValues: () => ({ browserPanel: { framesReceived: 1 } }),
     });
@@ -79,6 +83,7 @@ describe('memory profiler', () => {
   it('serializes one JSON object per line', () => {
     const sample = collectMemoryProfilerSample(0, 1_000, 'sample', 'start', 1_000);
     const serialized = serializeMemoryProfilerSamples([sample, { ...sample, sequence: 1 }]);
+
     const lines = serialized
       .trim()
       .split('\n')
@@ -111,10 +116,12 @@ describe('memory profiler', () => {
   it('forwards every sample to the sink and keeps running when the sink throws', () => {
     vi.useFakeTimers();
     const forwarded: MemoryProfilerSample[] = [];
+
     const onSample = vi.fn((sample: MemoryProfilerSample) => {
       forwarded.push(sample);
       throw new Error('sink unavailable');
     });
+
     const profiler = new MemoryProfiler({ onSample });
 
     profiler.start({ intervalMs: 1_000 });
@@ -155,6 +162,7 @@ describe('memory profiler', () => {
       prefix: 'client.memory',
       attributes: { service: 'funny' },
     });
+
     const byName = Object.fromEntries(metrics.map((point) => [point.name, point.value]));
 
     expect(byName).toEqual({
@@ -181,6 +189,7 @@ describe('memory profiler', () => {
     const sample = collectMemoryProfilerSample(0, 0, 'sample', null, 0, {
       sessionId: 'run-2',
     });
+
     const metrics = toMemoryProfilerMetrics(sample);
 
     expect(metrics.every((point) => point.name.startsWith('browser.memory.'))).toBe(true);

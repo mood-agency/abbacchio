@@ -52,12 +52,15 @@ export function generateRandomExtras(level: string): Record<string, unknown> {
   if (Math.random() > 0.5) {
     extras.userId = randomElement(userIds);
   }
+
   if (Math.random() > 0.5) {
     extras.requestId = randomRequestId();
   }
+
   if (Math.random() > 0.5) {
     extras.duration = randomDuration();
   }
+
   if (Math.random() > 0.7) {
     extras.metadata = {
       version: '1.0.0',
@@ -65,6 +68,7 @@ export function generateRandomExtras(level: string): Record<string, unknown> {
       region: randomElement(['us-east-1', 'eu-west-1', 'ap-south-1']),
     };
   }
+
   if ((level === 'error' || level === 'fatal') && Math.random() > 0.3) {
     extras.error = {
       message: 'Something went wrong',

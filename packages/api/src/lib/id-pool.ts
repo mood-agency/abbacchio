@@ -32,6 +32,7 @@ export class IdPool {
    */
   private fillPool(): void {
     const needed = this.config.poolSize - this.pool.length;
+
     for (let i = 0; i < needed; i++) {
       this.pool.push(nanoid());
     }
@@ -42,6 +43,7 @@ export class IdPool {
    */
   private scheduleRefill(): void {
     if (this.isRefilling) return;
+
     if (this.pool.length >= this.config.refillThreshold) return;
 
     this.isRefilling = true;
@@ -145,6 +147,7 @@ export function getIdPool(): IdPool {
   if (!instance) {
     instance = new IdPool();
   }
+
   return instance;
 }
 
@@ -152,5 +155,6 @@ export function resetIdPool(): void {
   if (instance) {
     instance.clear();
   }
+
   instance = null;
 }

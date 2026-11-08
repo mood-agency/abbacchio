@@ -10,6 +10,7 @@ describe('AbbacchioClient delivery', () => {
     nextStatus = 200;
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
+
       return new Response('{}', { status: nextStatus, headers: nextStatus === 429 ? { 'Retry-After': '60' } : {} });
     }));
   });

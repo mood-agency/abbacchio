@@ -40,6 +40,7 @@ describe('summarizeSpans', () => {
       { durationMs: 30, error: false },
       { durationMs: 40, error: false },
     ]);
+
     expect(s.errorRate).toBe(0.25);
     expect(s.mean).toBe(25);
   });
@@ -87,6 +88,7 @@ describe('summarizeMetric', () => {
     const gauge = (value: number): MetricSample => ({
       type: 'Gauge', unit: 'By', value, count: null, bucketCounts: null, explicitBounds: null,
     });
+
     const s = summarizeMetric([gauge(100), gauge(200), gauge(300)]);
     expect(s.count).toBe(3);
     expect(s.p50).toBe(200);

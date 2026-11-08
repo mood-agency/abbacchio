@@ -40,6 +40,7 @@ describe('parseOtlpLogs', () => {
         }],
       }],
     };
+
     const logs = parseOtlpLogs(request, 'my-default');
 
     expect(logs[0].channel).toBe('my-default');
@@ -79,6 +80,7 @@ describe('parseOtlpLogs', () => {
         }],
       }],
     };
+
     const logs = parseOtlpLogs(request, 'default');
     expect(logs[0].level).toBe(30);
   });
@@ -99,6 +101,7 @@ describe('parseOtlpLogs', () => {
         { key: 'latency', value: { doubleValue: 1.5 } },
       ],
     });
+
     const logs = parseOtlpLogs(request, 'default');
 
     expect(logs[0].userId).toBe(42);
@@ -112,6 +115,7 @@ describe('parseOtlpLogs', () => {
       traceId: 'trace-abc-123',
       spanId: 'span-def-456',
     });
+
     const logs = parseOtlpLogs(request, 'default');
 
     expect(logs[0].traceId).toBe('trace-abc-123');
@@ -145,6 +149,7 @@ describe('parseOtlpLogs', () => {
       serviceName: 'pino-otel-test',
       attributes: { userId: 42, action: 'login' },
     });
+
     const logs = parseOtlpLogs(request, 'default');
 
     expect(logs).toHaveLength(1);
@@ -161,6 +166,7 @@ describe('parseOtlpLogs', () => {
       level: 'warn',
       attributes: { latency: 1500 },
     });
+
     const logs = parseOtlpLogs(request, 'default');
 
     expect(logs[0].level).toBe(40);
@@ -173,6 +179,7 @@ describe('parseOtlpLogs', () => {
       level: 'error',
       attributes: { code: 'ERR_TIMEOUT' },
     });
+
     const logs = parseOtlpLogs(request, 'default');
 
     expect(logs[0].level).toBe(50);
@@ -192,6 +199,7 @@ describe('parseOtlpLogs', () => {
         },
       ],
     };
+
     const logs = parseOtlpLogs(request, 'default');
 
     expect(logs).toHaveLength(2);
@@ -210,6 +218,7 @@ describe('parseOtlpMetrics', () => {
       type: 'sum',
       value: 100,
     });
+
     const metrics = parseOtlpMetrics(request, 'default');
 
     expect(metrics).toHaveLength(1);
@@ -225,6 +234,7 @@ describe('parseOtlpMetrics', () => {
       value: 512.5,
       unit: 'MB',
     });
+
     const metrics = parseOtlpMetrics(request, 'default');
 
     expect(metrics).toHaveLength(1);
@@ -258,6 +268,7 @@ describe('parseOtlpMetrics', () => {
         { key: 'http.status_code', value: { intValue: 200 } },
       ],
     });
+
     const metrics = parseOtlpMetrics(request, 'default');
 
     expect(metrics[0].attributes['http.method']).toBe('GET');
@@ -272,6 +283,7 @@ describe('parseOtlpTraces', () => {
       spanId: 'span-456',
       name: 'GET /api/users',
     });
+
     const spans = parseOtlpTraces(request, 'default');
 
     expect(spans).toHaveLength(1);
@@ -294,6 +306,7 @@ describe('parseOtlpTraces', () => {
         { key: 'http.status_code', value: { intValue: 201 } },
       ],
     });
+
     const spans = parseOtlpTraces(request, 'default');
 
     expect(spans[0].attributes['http.method']).toBe('POST');
@@ -304,6 +317,7 @@ describe('parseOtlpTraces', () => {
     const request = createOtlpTraceRequest({
       parentSpanId: 'parent-span-789',
     });
+
     const spans = parseOtlpTraces(request, 'default');
 
     expect(spans[0].parentSpanId).toBe('parent-span-789');
@@ -321,6 +335,7 @@ describe('parseOtlpTraces', () => {
       startTimeUnixNano: '1700000000000000000',
       endTimeUnixNano: '1700000000100000000',
     });
+
     const spans = parseOtlpTraces(request, 'default');
 
     // 1700000000000000000 ns = 1700000000000 ms

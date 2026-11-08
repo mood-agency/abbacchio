@@ -40,19 +40,24 @@ interface MetricsViewerProps {
 /** Group metrics into time buckets for charting */
 function bucketByTime(metrics: MetricDataPoint[], bucketMs = 10_000) {
     const byBucket = new Map<number, MetricDataPoint[]>();
+
     for (const m of metrics) {
         const t = typeof m.timeUnixNano === 'string'
             ? Math.floor(Number(BigInt(m.timeUnixNano) / BigInt(1_000_000)) / bucketMs) * bucketMs
             : Math.floor((m.timeUnixNano / 1_000_000) / bucketMs) * bucketMs;
+
         const arr = byBucket.get(t);
+
         if (arr) arr.push(m);
         else byBucket.set(t, [m]);
     }
+
     return byBucket;
 }
 
 function formatTime(ts: number) {
     const d = new Date(ts);
+
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
@@ -62,6 +67,7 @@ function percentiles(values: number[]) {
     const sorted = [...values].sort((a, b) => a - b);
     const p = (pct: number) => sorted[Math.min(Math.floor(sorted.length * pct), sorted.length - 1)];
     const avg = values.reduce((s, v) => s + v, 0) / values.length;
+
     return { p50: p(0.5), p95: p(0.95), p99: p(0.99), avg: Math.round(avg * 100) / 100 };
 }
 
@@ -69,10 +75,13 @@ const METRICS_TIME_RANGES: TimeRange[] = ['5m', '10m', '15m', '30m', '1h', '12h'
 
 function filterByTimeRange(metrics: MetricDataPoint[], range: TimeRange): MetricDataPoint[] {
     const rangeMs = TIME_RANGE_OPTIONS[range];
+
     if (rangeMs === 0) return metrics;
     const cutoff = (Date.now() - rangeMs) * 1_000_000; // convert to nanoseconds
+
     return metrics.filter(m => {
         const t = typeof m.timeUnixNano === 'string' ? Number(BigInt(m.timeUnixNano)) : m.timeUnixNano;
+
         return t >= cutoff;
     });
 }
@@ -103,11 +112,17 @@ interface MetricGroup {
 
 function formatUnit(unit?: string): string {
     if (!unit) return '';
+
     if (unit === 'ms' || unit === 'milliseconds') return 'ms';
+
     if (unit === 's' || unit === 'seconds') return 's';
+
     if (unit === 'By' || unit === 'bytes') return 'B';
+
     if (unit === '%' || unit === 'percent') return '%';
+
     if (unit === '1') return '';
+
     return unit;
 }
 
@@ -131,6 +146,7 @@ function typeLabel(type: 'Sum' | 'Gauge' | 'Histogram') {
 function SumChart({ group }: { group: MetricGroup }) {
     const data = useMemo(() => {
         const buckets = bucketByTime(group.dataPoints);
+
         return Array.from(buckets.entries())
             .sort(([a], [b]) => a - b)
             .map(([ts, items]) => ({
@@ -161,12 +177,14 @@ function SumChart({ group }: { group: MetricGroup }) {
 function GaugeChart({ group }: { group: MetricGroup }) {
     const data = useMemo(() => {
         const buckets = bucketByTime(group.dataPoints);
+
         return Array.from(buckets.entries())
             .sort(([a], [b]) => a - b)
             .map(([ts, items]) => {
                 const avg = items.reduce((s, i) => s + i.value, 0) / items.length;
                 const min = Math.min(...items.map(i => i.value));
                 const max = Math.max(...items.map(i => i.value));
+
                 return {
                     time: formatTime(ts),
                     ts,
@@ -207,15 +225,19 @@ function GaugeChart({ group }: { group: MetricGroup }) {
 function HistogramChart({ group }: { group: MetricGroup }) {
     const data = useMemo(() => {
         const buckets = bucketByTime(group.dataPoints);
+
         return Array.from(buckets.entries())
             .sort(([a], [b]) => a - b)
             .map(([ts, items]) => {
                 // For histograms, use the sum/count to compute mean, and raw values for percentiles
                 const vals = items.map(i => {
                     if (i.count && i.count > 0) return i.value / i.count;
+
                     return i.value;
                 });
+
                 const p = percentiles(vals);
+
                 return {
                     time: formatTime(ts),
                     ts,
@@ -259,6 +281,7 @@ export function MetricsViewer({ metrics, channelName }: MetricsViewerProps) {
         for (const m of filtered) {
             const key = m.name;
             const existing = groupMap.get(key);
+
             if (existing) {
                 existing.dataPoints.push(m);
             } else {
@@ -274,9 +297,12 @@ export function MetricsViewer({ metrics, channelName }: MetricsViewerProps) {
 
         // Sort: Histograms first, then Gauges, then Sums — alphabetical within each type
         const typeOrder: Record<string, number> = { Histogram: 0, Gauge: 1, Sum: 2 };
+
         const groups = Array.from(groupMap.values()).sort((a, b) => {
             const orderDiff = (typeOrder[a.type] ?? 3) - (typeOrder[b.type] ?? 3);
+
             if (orderDiff !== 0) return orderDiff;
+
             return a.name.localeCompare(b.name);
         });
 
@@ -378,6 +404,7 @@ export function MetricsViewer({ metrics, channelName }: MetricsViewerProps) {
 
 function MetricChartCard({ group }: { group: MetricGroup }) {
     const unit = formatUnit(group.unit);
+
     const subtitle = [
         typeLabel(group.type),
         unit ? `(${unit})` : null,
