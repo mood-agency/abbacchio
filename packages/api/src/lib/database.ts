@@ -91,6 +91,13 @@ export interface RunSelector {
   since?: number;
   /** Inclusive upper bound, Unix epoch milliseconds. */
   until?: number;
+  /** Several inclusive [since, until] epoch-ms windows, OR-ed together (used by `abbacchio bench` rounds). */
+  windows?: TimeWindow[];
+}
+
+export interface TimeWindow {
+  since: number;
+  until: number;
 }
 
 export interface SpanSample {
@@ -788,6 +795,16 @@ export class LogDatabase {
     if (sel.until !== undefined) {
       conditions.push(`${timeColumn} <= ?`);
       params.push(sel.until * timeScale);
+    }
+
+    if (sel.windows !== undefined) {
+      if (sel.windows.length === 0) {
+        conditions.push('0 = 1');
+      } else {
+        conditions.push(`(${sel.windows.map(() => `${timeColumn} BETWEEN ? AND ?`).join(' OR ')})`);
+
+        for (const w of sel.windows) params.push(w.since * timeScale, w.until * timeScale);
+      }
     }
 
     return { sql: conditions.length > 0 ? conditions.join(' AND ') : '1 = 1', params };

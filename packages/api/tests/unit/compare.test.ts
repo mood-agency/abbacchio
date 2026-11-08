@@ -9,6 +9,7 @@ import {
   summarizeSpans,
   summarizeValues,
 } from '../../src/lib/compare.js';
+import { spreadPct } from '../../src/bench.js';
 import type { MetricSample } from '../../src/lib/database.js';
 
 describe('percentile', () => {
@@ -142,5 +143,14 @@ describe('compareStats', () => {
     expect(r.verdict).toBe('no_change');
     expect(r.deltas.errorRate?.candidate).toBeCloseTo(0.3);
     expect(r.notes.some((n) => n.includes('Error rate rose'))).toBe(true);
+  });
+});
+
+describe('spreadPct', () => {
+  it('is (max - min) / median in percent, null with fewer than 2 values', () => {
+    expect(spreadPct([10, 20, 10])).toBeCloseTo(100, 6);
+    expect(spreadPct([10, 11, 12])).toBeCloseTo(18.18, 2);
+    expect(spreadPct([5])).toBeNull();
+    expect(spreadPct([0, 0])).toBeNull();
   });
 });

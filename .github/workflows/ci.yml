@@ -88,6 +88,45 @@ jobs:
         run: bun run --filter @abbacchio/dashboard build
 
   # ============================================
+  # Performance vs the base branch (abbacchio bench)
+  # Report-only for now: a regression adds a warning and the table to the
+  # job summary but does not fail the job, until runner noise is known.
+  # ============================================
+  perf:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the baseline is checked out from origin/<base> in a worktree
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compare API performance with ${{ github.base_ref }}
+        run: |
+          set +e
+          bun packages/api/src/cli.ts bench \
+            --baseline "origin/${{ github.base_ref }}" \
+            --setup "bun install --frozen-lockfile" \
+            --run "bun $GITHUB_WORKSPACE/packages/api/bench/load.ts" \
+            --runs 3 \
+            --format markdown > perf.md
+          code=$?
+          set -e
+          cat perf.md >> "$GITHUB_STEP_SUMMARY"
+          case $code in
+            0) echo "No performance regressions." ;;
+            1) echo "::warning title=Performance::Possible regression vs ${{ github.base_ref }}; see the job summary." ;;
+            3) echo "::warning title=Performance::Not enough data to compare; see the job summary." ;;
+            *) echo "::error title=Performance::abbacchio bench failed (exit $code)"; exit "$code" ;;
+          esac
+
+  # ============================================
   # Build Tauri (solo verificar que compila)
   # ============================================
   build-tauri:
