@@ -170,7 +170,7 @@ To check a code change for performance regressions in one step, run `abbacchio b
 bunx @abbacchio/api bench --setup "bun install" --run "bun run load-test"
 ```
 
-See [Comparing Versions](docs/performance-comparison.md).
+See [Comparing Versions](docs/performance-comparison.md). To have coding agents run this check on their own, see [Performance Checks by Agents](docs/agents.md).
 
 Abbacchio is optimized to handle massive amounts of logs quickly. For ephemeral environments like AI Agent Sandboxes where you don't need persistent disk storage, you can run Abbacchio entirely in-memory with strict memory bounding.
 
@@ -189,6 +189,7 @@ This configuration guarantees your sandbox will not hit an Out-Of-Memory (OOM) e
 - [Transports](docs/transports.md) - Pino, Winston, Bunyan, Console, HTTP
 - [API Reference](docs/api.md) - REST endpoints and log format
 - [Comparing Versions](docs/performance-comparison.md) - Detect performance regressions between builds
+- [Performance Checks by Agents](docs/agents.md) - Let coding agents check their own changes (skill + recipe)
 - [Channels](docs/channels.md) - Multi-channel support
 - [Dashboard](docs/dashboard.md) - URL parameters and filtering
 - [Terminal UI](docs/tui.md) - CLI for viewing logs in terminal

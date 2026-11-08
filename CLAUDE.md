@@ -77,6 +77,8 @@ The API passes `{ encrypted: ... }` payloads through unchanged. Only the TUI dec
 - `packages/api/src/cli.ts` - `abbacchio` command (`start`, `sandbox`, `bench`); bundled to `dist/cli.js` by `packages/api/scripts/build.ts`
 - `packages/api/src/bench.ts` - `abbacchio bench`: baseline (git worktree) vs working tree perf comparison
 - `packages/api/src/lib/compare.ts` - Run statistics and regression verdicts (`/api/compare`, `bench`)
+- `packages/api/bench/load.ts` - API load test run by `abbacchio bench` (CI `perf` job)
+- `skills/abbacchio-perf-check/SKILL.md` - Distributable Claude Code skill: agents run `abbacchio bench` on their own changes (see `docs/agents.md`)
 - `packages/api/src/routes/logs.handlers.ts` - Log ingestion and retrieval handlers
 - `packages/api/src/lib/database.ts` - SQLite persistence layer
 - `packages/dashboard/src/App.tsx` - Dashboard main component
