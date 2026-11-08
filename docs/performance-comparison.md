@@ -150,17 +150,37 @@ The command runs with `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCO
 This repository's own CI runs a `perf` job on every pull request. It benchmarks the API (`packages/api/bench/load.ts`: OTLP and `/api/logs` ingestion, plus queries over a fixed dataset) against the base branch:
 
 ```yaml
-- uses: actions/checkout@v4
-  with:
-    fetch-depth: 0          # the baseline is checked out from origin/<base>
-- run: bun install --frozen-lockfile
-- run: |
-    bun packages/api/src/cli.ts bench \
-      --baseline "origin/${{ github.base_ref }}" \
-      --setup "bun install --frozen-lockfile" \
-      --run "bun $GITHUB_WORKSPACE/packages/api/bench/load.ts" \
-      --format markdown >> "$GITHUB_STEP_SUMMARY"
+perf:
+  if: github.event_name == 'pull_request'
+  runs-on: ubuntu-latest
+  permissions:
+    contents: read                # it runs the PR's code
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0            # the baseline commit is checked out in a worktree
+        persist-credentials: false
+    - uses: oven-sh/setup-bun@v2
+    - run: bun install --frozen-lockfile
+    - env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}   # what the merge commit is built on
+      run: |
+        set +e
+        bun packages/api/src/cli.ts bench \
+          --baseline "$BASE_SHA" \
+          --setup "bun install --frozen-lockfile" \
+          --run "bun $GITHUB_WORKSPACE/packages/api/bench/load.ts" \
+          --format markdown > perf.md
+        code=$?
+        cat perf.md >> "$GITHUB_STEP_SUMMARY"
+        case $code in
+          0) ;;                                                     # no regression
+          3) echo "::warning title=Performance::Not enough data" ;;  # warn only
+          *) exit "$code" ;;                                        # 1 regression, 2 error
+        esac
 ```
+
+The baseline is the PR's recorded base commit, not `origin/<base>`, so the comparison matches the merge commit being tested even if the base branch moves while the job runs. See `.github/workflows/ci.yml` for the full job, which also prints the table to the log and names regressed workloads in the annotation.
 
 The load script is passed by absolute path from the candidate checkout, so the baseline doesn't need to contain it. It starts the API server of whichever checkout it runs in. The job fails on a regression and names the regressed workloads in an error annotation. The table goes to the job log and the job summary. On GitHub runners the measured run-to-run noise is about ±0.3–6%, so a 10% threshold is meaningful there. "Not enough data" only warns. If a regression is intentional (the cost of a feature), say so in the PR; once it merges, the base branch is the new baseline.
 

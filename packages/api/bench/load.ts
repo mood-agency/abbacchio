@@ -26,10 +26,26 @@
 import { existsSync } from 'fs';
 import { join, resolve } from 'path';
 
-const ITERATIONS = Number(process.env.ABBACCHIO_LOAD_ITERATIONS ?? 200);
-const WARMUP = Number(process.env.ABBACCHIO_LOAD_WARMUP ?? 30);
-const MIN_MS = Number(process.env.ABBACCHIO_LOAD_MIN_MS ?? 1500);
-const PRELOAD = Number(process.env.ABBACCHIO_LOAD_PRELOAD ?? 50);
+/** A non-negative integer from the environment; anything else would make the workload loops never end. */
+function envCount(name: string, fallback: number): number {
+  const raw = process.env[name];
+
+  if (raw === undefined || raw === '') return fallback;
+
+  const value = Number(raw);
+
+  if (!Number.isInteger(value) || value < 0) {
+    console.error(`load.ts: ${name} must be a non-negative integer (got "${raw}")`);
+    process.exit(2);
+  }
+
+  return value;
+}
+
+const ITERATIONS = envCount('ABBACCHIO_LOAD_ITERATIONS', 200);
+const WARMUP = envCount('ABBACCHIO_LOAD_WARMUP', 30);
+const MIN_MS = envCount('ABBACCHIO_LOAD_MIN_MS', 1500);
+const PRELOAD = envCount('ABBACCHIO_LOAD_PRELOAD', 50);
 const BATCH = 100;
 
 const collector = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
