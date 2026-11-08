@@ -761,9 +761,14 @@ export class LogDatabase {
 
   // ──────── RUN COMPARISON ────────
 
-  private runConditions(name: string, sel: RunSelector, timeColumn: string, timeScale: number): RunFilter {
-    const conditions: string[] = ['name = ?'];
-    const params: Array<string | number> = [name];
+  private runConditions(name: string | undefined, sel: RunSelector, timeColumn: string, timeScale: number): RunFilter {
+    const conditions: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (name !== undefined) {
+      conditions.push('name = ?');
+      params.push(name);
+    }
 
     if (sel.channel) {
       conditions.push('channel = ?');
@@ -785,7 +790,7 @@ export class LogDatabase {
       params.push(sel.until * timeScale);
     }
 
-    return { sql: conditions.join(' AND '), params };
+    return { sql: conditions.length > 0 ? conditions.join(' AND ') : '1 = 1', params };
   }
 
   /** Durations of every span called `name` in the selected run. */
@@ -829,6 +834,19 @@ export class LogDatabase {
       })),
       truncated,
     };
+  }
+
+  /** Distinct span names in the selected run, most frequent first. */
+  listSpanNames(sel: RunSelector): string[] {
+    this.flush();
+    const { sql, params } = this.runConditions(undefined, sel, 'start_time_ms', 1);
+
+    // SAFETY: the row shape matches the SELECT column list.
+    const rows = this.db.prepare(
+      `SELECT name, COUNT(*) AS n FROM traces WHERE ${sql} GROUP BY name ORDER BY n DESC, name`
+    ).all(...params) as Array<{ name: string; n: number }>;
+
+    return rows.map((r) => r.name);
   }
 
   /** Distinct `service.version` values seen per channel, across spans, metrics and logs. */

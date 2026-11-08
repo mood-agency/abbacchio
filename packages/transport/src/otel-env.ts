@@ -13,11 +13,14 @@
  * See https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
  */
 
+/** String key/value pairs, as used by OTEL_RESOURCE_ATTRIBUTES and OTEL_EXPORTER_OTLP_HEADERS. */
+export type KeyValues = Record<string, string>;
+
 export interface OtelEnvConfig {
   endpoint?: string;
   serviceName?: string;
-  resourceAttributes: Record<string, string>;
-  headers: Record<string, string>;
+  resourceAttributes: KeyValues;
+  headers: KeyValues;
   disabled: boolean;
 }
 
@@ -33,8 +36,8 @@ function decode(value: string): string {
 }
 
 /** Parse the `key=value,key=value` lists used by OTEL_RESOURCE_ATTRIBUTES and OTEL_EXPORTER_OTLP_HEADERS. */
-export function parseKeyValueList(raw: string | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
+export function parseKeyValueList(raw: string | undefined): KeyValues {
+  const result: KeyValues = {};
 
   if (!raw) return result;
 

@@ -88,7 +88,69 @@ Response (abridged):
 - **Histogram metrics**: points are merged. The mean is exact (Σsum / Σcount). Percentiles are estimated from the bucket boundaries, so pick bucket bounds that bracket the latencies you care about.
 - Each run reads at most the 200,000 most recent observations.
 
-## Workflow in a sandbox
+## One command: `abbacchio bench`
+
+`abbacchio bench` does the whole loop, and its exit code makes it usable from CI or an agent:
+
+1. It starts a private, in-memory Abbacchio.
+2. It runs your command against the baseline (a git ref, checked out in a temporary `git worktree`; your working tree is never touched).
+3. It runs the same command against your working tree.
+4. It compares every span and prints a verdict.
+
+```bash
+# Working tree vs HEAD (the default baseline)
+bunx @abbacchio/api bench --run "bun run load-test"
+
+# vs another ref, installing dependencies in each checkout, 3 runs per build
+bunx @abbacchio/api bench --baseline origin/main --setup "bun install" --runs 3 --run "bun run load-test"
+```
+
+```
+Comparing baseline-cb73cd8 → candidate-cb73cd8-dirty (p95, threshold ±10%)
+
+  name       baseline   candidate   change    verdict      samples
+  checkout   10.2 ms    30.2 ms     +196.1%   REGRESSION   n=20/20
+
+1 regression(s), 0 improvement(s), 0 unchanged, 0 without enough data
+```
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | No regression |
+| `1` | At least one span or metric regressed beyond the threshold |
+| `2` | Usage error, or the command or setup failed |
+| `3` | Not enough telemetry to decide (nothing received, or fewer than `--min-samples`) |
+
+The command runs with `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/json`, `ABBACCHIO_URL` and `OTEL_RESOURCE_ATTRIBUTES=…,service.version=<baseline-sha|candidate-sha>` set. `@abbacchio/transport` and OpenTelemetry SDKs pick these up automatically. Runs are told apart by time window, so a program that hard-codes its own `service.version` still compares correctly. The command's stdout goes to stderr, so `--json` output stays clean.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--run <cmd>` | *(required)* | Command that exercises the program |
+| `--baseline <ref>` | `HEAD` | Git ref for the baseline. `none` runs only the working tree |
+| `--against <file>` | | Compare with stats saved earlier with `--save` instead of running a baseline |
+| `--save <file>` | | Save the working tree's stats, e.g. on `main`, for a later `--against` |
+| `--setup <cmd>` | | Run once in each checkout first (the baseline worktree starts without `node_modules`) |
+| `--runs <n>` | `1` | Repeat the command per build for more samples |
+| `--span <name>` | all spans | Only compare these spans (repeatable) |
+| `--metric <name>` | | Also compare this metric (repeatable). `--direction` applies to metrics |
+| `--stat`, `--threshold`, `--min-samples` | `p95`, `10`, `5` | As for `/api/compare` |
+| `--settle <ms>` | `1500` | Wait after the last run so batched exporters can flush |
+| `--json` | | Machine-readable report |
+
+### Keeping a baseline across sandboxes
+
+When the baseline can't be rebuilt in the same sandbox, save its stats once and compare against the file later, for example from a CI artifact:
+
+```bash
+# on main
+abbacchio bench --baseline none --run "bun run load-test" --save perf-baseline.json
+# on a branch, possibly another machine
+abbacchio bench --against perf-baseline.json --run "bun run load-test"
+```
+
+Comparing across machines adds hardware noise, so consider a larger `--threshold`. Same-sandbox `--baseline` is the more reliable option.
+
+## Workflow in a sandbox (manual)
 
 Running the baseline and the candidate **in the same sandbox, one after the other**, is the simplest and fairest option. It's the same machine, so there's no cross-environment noise, and nothing has to survive the sandbox.
 
@@ -119,11 +181,11 @@ curl -s 'http://localhost:4000/api/compare?source=span&name=checkout&baselineVer
 | `--env-file <path>` | | Write `export ...` lines for the program under test |
 | `-q, --quiet` | off | Only print errors |
 
-Environment variables you set yourself take precedence over the sandbox defaults, so `API_KEY=... abbacchio sandbox` still requires a key.
+Environment variables you set yourself take precedence over the sandbox defaults, so `API_KEY=... abbacchio sandbox` still requires a key. A `SQLITE_PATH` inherited from your shell is used, but it is never wiped. Pass `--db` to get a throwaway file.
 
 To point the MCP server at the sandbox, use `SQLITE_PATH` (the `Database:` line printed at startup) and `ABBACCHIO_URL`.
 
-To keep a baseline across sandboxes, save the `stats` of a compare response (or the raw rows) as a CI artifact, or point `SQLITE_PATH` at a persistent volume and drop `SQLITE_EPHEMERAL`.
+To keep a baseline across sandboxes, use `abbacchio bench --save` / `--against` (above), or point `--db` at a persistent volume with `--keep`.
 
 ## From Claude Code (MCP)
 

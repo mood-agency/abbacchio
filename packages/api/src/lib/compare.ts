@@ -345,30 +345,42 @@ export interface CompareDataSource {
   selectMetricSamples(name: string, sel: RunSelector): { samples: MetricSample[]; truncated: boolean };
 }
 
+/**
+ * Summarize one run of a span or metric. Caveats (truncation, estimated
+ * percentiles, ...) are appended to `notes`, prefixed with `label`.
+ */
+export function summarizeRun(
+  db: CompareDataSource,
+  source: CompareSource,
+  name: string,
+  sel: RunSelector,
+  label: string,
+  notes: string[] = [],
+): RunStats {
+  if (source === 'span') {
+    const { samples, truncated } = db.selectSpanSamples(name, sel);
+
+    if (truncated) notes.push(`${label} run was truncated to the ${samples.length} most recent spans.`);
+
+    return summarizeSpans(samples);
+  }
+
+  const { samples, truncated } = db.selectMetricSamples(name, sel);
+
+  if (truncated) notes.push(`${label} run was truncated to the ${samples.length} most recent data points.`);
+
+  const metricNotes: string[] = [];
+  const stats = summarizeMetric(samples, metricNotes);
+
+  notes.push(...metricNotes.map((n) => `${label}: ${n}`));
+
+  return stats;
+}
+
 export function compareRuns(db: CompareDataSource, opts: CompareOptions): CompareResult {
   const notes: string[] = [];
-
-  const summarize = (sel: RunSelector, label: string): RunStats => {
-    if (opts.source === 'span') {
-      const { samples, truncated } = db.selectSpanSamples(opts.name, sel);
-
-      if (truncated) notes.push(`${label} run was truncated to the ${samples.length} most recent spans.`);
-
-      return summarizeSpans(samples);
-    }
-
-    const { samples, truncated } = db.selectMetricSamples(opts.name, sel);
-
-    if (truncated) notes.push(`${label} run was truncated to the ${samples.length} most recent data points.`);
-    const metricNotes: string[] = [];
-    const stats = summarizeMetric(samples, metricNotes);
-    notes.push(...metricNotes.map((n) => `${label}: ${n}`));
-
-    return stats;
-  };
-
-  const baselineStats = summarize(opts.baseline, 'Baseline');
-  const candidateStats = summarize(opts.candidate, 'Candidate');
+  const baselineStats = summarizeRun(db, opts.source, opts.name, opts.baseline, 'Baseline', notes);
+  const candidateStats = summarizeRun(db, opts.source, opts.name, opts.candidate, 'Candidate', notes);
 
   return compareStats(opts, baselineStats, candidateStats, notes);
 }

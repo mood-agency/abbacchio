@@ -74,7 +74,9 @@ The API passes `{ encrypted: ... }` payloads through unchanged. Only the TUI dec
 ## Important Files
 
 - `packages/api/src/server.ts` - Main API server entry point
-- `packages/api/src/cli.ts` - `abbacchio` command (`start`, `sandbox`); bundled to `dist/cli.js` by `packages/api/scripts/build.ts`
+- `packages/api/src/cli.ts` - `abbacchio` command (`start`, `sandbox`, `bench`); bundled to `dist/cli.js` by `packages/api/scripts/build.ts`
+- `packages/api/src/bench.ts` - `abbacchio bench`: baseline (git worktree) vs working tree perf comparison
+- `packages/api/src/lib/compare.ts` - Run statistics and regression verdicts (`/api/compare`, `bench`)
 - `packages/api/src/routes/logs.handlers.ts` - Log ingestion and retrieval handlers
 - `packages/api/src/lib/database.ts` - SQLite persistence layer
 - `packages/dashboard/src/App.tsx` - Dashboard main component

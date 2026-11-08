@@ -162,7 +162,15 @@ bunx @abbacchio/api sandbox --env-file .abbacchio.env &
 source .abbacchio.env        # OTEL_EXPORTER_OTLP_ENDPOINT, ABBACCHIO_URL, ...
 ```
 
-The sandbox runs with anonymous access, no rate limit and the SQL endpoint on, and it wipes its database on every start. It also serves the dashboard. See [Comparing Versions](docs/performance-comparison.md) for the full baseline-vs-candidate workflow.
+The sandbox runs with anonymous access, no rate limit and the SQL endpoint on, and it wipes its database on every start. It also serves the dashboard.
+
+To check a code change for performance regressions in one step, run `abbacchio bench`. It runs your command against `HEAD` (in a temporary worktree) and against your working tree, compares every span, and exits `1` on a regression:
+
+```bash
+bunx @abbacchio/api bench --setup "bun install" --run "bun run load-test"
+```
+
+See [Comparing Versions](docs/performance-comparison.md).
 
 Abbacchio is optimized to handle massive amounts of logs quickly. For ephemeral environments like AI Agent Sandboxes where you don't need persistent disk storage, you can run Abbacchio entirely in-memory with strict memory bounding.
 

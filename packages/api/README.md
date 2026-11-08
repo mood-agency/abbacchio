@@ -30,6 +30,9 @@ PORT=4000 SQLITE_PATH=./logs.db abbacchio start
 abbacchio sandbox              # throwaway instance for agents/CI: anonymous access,
                                # no rate limit, SQL endpoint on, database wiped on start
 abbacchio sandbox --port 4100 --env-file .abbacchio.env --quiet
+
+abbacchio bench --run "bun run load-test"            # working tree vs HEAD; exit 1 on regression
+abbacchio bench --against perf.json --run "..."      # vs stats saved with --save
 abbacchio --help
 ```
 
