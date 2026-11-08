@@ -354,3 +354,47 @@ describe('parseOtlpTraces', () => {
     expect(spans).toHaveLength(0);
   });
 });
+
+describe('resource attributes', () => {
+  const resource = {
+    attributes: [
+      { key: 'service.name', value: { stringValue: 'svc' } },
+      { key: 'service.version', value: { stringValue: '1.2.3' } },
+      { key: 'host.name', value: { stringValue: 'dropped' } },
+    ],
+  };
+
+  it('copies allow-listed resource attributes onto each data point, without overriding its own', () => {
+    const points = parseOtlpMetrics({
+      resourceMetrics: [{
+        resource,
+        scopeMetrics: [{
+          metrics: [{
+            name: 'm',
+            gauge: {
+              dataPoints: [
+                { timeUnixNano: '1', asDouble: 1, attributes: [] },
+                { timeUnixNano: '2', asDouble: 2, attributes: [{ key: 'service.version', value: { stringValue: 'own' } }] },
+              ],
+            },
+          }],
+        }],
+      }],
+    }, 'default');
+
+    expect(points[0].attributes).toEqual({ 'service.version': '1.2.3' });
+    expect(points[1].attributes).toEqual({ 'service.version': 'own' });
+  });
+
+  it('adds nothing when the resource has no allow-listed attributes', () => {
+    const logs = parseOtlpLogs({
+      resourceLogs: [{
+        resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc' } }] },
+        scopeLogs: [{ logRecords: [{ timeUnixNano: '1000000', body: { stringValue: 'x' }, attributes: [{ key: 'a', value: { intValue: 1 } }] }] }],
+      }],
+    }, 'default');
+
+    expect(logs[0].a).toBe(1);
+    expect('service.version' in logs[0]).toBe(false);
+  });
+});
