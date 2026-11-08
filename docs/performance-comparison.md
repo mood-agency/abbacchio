@@ -91,8 +91,10 @@ Response (abridged):
 Running the baseline and the candidate **in the same sandbox, one after the other**, is the simplest and fairest option. It's the same machine, so there's no cross-environment noise, and nothing has to survive the sandbox.
 
 ```bash
-# Abbacchio, throwaway database
-NODE_ENV=production ALLOW_ANON=true SQLITE_EPHEMERAL=true SQLITE_PATH=/tmp/abbacchio.db bun run start &
+# Abbacchio: one command, no Docker or clone needed (requires Bun).
+# Anonymous access, no rate limit, SQL endpoint on, database wiped on start.
+bunx @abbacchio/api sandbox --env-file .abbacchio.env &
+source .abbacchio.env       # ABBACCHIO_URL, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL
 
 # Baseline
 git stash && export OTEL_RESOURCE_ATTRIBUTES="service.version=baseline"
@@ -104,6 +106,20 @@ git stash pop && export OTEL_RESOURCE_ATTRIBUTES="service.version=candidate"
 
 curl -s 'http://localhost:4000/api/compare?source=span&name=checkout&baselineVersion=baseline&candidateVersion=candidate' | jq .summary
 ```
+
+`abbacchio sandbox` options:
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `-p, --port <n>` | `$PORT` or `4000` | Port to listen on |
+| `--db <path>` | `<tmpdir>/abbacchio-sandbox-<port>.db` | SQLite file. `:memory:` keeps everything in RAM, but then the MCP server can't read it |
+| `--keep` | off | Keep data between restarts |
+| `--env-file <path>` | | Write `export ...` lines for the program under test |
+| `-q, --quiet` | off | Only print errors |
+
+Environment variables you set yourself take precedence over the sandbox defaults, so `API_KEY=... abbacchio sandbox` still requires a key.
+
+To point the MCP server at the sandbox, use `SQLITE_PATH` (the `Database:` line printed at startup) and `ABBACCHIO_URL`.
 
 To keep a baseline across sandboxes, save the `stats` of a compare response (or the raw rows) as a CI artifact, or point `SQLITE_PATH` at a persistent volume and drop `SQLITE_EPHEMERAL`.
 

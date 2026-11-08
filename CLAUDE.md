@@ -66,6 +66,7 @@ The API passes `{ encrypted: ... }` payloads through unchanged. Only the TUI dec
 ## Package Publishing
 
 - Main package publishes to npm as `abbacchio`
+- API server publishes as `@abbacchio/api` (bundled `dist/cli.js` + `dist/dashboard`, no runtime deps, run with `bunx @abbacchio/api`)
 - Transport package publishes as `@abbacchio/transport`
 - TUI publishes as `@abbacchio/tui`
 - Python package publishes to PyPI as `abbacchio-transport`
@@ -73,6 +74,7 @@ The API passes `{ encrypted: ... }` payloads through unchanged. Only the TUI dec
 ## Important Files
 
 - `packages/api/src/server.ts` - Main API server entry point
+- `packages/api/src/cli.ts` - `abbacchio` command (`start`, `sandbox`); bundled to `dist/cli.js` by `packages/api/scripts/build.ts`
 - `packages/api/src/routes/logs.handlers.ts` - Log ingestion and retrieval handlers
 - `packages/api/src/lib/database.ts` - SQLite persistence layer
 - `packages/dashboard/src/App.tsx` - Dashboard main component

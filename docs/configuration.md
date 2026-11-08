@@ -17,6 +17,8 @@
 | `SQLITE_EPHEMERAL`     | `false`          | If `true`, deletes the SQLite database file on startup. |
 | `SQLITE_CACHE_SIZE`    | `-64000` (64 MB) | SQLite page cache. Negative = KiB. Lower to reduce RAM footprint. |
 | `SQLITE_MMAP_SIZE`     | `268435456` (256 MB) | Memory-mapped I/O size in bytes. Set `0` to disable mmap and minimize RAM. |
+| `DASHBOARD_DIR`        | -                | Directory with a built dashboard to serve in production. Defaults to `dist/dashboard` in the published package, or `packages/dashboard/dist` in the monorepo. |
+| `ABBACCHIO_QUIET`      | `false`          | If `true`, skip the startup banner, the request log and the anonymous-access warning. `abbacchio sandbox` sets it. |
 
 ## Storage & Retention — design decisions
 

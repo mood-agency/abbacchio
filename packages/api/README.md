@@ -14,21 +14,26 @@ Real-time log server with HTTP ingestion and SQLite persistence, supporting mult
 
 ## Installation
 
+The package is a single bundled file plus the built dashboard, with no runtime dependencies. It needs the [Bun](https://bun.sh) runtime because it uses `bun:sqlite`.
+
 ```bash
-npm install @abbacchio/api
-# or
-pnpm add @abbacchio/api
+bunx @abbacchio/api            # run without installing
+bun add -g @abbacchio/api      # or install the `abbacchio` command
 ```
 
 ## Quick Start
 
 ```bash
-# Start the server (requires Bun runtime)
-bun start
+abbacchio                      # start the server, configured by environment variables
+PORT=4000 SQLITE_PATH=./logs.db abbacchio start
 
-# Or with environment variables
-PORT=4000 bun start
+abbacchio sandbox              # throwaway instance for agents/CI: anonymous access,
+                               # no rate limit, SQL endpoint on, database wiped on start
+abbacchio sandbox --port 4100 --env-file .abbacchio.env --quiet
+abbacchio --help
 ```
+
+From the monorepo: `bun start`, or `bun src/cli.ts sandbox`.
 
 Send a test log:
 

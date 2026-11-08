@@ -50,10 +50,13 @@ app.use('*', cors({
 // logging every POST (and every 429 when a producer floods) drowns the terminal
 // in millions of lines. Skip them by default; set LOG_OTLP_INGEST=true to include.
 const LOG_OTLP_INGEST = process.env.LOG_OTLP_INGEST === 'true';
+
+// ABBACCHIO_QUIET (set by `abbacchio sandbox`): no banner, request log or anonymous-access warning.
+const QUIET = process.env.ABBACCHIO_QUIET === 'true';
 const honoLogger = logger();
 
 app.use('*', (c, next) => {
-  if (!LOG_OTLP_INGEST && c.req.path.startsWith('/v1/')) return next();
+  if (QUIET || (!LOG_OTLP_INGEST && c.req.path.startsWith('/v1/'))) return next();
 
   return honoLogger(c, next);
 });
@@ -109,7 +112,7 @@ if (API_KEY) {
     process.exit(1);
   }
 
-  console.warn('\n⚠️  WARNING: Running in production with ALLOW_ANON=true. All endpoints are unauthenticated.\n');
+  if (!QUIET) console.warn('\n⚠️  WARNING: Running in production with ALLOW_ANON=true. All endpoints are unauthenticated.\n');
 }
 
 // SECURITY: Add security headers to all responses
@@ -156,8 +159,17 @@ app.get('/health', (c) => {
 
 // Serve dashboard static files (only in production)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dashboardPath = join(__dirname, '../../dashboard/dist');
-const shouldServeDashboard = !IS_DEV && existsSync(dashboardPath);
+
+// Look for the built dashboard: explicit DASHBOARD_DIR, next to the bundled
+// server (published package: dist/dashboard), or the monorepo sibling package.
+const dashboardCandidates = [
+  process.env.DASHBOARD_DIR,
+  join(__dirname, 'dashboard'),
+  join(__dirname, '../../dashboard/dist'),
+].filter((p): p is string => Boolean(p));
+
+const dashboardPath = dashboardCandidates.find((p) => existsSync(join(p, 'index.html'))) ?? dashboardCandidates[dashboardCandidates.length - 1];
+const shouldServeDashboard = !IS_DEV && existsSync(join(dashboardPath, 'index.html'));
 
 if (shouldServeDashboard) {
   // Serve static files with absolute path
@@ -292,7 +304,7 @@ process.on('unhandledRejection', (reason) => {
 // Start server
 const dbPath = process.env.SQLITE_PATH || './data/logs.db';
 
-console.log(`
+if (!QUIET) console.log(`
   ╔═══════════════════════════════════════════╗
   ║                                           ║
   ║   Abbacchio${IS_DEV ? ' (dev)' : ''}                          ║
@@ -310,7 +322,7 @@ const server = Bun.serve({
 });
 
 // Export for programmatic use
-export { app };
+export { app, server, shouldServeDashboard };
 
 export { getLogBuffer, resetLogBuffer } from './lib/log-buffer.js';
 

@@ -155,6 +155,15 @@ This will generate an OTLP Span containing the duration and exact memory metrics
 
 ## High-Throughput & Agent Sandboxes
 
+To start a throwaway instance with one command (no Docker, no clone), you only need [Bun](https://bun.sh):
+
+```bash
+bunx @abbacchio/api sandbox --env-file .abbacchio.env &
+source .abbacchio.env        # OTEL_EXPORTER_OTLP_ENDPOINT, ABBACCHIO_URL, ...
+```
+
+The sandbox runs with anonymous access, no rate limit and the SQL endpoint on, and it wipes its database on every start. It also serves the dashboard. See [Comparing Versions](docs/performance-comparison.md) for the full baseline-vs-candidate workflow.
+
 Abbacchio is optimized to handle massive amounts of logs quickly. For ephemeral environments like AI Agent Sandboxes where you don't need persistent disk storage, you can run Abbacchio entirely in-memory with strict memory bounding.
 
 Set the following environment variables:
