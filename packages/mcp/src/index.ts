@@ -22,6 +22,10 @@ import { existsSync } from 'fs';
 const DEFAULT_DB_PATH = join(homedir(), '.abbacchio', 'logs.db');
 const DB_PATH = process.env.SQLITE_PATH || DEFAULT_DB_PATH;
 
+// HTTP API used by tools that need server-side computation (compare_runs, list_versions)
+const API_URL = (process.env.ABBACCHIO_URL || 'http://localhost:4000').replace(/\/+$/, '');
+const API_KEY = process.env.ABBACCHIO_API_KEY || process.env.API_KEY;
+
 // Types
 interface LogEntry {
   id: string;
@@ -93,8 +97,13 @@ function rowToSpanEntry(row: any): SpanEntry {
     spanId: row.span_id,
     parentSpanId: row.parent_span_id || undefined,
     name: row.name,
-    startTimeMs: Math.floor(Number(BigInt(String(row.start_time_unix_nano || '0')) / 1_000_000n)),
-    endTimeMs: Math.floor(Number(BigInt(String(row.end_time_unix_nano || '0')) / 1_000_000n)),
+    // The API server stores milliseconds; older databases stored nanoseconds.
+    startTimeMs: row.start_time_ms !== undefined
+      ? Number(row.start_time_ms)
+      : Math.floor(Number(BigInt(String(row.start_time_unix_nano || '0')) / 1_000_000n)),
+    endTimeMs: row.end_time_ms !== undefined
+      ? Number(row.end_time_ms)
+      : Math.floor(Number(BigInt(String(row.end_time_unix_nano || '0')) / 1_000_000n)),
     channel: row.channel,
     attributes: JSON.parse(row.attributes || '{}'),
     statusCode: row.status_code !== null ? row.status_code : undefined,
@@ -195,6 +204,41 @@ const tools: Tool[] = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'list_versions',
+    description: 'List the service.version values seen per channel (with span/metric/log counts). Use before compare_runs to pick a baseline and a candidate. Requires the Abbacchio API (ABBACCHIO_URL).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'compare_runs',
+    description: 'Compare a span (durations) or metric between two runs — e.g. a baseline version and a candidate version — and report mean/p50/p90/p95/p99 deltas plus a verdict (regression, improvement, no_change, insufficient_data). Runs are selected by service.version, channel and/or epoch-ms time range. Requires the Abbacchio API (ABBACCHIO_URL).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', enum: ['span', 'metric'], description: 'span = durations of spans named `name`; metric = data points of metric `name`' },
+        name: { type: 'string', description: 'Exact span or metric name' },
+        channel: { type: 'string', description: 'Channel applied to both runs' },
+        baselineVersion: { type: 'string' },
+        candidateVersion: { type: 'string' },
+        baselineChannel: { type: 'string' },
+        candidateChannel: { type: 'string' },
+        baselineSince: { type: 'number' },
+        baselineUntil: { type: 'number' },
+        candidateSince: { type: 'number' },
+        candidateUntil: { type: 'number' },
+        stat: { type: 'string', enum: ['mean', 'p50', 'p90', 'p95', 'p99', 'max'], default: 'p95' },
+        threshold: { type: 'number', description: 'Percent change that counts as a difference', default: 10 },
+        direction: { type: 'string', enum: ['lower', 'higher'], description: 'Which direction is better', default: 'lower' },
+        minSamples: { type: 'number', default: 5 },
+      },
+      required: ['source', 'name'],
+    },
+  },
+  {
     name: 'analyze_error',
     description: 'Search for logs related to an error message and provide context.',
     inputSchema: {
@@ -209,6 +253,49 @@ const tools: Tool[] = [
 ];
 
 // Handlers
+
+/** Column that orders spans by start time: `start_time_ms` (API server) or `start_time_unix_nano` (legacy). */
+function spanTimeColumn(db: Database.Database): string {
+  const cols = db.prepare('PRAGMA table_info(traces)').all() as Array<{ name: string }>;
+  return cols.some((c) => c.name === 'start_time_ms') ? 'start_time_ms' : 'start_time_unix_nano';
+}
+
+async function callApi(path: string, params: Record<string, unknown>): Promise<unknown> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  }
+  const url = `${API_URL}${path}${qs.size ? `?${qs}` : ''}`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: API_KEY ? { 'X-API-KEY': API_KEY } : {} });
+  } catch (err: any) {
+    throw new Error(`Could not reach the Abbacchio API at ${API_URL} (${err.message}). Start it or set ABBACCHIO_URL.`);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status} from ${path}`);
+  return body;
+}
+
+function compareRuns(args: any): Promise<unknown> {
+  return callApi('/api/compare', {
+    source: args.source,
+    name: args.name,
+    channel: args.channel,
+    baselineVersion: args.baselineVersion,
+    candidateVersion: args.candidateVersion,
+    baselineChannel: args.baselineChannel,
+    candidateChannel: args.candidateChannel,
+    baselineSince: args.baselineSince,
+    baselineUntil: args.baselineUntil,
+    candidateSince: args.candidateSince,
+    candidateUntil: args.candidateUntil,
+    stat: args.stat,
+    threshold: args.threshold,
+    direction: args.direction,
+    minSamples: args.minSamples,
+  });
+}
 function searchLogs(params: any): LogEntry[] {
   const db = getDatabase();
   if (!db) return [];
@@ -243,7 +330,7 @@ function getTrace(traceId: string): { spans: SpanEntry[]; logs: LogEntry[] } {
   const db = getDatabase();
   if (!db) return { spans: [], logs: [] };
   try {
-    const spans = (db.prepare('SELECT * FROM traces WHERE trace_id = ? ORDER BY start_time_unix_nano').all(traceId) as any[]).map(rowToSpanEntry);
+    const spans = (db.prepare(`SELECT * FROM traces WHERE trace_id = ? ORDER BY ${spanTimeColumn(db)}`).all(traceId) as any[]).map(rowToSpanEntry);
     const logs = (db.prepare('SELECT * FROM logs WHERE trace_id = ? ORDER BY time').all(traceId) as any[]).map(rowToLogEntry);
     return { spans, logs };
   } finally { db.close(); }
@@ -259,7 +346,7 @@ function searchSpans(params: any): SpanEntry[] {
     if (params.channel) { sql += ' AND channel = ?'; sqlParams.push(params.channel); }
     if (params.errorOnly) { sql += ' AND status_code = 2'; } // 2 = Error in OTLP
 
-    sql += ' ORDER BY start_time_unix_nano DESC LIMIT ?';
+    sql += ` ORDER BY ${spanTimeColumn(db)} DESC LIMIT ?`;
     sqlParams.push(params.limit || 50);
     return (db.prepare(sql).all(...sqlParams) as any[]).map(rowToSpanEntry);
   } finally { db.close(); }
@@ -339,6 +426,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  // Tools served by the HTTP API do not need local database access.
+  if (name === 'compare_runs' || name === 'list_versions') {
+    try {
+      const result = name === 'compare_runs'
+        ? await compareRuns(args ?? {})
+        : await callApi('/api/versions', { channel: (args as any)?.channel });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err: any) {
+      return { content: [{ type: 'text', text: `Error executing ${name}: ${err.message}` }], isError: true };
+    }
+  }
+
   if (!existsSync(DB_PATH)) {
     return { content: [{ type: 'text', text: `Database not found at ${DB_PATH}.` }] };
   }

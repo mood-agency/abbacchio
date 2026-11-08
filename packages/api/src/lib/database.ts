@@ -82,6 +82,46 @@ export interface ChannelStats {
   lastActivity: number;
 }
 
+/** Identifies one "run" of telemetry to compare: a channel, a version, or both, optionally bounded in time. */
+export interface RunSelector {
+  channel?: string;
+  /** Matches the `service.version` resource attribute. */
+  version?: string;
+  /** Inclusive lower bound, Unix epoch milliseconds. */
+  since?: number;
+  /** Inclusive upper bound, Unix epoch milliseconds. */
+  until?: number;
+}
+
+export interface SpanSample {
+  durationMs: number;
+  error: boolean;
+}
+
+export interface MetricSample {
+  type: string;
+  unit: string | null;
+  value: number;
+  count: number | null;
+  bucketCounts: number[] | null;
+  explicitBounds: number[] | null;
+}
+
+export interface VersionInfo {
+  channel: string;
+  version: string;
+  spans: number;
+  metricPoints: number;
+  logs: number;
+  firstSeen: number | null;
+  lastSeen: number | null;
+}
+
+/** Upper bound on rows pulled into memory for one side of a comparison. */
+export const MAX_COMPARE_SAMPLES = 200_000;
+
+const VERSION_EXPR = `json_extract(attributes, '$."service.version"')`;
+
 export interface DbStats {
   totalLogs: number;
   dbSizeBytes: number;
@@ -324,6 +364,12 @@ export class LogDatabase {
       )
     `);
 
+    // Migration: histogram shape (previously dropped on persist, so only the
+    // sum survived and means/percentiles could not be computed).
+    this.addColumnIfMissing('metrics', 'count', 'INTEGER');
+    this.addColumnIfMissing('metrics', 'bucket_counts', 'TEXT');
+    this.addColumnIfMissing('metrics', 'explicit_bounds', 'TEXT');
+
     this.db.run('CREATE INDEX IF NOT EXISTS idx_metrics_channel_time ON metrics(channel, time_unix_nano DESC)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name)');
 
@@ -354,8 +400,8 @@ export class LogDatabase {
     `);
 
     this.insertMetricStmt = this.db.prepare(`
-      INSERT INTO metrics (name, description, unit, type, channel, time_unix_nano, value, attributes)
-      VALUES ($name, $description, $unit, $type, $channel, $timeUnixNano, $value, $attributes)
+      INSERT INTO metrics (name, description, unit, type, channel, time_unix_nano, value, attributes, count, bucket_counts, explicit_bounds)
+      VALUES ($name, $description, $unit, $type, $channel, $timeUnixNano, $value, $attributes, $count, $bucketCounts, $explicitBounds)
     `);
 
     this.insertSpanStmt = this.db.prepare(`
@@ -442,6 +488,9 @@ export class LogDatabase {
           $timeUnixNano: m.timeUnixNano,
           $value: m.value,
           $attributes: JSON.stringify(m.attributes),
+          $count: m.count ?? null,
+          $bucketCounts: m.bucketCounts ? JSON.stringify(m.bucketCounts) : null,
+          $explicitBounds: m.explicitBounds ? JSON.stringify(m.explicitBounds) : null,
         });
       }
 
@@ -556,16 +605,22 @@ export class LogDatabase {
       `SELECT * FROM metrics ${where} ORDER BY time_unix_nano ${order} LIMIT $limit OFFSET $offset`
     ).all({ ...params, $limit: limit, $offset: offset }) as any[];
 
-    const metrics: MetricDataPoint[] = rows.map((row) => ({
-      name: row.name,
-      description: row.description || undefined,
-      unit: row.unit || undefined,
-      type: row.type,
-      channel: row.channel,
-      timeUnixNano: row.time_unix_nano,
-      value: row.value,
-      attributes: JSON.parse(row.attributes),
-    }));
+    const metrics: MetricDataPoint[] = rows.map((row) => {
+      const metric: MetricDataPoint = {
+        name: row.name,
+        description: row.description || undefined,
+        unit: row.unit || undefined,
+        type: row.type,
+        channel: row.channel,
+        timeUnixNano: row.time_unix_nano,
+        value: row.value,
+        attributes: JSON.parse(row.attributes),
+      };
+      if (row.count !== null && row.count !== undefined) metric.count = row.count;
+      if (row.bucket_counts) metric.bucketCounts = JSON.parse(row.bucket_counts);
+      if (row.explicit_bounds) metric.explicitBounds = JSON.parse(row.explicit_bounds);
+      return metric;
+    });
 
     return { metrics, count: metrics.length, total, limit, offset };
   }
@@ -624,6 +679,100 @@ export class LogDatabase {
     }));
 
     return { spans, count: spans.length, total, limit, offset };
+  }
+
+  // ──────── RUN COMPARISON ────────
+
+  private runConditions(name: string, sel: RunSelector, timeColumn: string, timeScale: number): { sql: string; params: Array<string | number> } {
+    const conditions: string[] = ['name = ?'];
+    const params: Array<string | number> = [name];
+    if (sel.channel) {
+      conditions.push('channel = ?');
+      params.push(sel.channel);
+    }
+    if (sel.version) {
+      conditions.push(`${VERSION_EXPR} = ?`);
+      params.push(sel.version);
+    }
+    if (sel.since !== undefined) {
+      conditions.push(`${timeColumn} >= ?`);
+      params.push(sel.since * timeScale);
+    }
+    if (sel.until !== undefined) {
+      conditions.push(`${timeColumn} <= ?`);
+      params.push(sel.until * timeScale);
+    }
+    return { sql: conditions.join(' AND '), params };
+  }
+
+  /** Durations of every span called `name` in the selected run. */
+  selectSpanSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): { samples: SpanSample[]; truncated: boolean } {
+    this.flush();
+    const { sql, params } = this.runConditions(name, sel, 'start_time_ms', 1);
+    const rows = this.db.prepare(
+      `SELECT end_time_ms - start_time_ms AS duration, status_code FROM traces WHERE ${sql} ORDER BY start_time_ms DESC LIMIT ?`
+    ).all(...params, limit + 1) as Array<{ duration: number; status_code: number | null }>;
+    const truncated = rows.length > limit;
+    return {
+      samples: rows.slice(0, limit).map((r) => ({ durationMs: r.duration, error: r.status_code === 2 })),
+      truncated,
+    };
+  }
+
+  /** Data points of the metric called `name` in the selected run. */
+  selectMetricSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): { samples: MetricSample[]; truncated: boolean } {
+    this.flush();
+    const { sql, params } = this.runConditions(name, sel, 'time_unix_nano', 1_000_000);
+    const rows = this.db.prepare(
+      `SELECT type, unit, value, count, bucket_counts, explicit_bounds FROM metrics WHERE ${sql} ORDER BY time_unix_nano DESC LIMIT ?`
+    ).all(...params, limit + 1) as any[];
+    const truncated = rows.length > limit;
+    return {
+      samples: rows.slice(0, limit).map((r) => ({
+        type: r.type,
+        unit: r.unit ?? null,
+        value: r.value,
+        count: r.count ?? null,
+        bucketCounts: r.bucket_counts ? JSON.parse(r.bucket_counts) : null,
+        explicitBounds: r.explicit_bounds ? JSON.parse(r.explicit_bounds) : null,
+      })),
+      truncated,
+    };
+  }
+
+  /** Distinct `service.version` values seen per channel, across spans, metrics and logs. */
+  listVersions(channel?: string): VersionInfo[] {
+    this.flush();
+    const channelFilter = channel ? 'AND channel = ?' : '';
+    const params = channel ? [channel, channel, channel] : [];
+    const logVersion = `json_extract(data, '$."service.version"')`;
+    const rows = this.db.prepare(`
+      SELECT channel, version, SUM(spans) AS spans, SUM(points) AS metricPoints, SUM(logs) AS logs,
+             MIN(first_seen) AS firstSeen, MAX(last_seen) AS lastSeen
+      FROM (
+        SELECT channel, ${VERSION_EXPR} AS version, COUNT(*) AS spans, 0 AS points, 0 AS logs,
+               MIN(start_time_ms) AS first_seen, MAX(start_time_ms) AS last_seen
+        FROM traces WHERE ${VERSION_EXPR} IS NOT NULL ${channelFilter} GROUP BY channel, version
+        UNION ALL
+        SELECT channel, ${VERSION_EXPR}, 0, COUNT(*), 0,
+               MIN(time_unix_nano) / 1000000, MAX(time_unix_nano) / 1000000
+        FROM metrics WHERE ${VERSION_EXPR} IS NOT NULL ${channelFilter} GROUP BY channel, 2
+        UNION ALL
+        SELECT channel, ${logVersion}, 0, 0, COUNT(*), MIN(time), MAX(time)
+        FROM logs WHERE ${logVersion} IS NOT NULL ${channelFilter} GROUP BY channel, 2
+      )
+      GROUP BY channel, version
+      ORDER BY lastSeen DESC
+    `).all(...params) as any[];
+    return rows.map((r) => ({
+      channel: r.channel,
+      version: String(r.version),
+      spans: r.spans,
+      metricPoints: r.metricPoints,
+      logs: r.logs,
+      firstSeen: r.firstSeen === null ? null : Math.floor(r.firstSeen),
+      lastSeen: r.lastSeen === null ? null : Math.floor(r.lastSeen),
+    }));
   }
 
   // ──────── SQL EXECUTION ────────

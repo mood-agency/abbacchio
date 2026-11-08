@@ -82,6 +82,28 @@ function getIdentityFromResource(resource: OTLPResource | undefined): { source?:
 }
 
 /**
+ * Resource attributes copied onto every log, metric data point and span.
+ * They identify *which build* emitted the telemetry, so runs of different
+ * versions can be filtered and compared (see lib/compare.ts). Everything else
+ * on the resource (host.*, process.*, telemetry.sdk.*) is dropped to keep rows
+ * small. Point-level attributes with the same key take precedence.
+ */
+export const RESOURCE_ATTRIBUTE_ALLOWLIST = [
+    'service.version',
+    'service.namespace',
+    'deployment.environment',
+    'deployment.environment.name',
+    'vcs.ref.head.name',
+    'vcs.ref.head.revision',
+] as const;
+
+function getResourceAttributes(resource: OTLPResource | undefined): Record<string, string | number | boolean> {
+    if (!resource || !Array.isArray(resource.attributes)) return {};
+    const allowed = new Set<string>(RESOURCE_ATTRIBUTE_ALLOWLIST);
+    return parseAttributes(resource.attributes.filter((attr) => allowed.has(attr.key)));
+}
+
+/**
  * Convert OTLP KeyValue array to a simple Record map
  */
 function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | number | boolean> {
@@ -131,6 +153,7 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
     for (const resourceLog of request.resourceLogs) {
         const channel = getChannelFromResource(resourceLog.resource, defaultChannel);
         const identity = getIdentityFromResource(resourceLog.resource);
+        const resourceAttributes = getResourceAttributes(resourceLog.resource);
 
         if (!Array.isArray(resourceLog.scopeLogs)) continue;
 
@@ -141,7 +164,7 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
                 const timeUnixNano = logRecord.timeUnixNano || logRecord.observedTimeUnixNano;
                 const time = timeUnixNano ? Math.floor(Number(timeUnixNano) / 1_000_000) : Date.now();
 
-                const attributes = parseAttributes(logRecord.attributes);
+                const attributes = { ...resourceAttributes, ...parseAttributes(logRecord.attributes) };
                 const msg = logRecord.body?.stringValue || '';
 
                 const incoming: IncomingLog = {
@@ -174,6 +197,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
 
     for (const resourceMetric of request.resourceMetrics) {
         const channel = getChannelFromResource(resourceMetric.resource, defaultChannel);
+        const resourceAttributes = getResourceAttributes(resourceMetric.resource);
 
         if (!Array.isArray(resourceMetric.scopeMetrics)) continue;
 
@@ -196,7 +220,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             channel,
                             timeUnixNano: Number(dp.timeUnixNano),
                             value: dp.asDouble !== undefined ? dp.asDouble : Number(dp.asInt || 0),
-                            attributes: parseAttributes(dp.attributes),
+                            attributes: { ...resourceAttributes, ...parseAttributes(dp.attributes) },
                         });
                     }
                 }
@@ -212,7 +236,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             channel,
                             timeUnixNano: Number(dp.timeUnixNano),
                             value: dp.asDouble !== undefined ? dp.asDouble : Number(dp.asInt || 0),
-                            attributes: parseAttributes(dp.attributes),
+                            attributes: { ...resourceAttributes, ...parseAttributes(dp.attributes) },
                         });
                     }
                 }
@@ -231,7 +255,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             count: dp.count !== undefined ? Number(dp.count) : 0,
                             bucketCounts: Array.isArray(dp.bucketCounts) ? dp.bucketCounts.map(Number) : undefined,
                             explicitBounds: Array.isArray(dp.explicitBounds) ? dp.explicitBounds.map(Number) : undefined,
-                            attributes: parseAttributes(dp.attributes),
+                            attributes: { ...resourceAttributes, ...parseAttributes(dp.attributes) },
                         });
                     }
                 }
@@ -252,6 +276,7 @@ export function parseOtlpTraces(request: OTLPExportTraceServiceRequest, defaultC
 
     for (const resourceSpan of request.resourceSpans) {
         const channel = getChannelFromResource(resourceSpan.resource, defaultChannel);
+        const resourceAttributes = getResourceAttributes(resourceSpan.resource);
 
         if (!Array.isArray(resourceSpan.scopeSpans)) continue;
 
@@ -271,7 +296,7 @@ export function parseOtlpTraces(request: OTLPExportTraceServiceRequest, defaultC
                     startTimeMs: Number(startNano / 1_000_000n),
                     endTimeMs: Number(endNano / 1_000_000n),
                     channel,
-                    attributes: parseAttributes(span.attributes),
+                    attributes: { ...resourceAttributes, ...parseAttributes(span.attributes) },
                     status: span.status ? {
                         code: span.status.code,
                         message: span.status.message,

@@ -131,6 +131,26 @@ Parameters:
 - channel: Filter by channel/app name
 ```
 
+### `list_versions` and `compare_runs`
+
+Compare a span or metric between two builds (selected by `service.version`, channel or time range) and get a regression verdict. These two tools call the Abbacchio HTTP API rather than the database, so set `ABBACCHIO_URL` (default `http://localhost:4000`) and `ABBACCHIO_API_KEY` if the server needs one. See [Comparing Versions](performance-comparison.md).
+
+### Using the API server's database (sandboxes, CI)
+
+Without the desktop app, point the MCP server at the database the API server writes:
+
+```json
+{
+  "mcpServers": {
+    "abbacchio": {
+      "command": "npx",
+      "args": ["@abbacchio/mcp"],
+      "env": { "SQLITE_PATH": "/path/to/abbacchio/data/logs.db", "ABBACCHIO_URL": "http://localhost:4000" }
+    }
+  }
+}
+```
+
 ## Usage Examples
 
 ### Debugging a Browser Error

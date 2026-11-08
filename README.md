@@ -171,6 +171,7 @@ This configuration guarantees your sandbox will not hit an Out-Of-Memory (OOM) e
 - [Browser Memory Profiling](docs/memory-profiling.md) - Track heap, DOM, and application counters over time
 - [Transports](docs/transports.md) - Pino, Winston, Bunyan, Console, HTTP
 - [API Reference](docs/api.md) - REST endpoints and log format
+- [Comparing Versions](docs/performance-comparison.md) - Detect performance regressions between builds
 - [Channels](docs/channels.md) - Multi-channel support
 - [Dashboard](docs/dashboard.md) - URL parameters and filtering
 - [Terminal UI](docs/tui.md) - CLI for viewing logs in terminal

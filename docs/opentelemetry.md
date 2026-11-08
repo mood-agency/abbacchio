@@ -21,6 +21,10 @@ The `service.name` resource attribute is used as the **channel** in Abbacchio. F
 3. `channel` query parameter
 4. `"default"`
 
+## Resource Attributes
+
+Besides `service.name`, these resource attributes are copied onto every stored log, metric data point and span: `service.version`, `service.namespace`, `deployment.environment`, `deployment.environment.name`, `vcs.ref.head.name` and `vcs.ref.head.revision`. Other resource attributes are dropped. `service.version` lets you compare runs of different builds; see [Comparing Versions](performance-comparison.md).
+
 ## Using with pino-opentelemetry-transport
 
 [pino-opentelemetry-transport](https://github.com/pinojs/pino-opentelemetry-transport) converts Pino logs into OTLP log records and exports them via the OpenTelemetry SDK.
@@ -154,5 +158,5 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otel-collector:4318
 ## Limitations
 
 - Only **JSON encoding** is supported (`http/json`). Protobuf binary is not supported.
-- Histograms are not yet fully supported in the metrics pipeline.
+- Histograms are stored with their count and bucket counts. Percentiles derived from them are estimates based on the bucket bounds.
 - No OTLP/gRPC support — only OTLP/HTTP.
