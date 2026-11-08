@@ -35,7 +35,9 @@ const VERSION_FILES = [
     type: "json",
     field: "version",
   },
+  { path: "packages/desktop/src-tauri/Cargo.toml", type: "toml", field: "version" },
   { path: "python/pyproject.toml", type: "toml", field: "version" },
+  { path: "python/abbacchio_transport/__init__.py", type: "python", field: "__version__" },
 ];
 
 function parseVersion(version) {
@@ -95,6 +97,18 @@ function updateTomlFile(filePath, newVersion) {
   writeFileSync(fullPath, content);
 }
 
+function updatePythonFile(filePath, newVersion) {
+  const fullPath = join(rootDir, filePath);
+  const content = readFileSync(fullPath, "utf8");
+  const updated = content.replace(/^__version__\s*=\s*"[^"]*"/m, `__version__ = "${newVersion}"`);
+
+  if (updated === content && !content.includes(`__version__ = "${newVersion}"`)) {
+    throw new Error("no __version__ assignment found");
+  }
+
+  writeFileSync(fullPath, updated);
+}
+
 function main() {
   const args = process.argv.slice(2);
 
@@ -131,6 +145,8 @@ Examples:
         updateJsonFile(file.path, newVersion);
       } else if (file.type === "toml") {
         updateTomlFile(file.path, newVersion);
+      } else if (file.type === "python") {
+        updatePythonFile(file.path, newVersion);
       }
 
       console.log(`  ✓ ${file.path}`);

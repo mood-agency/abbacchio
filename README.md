@@ -158,7 +158,7 @@ This will generate an OTLP Span containing the duration and exact memory metrics
 To start a throwaway instance with one command (no Docker, no clone), you only need [Bun](https://bun.sh):
 
 ```bash
-bunx @abbacchio/api sandbox --env-file .abbacchio.env &
+bunx abbacchio sandbox --env-file .abbacchio.env &
 source .abbacchio.env        # OTEL_EXPORTER_OTLP_ENDPOINT, ABBACCHIO_URL, ...
 ```
 
@@ -167,7 +167,7 @@ The sandbox runs with anonymous access, no rate limit and the SQL endpoint on, a
 To check a code change for performance regressions in one step, run `abbacchio bench`. It runs your command against `HEAD` (in a temporary worktree) and against your working tree, compares every span, and exits `1` on a regression:
 
 ```bash
-bunx @abbacchio/api bench --setup "bun install" --run "bun run load-test"
+bunx abbacchio bench --setup "bun install" --run "bun run load-test"
 ```
 
 See [Comparing Versions](docs/performance-comparison.md).

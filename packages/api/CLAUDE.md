@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Abbacchio** is a real-time log viewer with HTTP ingestion supporting multiple logging libraries (Pino, Winston, Bunyan, Console). This is the `@abbacchio/api` package - the Bun-based backend server with SQLite persistence.
+**Abbacchio** is a real-time log viewer with HTTP ingestion supporting multiple logging libraries (Pino, Winston, Bunyan, Console). This is the `abbacchio` package (in `packages/api`) - the Bun-based backend server with SQLite persistence.
 
 ## Monorepo Structure
 

@@ -82,7 +82,7 @@ jobs:
         run: bun run --filter @abbacchio/browser-transport build
 
       - name: Build API
-        run: bun run --filter @abbacchio/api build
+        run: bun run --filter abbacchio build
 
       - name: Build Dashboard
         run: bun run --filter @abbacchio/dashboard build

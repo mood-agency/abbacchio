@@ -14,11 +14,19 @@ Update the version in ALL of these files:
 5. `packages/dashboard/package.json`
 6. `packages/tui/package.json`
 
+Run `node scripts/bump-version.js <patch|minor|major|x.y.z>`; it updates every file below.
+
+### JavaScript/TypeScript packages (package.json)
+7. `packages/desktop/package.json`
+8. `packages/mcp/package.json`
+
 ### Tauri desktop app
-7. `packages/desktop/src-tauri/tauri.conf.json`
+9. `packages/desktop/src-tauri/tauri.conf.json`
+10. `packages/desktop/src-tauri/Cargo.toml`
 
 ### Python package
-8. `python/pyproject.toml`
+11. `python/pyproject.toml`
+12. `python/abbacchio_transport/__init__.py` (`__version__`)
 
 ## Instructions
 

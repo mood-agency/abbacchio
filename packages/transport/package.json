@@ -1,6 +1,6 @@
 {
   "name": "@abbacchio/transport",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OTLP-native Node.js transports for Pino, Winston, and Bunyan - send logs, metrics, and traces to Abbacchio",
   "type": "module",
   "main": "dist/index.js",

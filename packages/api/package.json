@@ -1,7 +1,7 @@
 {
-  "name": "@abbacchio/api",
-  "version": "0.2.0",
-  "description": "Abbacchio API - Real-time log viewer HTTP API with SQLite persistence",
+  "name": "abbacchio",
+  "version": "0.3.0",
+  "description": "Abbacchio: real-time logs, metrics and traces over HTTP/OTLP — server, dashboard, and the `abbacchio` CLI (start, sandbox, bench)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mood-agency/abbacchio.git",

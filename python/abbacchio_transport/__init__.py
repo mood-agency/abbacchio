@@ -12,7 +12,7 @@ Usage:
     from abbacchio_transport.loguru import abbacchio_sink
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 from abbacchio_transport.transport import AbbacchioTransport
 

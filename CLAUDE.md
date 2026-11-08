@@ -65,10 +65,10 @@ The API passes `{ encrypted: ... }` payloads through unchanged. Only the TUI dec
 
 ## Package Publishing
 
-- Main package publishes to npm as `abbacchio`
-- API server publishes as `@abbacchio/api` (bundled `dist/cli.js` + `dist/dashboard`, no runtime deps, run with `bunx @abbacchio/api`)
+- Main package: `packages/api` publishes to npm as `abbacchio` (server, dashboard and the `abbacchio` CLI: bundled `dist/cli.js` + `dist/dashboard`, no runtime deps, run with `bunx abbacchio`). The monorepo root is the private `abbacchio-monorepo`
 - Transport package publishes as `@abbacchio/transport`
-- TUI publishes as `@abbacchio/tui`
+- TUI publishes as `@abbacchio/tui` (command: `abbacchio-tui`)
+- All packages share one version: bump them together with `node scripts/bump-version.js <patch|minor|major|x.y.z>`
 - Python package publishes to PyPI as `abbacchio-transport`
 
 ## Important Files

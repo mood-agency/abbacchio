@@ -23,7 +23,7 @@ bun run start
 bun run test
 
 # Run tests in watch mode
-bun run --filter @abbacchio/api test:watch
+bun run --filter abbacchio test:watch
 ```
 
 ## Linting
