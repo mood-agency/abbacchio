@@ -102,11 +102,32 @@ export const RESOURCE_ATTRIBUTE_ALLOWLIST = [
     'vcs.ref.head.revision',
 ] as const;
 
-function getResourceAttributes(resource: OTLPResource | undefined): Record<string, string | number | boolean> {
-    if (!resource || !Array.isArray(resource.attributes)) return {};
-    const allowed = new Set<string>(RESOURCE_ATTRIBUTE_ALLOWLIST);
+const RESOURCE_ATTRIBUTE_KEYS = new Set<string>(RESOURCE_ATTRIBUTE_ALLOWLIST);
 
-    return parseAttributes(resource.attributes.filter((attr) => allowed.has(attr.key)));
+type AttributeMap = Record<string, string | number | boolean>;
+
+/** Allow-listed resource attributes, or null when there are none (the common case). */
+function getResourceAttributes(resource: OTLPResource | undefined): AttributeMap | null {
+    if (!resource || !Array.isArray(resource.attributes)) return null;
+
+    const picked = resource.attributes.filter((attr) => RESOURCE_ATTRIBUTE_KEYS.has(attr.key));
+
+    return picked.length > 0 ? parseAttributes(picked) : null;
+}
+
+/**
+ * Add resource attributes to a record's own (freshly parsed) attributes, in
+ * place: this runs once per log record, data point and span, so it must not
+ * allocate a copy. Keys already on the record win.
+ */
+function withResourceAttributes(attributes: AttributeMap, resourceAttributes: AttributeMap | null): AttributeMap {
+    if (resourceAttributes === null) return attributes;
+
+    for (const key in resourceAttributes) {
+        if (!(key in attributes)) attributes[key] = resourceAttributes[key];
+    }
+
+    return attributes;
 }
 
 /**
@@ -179,7 +200,7 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
                 const timeUnixNano = logRecord.timeUnixNano || logRecord.observedTimeUnixNano;
                 const time = timeUnixNano ? Math.floor(Number(timeUnixNano) / 1_000_000) : Date.now();
 
-                const attributes = { ...resourceAttributes, ...parseAttributes(logRecord.attributes) };
+                const attributes = withResourceAttributes(parseAttributes(logRecord.attributes), resourceAttributes);
                 const msg = logRecord.body?.stringValue || '';
 
                 const incoming: IncomingLog = {
@@ -235,7 +256,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             channel,
                             timeUnixNano: Number(dp.timeUnixNano),
                             value: dp.asDouble !== undefined ? dp.asDouble : Number(dp.asInt || 0),
-                            attributes: { ...resourceAttributes, ...parseAttributes(dp.attributes) },
+                            attributes: withResourceAttributes(parseAttributes(dp.attributes), resourceAttributes),
                         });
                     }
                 }
@@ -251,7 +272,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             channel,
                             timeUnixNano: Number(dp.timeUnixNano),
                             value: dp.asDouble !== undefined ? dp.asDouble : Number(dp.asInt || 0),
-                            attributes: { ...resourceAttributes, ...parseAttributes(dp.attributes) },
+                            attributes: withResourceAttributes(parseAttributes(dp.attributes), resourceAttributes),
                         });
                     }
                 }
@@ -270,7 +291,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             count: dp.count !== undefined ? Number(dp.count) : 0,
                             bucketCounts: Array.isArray(dp.bucketCounts) ? dp.bucketCounts.map(Number) : undefined,
                             explicitBounds: Array.isArray(dp.explicitBounds) ? dp.explicitBounds.map(Number) : undefined,
-                            attributes: { ...resourceAttributes, ...parseAttributes(dp.attributes) },
+                            attributes: withResourceAttributes(parseAttributes(dp.attributes), resourceAttributes),
                         });
                     }
                 }
@@ -313,7 +334,7 @@ export function parseOtlpTraces(request: OTLPExportTraceServiceRequest, defaultC
                     // Exact (sub-millisecond) duration; start/end above are truncated to ms.
                     durationMs: endNano >= startNano ? Number(endNano - startNano) / 1_000_000 : 0,
                     channel,
-                    attributes: { ...resourceAttributes, ...parseAttributes(span.attributes) },
+                    attributes: withResourceAttributes(parseAttributes(span.attributes), resourceAttributes),
                     status: span.status ? {
                         code: span.status.code,
                         message: span.status.message,
