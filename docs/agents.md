@@ -58,18 +58,27 @@ So that nothing depends on the agent remembering:
 perf:
   if: github.event_name == 'pull_request'
   runs-on: ubuntu-latest
+  permissions:
+    contents: read                 # it runs the PR's code
   steps:
     - uses: actions/checkout@v4
-      with: { fetch-depth: 0 }
+      with:
+        fetch-depth: 0             # the baseline commit is checked out in a worktree
+        persist-credentials: false
     - uses: oven-sh/setup-bun@v2
     - run: bun install --frozen-lockfile
-    - run: |
+    - env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set +e
         bunx @abbacchio/api bench \
-          --baseline "origin/${{ github.base_ref }}" \
+          --baseline "$BASE_SHA" \
           --setup "bun install --frozen-lockfile" \
           --run "bun $GITHUB_WORKSPACE/bench/load.ts" \
           --format markdown | tee -a "$GITHUB_STEP_SUMMARY"
-        exit "${PIPESTATUS[0]}"
+        code=${PIPESTATUS[0]}
+        [ "$code" = 3 ] && { echo "::warning::Not enough perf data"; exit 0; }
+        exit "$code"
 ```
 
 In this repository's own job, GitHub runners measured about ±0.3–6% run-to-run noise, so the default 10% threshold is meaningful there. See [Comparing Versions](performance-comparison.md#in-ci).
