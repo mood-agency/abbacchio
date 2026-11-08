@@ -258,12 +258,18 @@ const tools: Tool[] = [
 
 /** Column that orders spans by start time: `start_time_ms` (API server) or `start_time_unix_nano` (legacy). */
 function spanTimeColumn(db: Database.Database): string {
+  // SAFETY: PRAGMA table_info always returns one row per column with a string `name`.
   const cols = db.prepare('PRAGMA table_info(traces)').all() as Array<{ name: string }>;
 
   return cols.some((c) => c.name === 'start_time_ms') ? 'start_time_ms' : 'start_time_unix_nano';
 }
 
-async function callApi(path: string, params: Record<string, unknown>): Promise<unknown> {
+type QueryValue = string | number | boolean | undefined | null;
+
+/** JSON object returned by the Abbacchio HTTP API (shape depends on the endpoint). */
+type ApiResponse = object;
+
+async function callApi(path: string, params: Record<string, QueryValue>): Promise<ApiResponse> {
   const qs = new URLSearchParams();
 
   for (const [k, v] of Object.entries(params)) {
@@ -279,14 +285,17 @@ async function callApi(path: string, params: Record<string, unknown>): Promise<u
     throw new Error(`Could not reach the Abbacchio API at ${API_URL} (${err.message}). Start it or set ABBACCHIO_URL.`);
   }
 
-  const body = await res.json().catch(() => ({}));
+  const body: unknown = await res.json().catch(() => null);
+  const error = body !== null && typeof body === 'object' && 'error' in body ? String(body.error) : undefined;
 
-  if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status} from ${path}`);
+  if (!res.ok) throw new Error(error || `HTTP ${res.status} from ${path}`);
+
+  if (body === null || typeof body !== 'object') throw new Error(`Unexpected non-JSON response from ${path}`);
 
   return body;
 }
 
-function compareRuns(args: any): Promise<unknown> {
+function compareRuns(args: any): Promise<ApiResponse> {
   return callApi('/api/compare', {
     source: args.source,
     name: args.name,

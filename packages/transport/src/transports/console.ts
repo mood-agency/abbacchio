@@ -93,7 +93,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   activeClient = new AbbacchioClient(opts);
 
   for (const method of methods) {
-    (console as unknown as Record<string, unknown>)[method] = createInterceptedMethod(
+    console[method] = createInterceptedMethod(
       method,
       activeClient,
       passthrough
@@ -103,7 +103,7 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
 
 export function restoreConsole(): void {
   for (const method of Object.keys(originalConsole) as ConsoleMethod[]) {
-    (console as unknown as Record<string, unknown>)[method] = originalConsole[method];
+    console[method] = originalConsole[method];
   }
 
   if (activeClient) {

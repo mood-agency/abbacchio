@@ -42,6 +42,7 @@ function toOtlpAttributes(obj: Record<string, unknown>): OtlpKeyValue[] {
   return attrs;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- converts arbitrary log attribute values to OTLP AnyValue
 function toOtlpAnyValue(val: unknown): OtlpAnyValue {
   if (typeof val === 'string') return { stringValue: val };
 
@@ -60,6 +61,12 @@ interface OtlpAnyValue {
   doubleValue?: number;
   boolValue?: boolean;
 }
+
+/** Body of an OTLP/HTTP JSON export request (logs, metrics or traces). */
+type OtlpExportRequest =
+  | { resourceLogs: readonly object[] }
+  | { resourceMetrics: readonly object[] }
+  | { resourceSpans: readonly object[] };
 
 interface OtlpKeyValue {
   key: string;
@@ -354,6 +361,7 @@ export class AbbacchioClient {
   // ─── Logs ──────────────────────────────────────────
 
   /** Add a log record to the buffer */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- public API: accepts any logger record shape (pino/winston/bunyan objects)
   add(log: LogRecord | unknown): void {
     if (!this.enabled) return;
 
@@ -792,7 +800,7 @@ export class AbbacchioClient {
   }
 
   /** Returns true when the server rate-limited the request (429). */
-  private async post(path: string, payload: unknown): Promise<boolean> {
+  private async post(path: string, payload: OtlpExportRequest): Promise<boolean> {
     try {
       const body = JSON.stringify(payload);
 

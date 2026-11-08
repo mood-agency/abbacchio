@@ -20,6 +20,18 @@ export type CompareVerdict = 'regression' | 'improvement' | 'no_change' | 'insuf
 
 export const COMPARE_STATS: readonly CompareStat[] = ['mean', 'p50', 'p90', 'p95', 'p99', 'max'];
 
+export function isCompareStat(value: string): value is CompareStat {
+  return COMPARE_STATS.some((s) => s === value);
+}
+
+export function isCompareSource(value: string): value is CompareSource {
+  return value === 'span' || value === 'metric';
+}
+
+export function isCompareDirection(value: string): value is CompareDirection {
+  return value === 'lower' || value === 'higher';
+}
+
 export interface RunStats {
   /** Number of observations (span count, raw data points, or histogram total count). */
   count: number;
@@ -271,9 +283,14 @@ export function compareStats(
   const direction = opts.direction ?? 'lower';
   const minSamples = opts.minSamples ?? 5;
 
-  const deltas = Object.fromEntries(
-    COMPARE_STATS.map((s) => [s, delta(baselineStats[s], candidateStats[s])]),
-  ) as CompareResult['deltas'];
+  const deltas: CompareResult['deltas'] = {
+    mean: delta(baselineStats.mean, candidateStats.mean),
+    p50: delta(baselineStats.p50, candidateStats.p50),
+    p90: delta(baselineStats.p90, candidateStats.p90),
+    p95: delta(baselineStats.p95, candidateStats.p95),
+    p99: delta(baselineStats.p99, candidateStats.p99),
+    max: delta(baselineStats.max, candidateStats.max),
+  };
 
   if (baselineStats.errorRate !== undefined && candidateStats.errorRate !== undefined) {
     deltas.errorRate = delta(baselineStats.errorRate, candidateStats.errorRate);

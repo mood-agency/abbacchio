@@ -3,9 +3,9 @@ import { getDatabase, type RunSelector } from '../lib/database.js';
 import {
   COMPARE_STATS,
   compareRuns,
-  type CompareDirection,
-  type CompareSource,
-  type CompareStat,
+  isCompareDirection,
+  isCompareSource,
+  isCompareStat,
 } from '../lib/compare.js';
 
 function parseNumber(raw: string | undefined, field: string): number | undefined {
@@ -18,18 +18,19 @@ function parseNumber(raw: string | undefined, field: string): number | undefined
 }
 
 function parseSelector(c: Context, prefix: 'baseline' | 'candidate'): RunSelector {
-  const sharedChannel = c.req.query('channel') || undefined;
+  const sel: RunSelector = {};
+  const channel = c.req.query(`${prefix}Channel`) || c.req.query('channel');
+  const version = c.req.query(`${prefix}Version`);
+  const since = parseNumber(c.req.query(`${prefix}Since`), `${prefix}Since`);
+  const until = parseNumber(c.req.query(`${prefix}Until`), `${prefix}Until`);
 
-  const sel: RunSelector = {
-    channel: c.req.query(`${prefix}Channel`) || sharedChannel,
-    version: c.req.query(`${prefix}Version`) || undefined,
-    since: parseNumber(c.req.query(`${prefix}Since`), `${prefix}Since`),
-    until: parseNumber(c.req.query(`${prefix}Until`), `${prefix}Until`),
-  };
+  if (channel) sel.channel = channel;
 
-  for (const key of Object.keys(sel) as Array<keyof RunSelector>) {
-    if (sel[key] === undefined) delete sel[key];
-  }
+  if (version) sel.version = version;
+
+  if (since !== undefined) sel.since = since;
+
+  if (until !== undefined) sel.until = until;
 
   return sel;
 }
@@ -51,9 +52,9 @@ function parseSelector(c: Context, prefix: 'baseline' | 'candidate'): RunSelecto
  */
 export function compareRunsHandler(c: Context) {
   try {
-    const source = c.req.query('source') as CompareSource | undefined;
+    const source = c.req.query('source') ?? '';
 
-    if (source !== 'span' && source !== 'metric') {
+    if (!isCompareSource(source)) {
       return c.json({ error: '"source" must be "span" or "metric"' }, 400);
     }
 
@@ -75,15 +76,15 @@ export function compareRunsHandler(c: Context) {
       return c.json({ error: 'Baseline and candidate select the same data; give them different versions, channels or time ranges' }, 400);
     }
 
-    const stat = (c.req.query('stat') || 'p95') as CompareStat;
+    const stat = c.req.query('stat') || 'p95';
 
-    if (!COMPARE_STATS.includes(stat)) {
+    if (!isCompareStat(stat)) {
       return c.json({ error: `"stat" must be one of ${COMPARE_STATS.join(', ')}` }, 400);
     }
 
-    const direction = (c.req.query('direction') || 'lower') as CompareDirection;
+    const direction = c.req.query('direction') || 'lower';
 
-    if (direction !== 'lower' && direction !== 'higher') {
+    if (!isCompareDirection(direction)) {
       return c.json({ error: '"direction" must be "lower" or "higher"' }, 400);
     }
 

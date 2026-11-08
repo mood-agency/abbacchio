@@ -36,6 +36,7 @@ export function isLogObject(value: unknown): value is Record<string, unknown> {
 /**
  * Validate a single log entry's shape and size
  */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary parser for untrusted request bodies
 export function validateLogEntry(log: unknown, maxSize: number): ValidationResult {
   if (!isLogObject(log)) {
     return {

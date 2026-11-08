@@ -76,6 +76,7 @@ function resolveMinLevel(level: ConsoleInterceptorOptions['level']): number {
   return DEFAULT_MIN_LEVEL;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- serializes arbitrary console arguments; any value is valid input
 function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
   if (value === null) return null;
 

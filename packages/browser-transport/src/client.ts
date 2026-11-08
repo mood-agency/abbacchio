@@ -23,11 +23,18 @@ interface OtlpAnyValue {
   boolValue?: boolean;
 }
 
+/** Body of an OTLP/HTTP JSON export request (logs, metrics or traces). */
+type OtlpExportRequest =
+  | { resourceLogs: readonly object[] }
+  | { resourceMetrics: readonly object[] }
+  | { resourceSpans: readonly object[] };
+
 interface OtlpKeyValue {
   key: string;
   value: OtlpAnyValue;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- converts arbitrary log attribute values to OTLP AnyValue
 function toOtlpAnyValue(val: unknown): OtlpAnyValue {
   if (typeof val === 'string') {
     return { stringValue: val.length > 2000 ? val.substring(0, 2000) + '...[TRUNCATED]' : val };
@@ -666,7 +673,7 @@ export class AbbacchioClient {
   }
 
   /** Returns true when the server rate-limited the request (429). */
-  private async post(path: string, payload: unknown): Promise<boolean> {
+  private async post(path: string, payload: OtlpExportRequest): Promise<boolean> {
     const body = JSON.stringify(payload);
 
     const headers: Record<string, string> = {

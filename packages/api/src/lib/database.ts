@@ -117,6 +117,42 @@ export interface VersionInfo {
   lastSeen: number | null;
 }
 
+/** Observations selected for one side of a comparison. */
+export interface SampleSet<T> {
+  samples: T[];
+  /** True when more rows matched than were returned. */
+  truncated: boolean;
+}
+
+interface RunFilter {
+  sql: string;
+  params: Array<string | number>;
+}
+
+interface SpanSampleRow {
+  duration: number;
+  status_code: number | null;
+}
+
+interface MetricSampleRow {
+  type: string;
+  unit: string | null;
+  value: number;
+  count: number | null;
+  bucket_counts: string | null;
+  explicit_bounds: string | null;
+}
+
+interface VersionRow {
+  channel: string;
+  version: string | number;
+  spans: number;
+  metricPoints: number;
+  logs: number;
+  firstSeen: number | null;
+  lastSeen: number | null;
+}
+
 /** Upper bound on rows pulled into memory for one side of a comparison. */
 export const MAX_COMPARE_SAMPLES = 200_000;
 
@@ -720,7 +756,7 @@ export class LogDatabase {
 
   // ──────── RUN COMPARISON ────────
 
-  private runConditions(name: string, sel: RunSelector, timeColumn: string, timeScale: number): { sql: string; params: Array<string | number> } {
+  private runConditions(name: string, sel: RunSelector, timeColumn: string, timeScale: number): RunFilter {
     const conditions: string[] = ['name = ?'];
     const params: Array<string | number> = [name];
 
@@ -748,13 +784,14 @@ export class LogDatabase {
   }
 
   /** Durations of every span called `name` in the selected run. */
-  selectSpanSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): { samples: SpanSample[]; truncated: boolean } {
+  selectSpanSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): SampleSet<SpanSample> {
     this.flush();
     const { sql, params } = this.runConditions(name, sel, 'start_time_ms', 1);
 
+    // SAFETY: the row shape matches the SELECT column list.
     const rows = this.db.prepare(
       `SELECT end_time_ms - start_time_ms AS duration, status_code FROM traces WHERE ${sql} ORDER BY start_time_ms DESC LIMIT ?`
-    ).all(...params, limit + 1) as Array<{ duration: number; status_code: number | null }>;
+    ).all(...params, limit + 1) as SpanSampleRow[];
 
     const truncated = rows.length > limit;
 
@@ -765,13 +802,14 @@ export class LogDatabase {
   }
 
   /** Data points of the metric called `name` in the selected run. */
-  selectMetricSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): { samples: MetricSample[]; truncated: boolean } {
+  selectMetricSamples(name: string, sel: RunSelector, limit = MAX_COMPARE_SAMPLES): SampleSet<MetricSample> {
     this.flush();
     const { sql, params } = this.runConditions(name, sel, 'time_unix_nano', 1_000_000);
 
+    // SAFETY: the row shape matches the SELECT column list.
     const rows = this.db.prepare(
       `SELECT type, unit, value, count, bucket_counts, explicit_bounds FROM metrics WHERE ${sql} ORDER BY time_unix_nano DESC LIMIT ?`
-    ).all(...params, limit + 1) as any[];
+    ).all(...params, limit + 1) as MetricSampleRow[];
 
     const truncated = rows.length > limit;
 
@@ -795,6 +833,7 @@ export class LogDatabase {
     const params = channel ? [channel, channel, channel] : [];
     const logVersion = `json_extract(data, '$."service.version"')`;
 
+    // SAFETY: the row shape matches the outer SELECT column list.
     const rows = this.db.prepare(`
       SELECT channel, version, SUM(spans) AS spans, SUM(points) AS metricPoints, SUM(logs) AS logs,
              MIN(first_seen) AS firstSeen, MAX(last_seen) AS lastSeen
@@ -812,7 +851,7 @@ export class LogDatabase {
       )
       GROUP BY channel, version
       ORDER BY lastSeen DESC
-    `).all(...params) as any[];
+    `).all(...params) as VersionRow[];
 
     return rows.map((r) => ({
       channel: r.channel,

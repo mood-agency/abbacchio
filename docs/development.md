@@ -26,6 +26,27 @@ bun run test
 bun run --filter @abbacchio/api test:watch
 ```
 
+## Linting
+
+```bash
+bun run lint                # oxlint + the vendored anti-slop plugin (runs in CI; needs Node >= 22.12)
+bunx oxlint --fix           # apply autofixes (e.g. blank-line spacing)
+```
+
+Configuration lives in `.oxlintrc.json`. Errors fail CI; warnings do not.
+
+- **Errors**: spacing, chained/widened assertions, conditional empty spreads, `unknown` parameters and returns, and similar rules.
+- **Warnings** (`require-safety-comment-for-type-assertion`, `no-known-value-widening`, `no-unsafe-dictionary-type`): this codebase handles arbitrary structured log data, so `Record<string, unknown>` and SQL row casts are often correct. Don't add new warnings in code you write. For a cast that is genuinely safe, put a `// SAFETY: <invariant>` comment right before it.
+- **Off**: `no-runtime-typeof`. Runtime `typeof` checks are how the API and transports validate untrusted input.
+- **Tests and `scripts/`**: mocking, `unknown` parameters and the typing rules above are relaxed.
+
+When a boundary function really must accept `unknown` (a validator or a serializer), disable the rule on that line and say why:
+
+```ts
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- boundary parser for untrusted request bodies
+export function validateLogEntry(log: unknown, maxSize: number) { ... }
+```
+
 ## Test Log Generator
 
 Generate test logs to populate the dashboard during development:
