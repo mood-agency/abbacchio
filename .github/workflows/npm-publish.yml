@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package to publish'
+        description: 'Package to publish (api = the `abbacchio` package)'
         required: true
         type: choice
         options:
@@ -39,35 +39,55 @@ jobs:
             filter: '@abbacchio/browser-transport'
           - name: tui
             filter: '@abbacchio/tui'
-          - name: api
-            filter: '@abbacchio/api'
+          - name: api              # directory packages/api, published as `abbacchio`
+            filter: 'abbacchio'
 
     name: Publish ${{ matrix.package.name }}
 
     steps:
+      # A manual run publishes only the selected package (or all); a tag push publishes all.
+      - name: Select package
+        id: select
+        env:
+          SELECTED: ${{ github.event.inputs.package }}
+          PACKAGE: ${{ matrix.package.name }}
+        run: |
+          if [ -z "$SELECTED" ] || [ "$SELECTED" = all ] || [ "$SELECTED" = "$PACKAGE" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping $PACKAGE (selected: $SELECTED)"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.select.outputs.run == 'true'
 
       - uses: oven-sh/setup-bun@v2
+        if: steps.select.outputs.run == 'true'
         with:
           bun-version-file: package.json
 
       - uses: actions/setup-node@v4
+        if: steps.select.outputs.run == 'true'
         with:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
+        if: steps.select.outputs.run == 'true'
         run: bun install --frozen-lockfile
 
       # The API package ships the built dashboard inside dist/dashboard
       - name: Build dashboard
-        if: matrix.package.name == 'api'
+        if: steps.select.outputs.run == 'true' && matrix.package.name == 'api'
         run: bun run --filter @abbacchio/dashboard build
 
       - name: Build package
+        if: steps.select.outputs.run == 'true'
         run: bun run --filter ${{ matrix.package.filter }} build
 
       - name: Check if version exists on npm
+        if: steps.select.outputs.run == 'true'
         id: check
         run: |
           PACKAGE_VERSION=$(node -p "require('./packages/${{ matrix.package.name }}/package.json').version")
@@ -83,18 +103,19 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm
-        if: steps.check.outputs.exists == 'false' && github.event.inputs.dry_run != 'true'
+        if: steps.select.outputs.run == 'true' && steps.check.outputs.exists == 'false' && github.event.inputs.dry_run != 'true'
         working-directory: packages/${{ matrix.package.name }}
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Dry run
-        if: github.event.inputs.dry_run == 'true'
+        if: steps.select.outputs.run == 'true' && github.event.inputs.dry_run == 'true'
         working-directory: packages/${{ matrix.package.name }}
         run: npm publish --access public --dry-run
 
       - name: Summary
+        if: steps.select.outputs.run == 'true'
         run: |
           if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
             echo "### ${{ matrix.package.filter }} - Skipped" >> $GITHUB_STEP_SUMMARY

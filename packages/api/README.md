@@ -1,4 +1,4 @@
-# @abbacchio/api
+# abbacchio
 
 Real-time log server with HTTP ingestion and SQLite persistence, supporting multiple logging libraries (Pino, Winston, Bunyan, Console).
 
@@ -17,8 +17,8 @@ Real-time log server with HTTP ingestion and SQLite persistence, supporting mult
 The package is a single bundled file plus the built dashboard, with no runtime dependencies. It needs the [Bun](https://bun.sh) runtime because it uses `bun:sqlite`.
 
 ```bash
-bunx @abbacchio/api            # run without installing
-bun add -g @abbacchio/api      # or install the `abbacchio` command
+bunx abbacchio            # run without installing
+bun add -g abbacchio      # or install the `abbacchio` command
 ```
 
 ## Quick Start

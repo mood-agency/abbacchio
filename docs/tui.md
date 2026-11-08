@@ -11,7 +11,7 @@ npm install -g @abbacchio/tui
 ## Usage
 
 ```bash
-abbacchio -c <channel>
+abbacchio-tui -c <channel>
 ```
 
 ## CLI Options
@@ -26,13 +26,13 @@ abbacchio -c <channel>
 
 ```bash
 # Basic usage
-abbacchio -c my-app
+abbacchio-tui -c my-app
 
 # With custom API URL
-abbacchio -c production -u https://logs.example.com
+abbacchio-tui -c production -u https://logs.example.com
 
 # Filter by level (only show warn and above)
-abbacchio -c my-app -l warn
+abbacchio-tui -c my-app -l warn
 ```
 
 ## Keyboard Shortcuts

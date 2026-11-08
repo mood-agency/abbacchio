@@ -4,21 +4,25 @@ Synchronize and bump versions across all packages in the monorepo.
 
 ## Version Files
 
-Update the version in ALL of these files:
+Run `node scripts/bump-version.js <patch|minor|major|x.y.z>` from the repository root. It reads the current version from the root `package.json` and writes the new one to ALL of these files, so don't edit any of them by hand first:
 
 ### JavaScript/TypeScript packages (package.json)
 1. `package.json` (root)
 2. `packages/transport/package.json`
 3. `packages/browser-transport/package.json`
-4. `packages/api/package.json`
+4. `packages/api/package.json` (published as `abbacchio`)
 5. `packages/dashboard/package.json`
 6. `packages/tui/package.json`
+7. `packages/desktop/package.json`
+8. `packages/mcp/package.json`
 
 ### Tauri desktop app
-7. `packages/desktop/src-tauri/tauri.conf.json`
+9. `packages/desktop/src-tauri/tauri.conf.json`
+10. `packages/desktop/src-tauri/Cargo.toml`
 
 ### Python package
-8. `python/pyproject.toml`
+11. `python/pyproject.toml`
+12. `python/abbacchio_transport/__init__.py` (`__version__`)
 
 ## Instructions
 

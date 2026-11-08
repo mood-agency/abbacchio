@@ -1,10 +1,10 @@
 {
   "name": "@abbacchio/tui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Terminal user interface for Abbacchio real-time log viewer",
   "type": "module",
   "bin": {
-    "abbacchio": "./dist/cli.js"
+    "abbacchio-tui": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

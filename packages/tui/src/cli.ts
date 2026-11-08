@@ -4,7 +4,7 @@ import type { LogLevelLabel, CLIOptions } from './types/index.js';
 
 const cli = meow(`
   Usage
-    $ abbacchio --channel <channel>
+    $ abbacchio-tui --channel <channel>
 
   Options
     --channel, -c    Channel name (required)
@@ -15,9 +15,9 @@ const cli = meow(`
     --version        Show version number
 
   Examples
-    $ abbacchio -c my-app
-    $ abbacchio -c production -u https://logs.example.com -l warn
-    $ abbacchio -c encrypted-channel -k mysecretkey
+    $ abbacchio-tui -c my-app
+    $ abbacchio-tui -c production -u https://logs.example.com -l warn
+    $ abbacchio-tui -c encrypted-channel -k mysecretkey
 
   Keyboard Shortcuts
     q          Quit

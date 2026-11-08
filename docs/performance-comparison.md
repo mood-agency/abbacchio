@@ -98,10 +98,10 @@ Response (abridged):
 
 ```bash
 # Working tree vs HEAD (the default baseline)
-bunx @abbacchio/api bench --run "bun run load-test"
+bunx abbacchio bench --run "bun run load-test"
 
 # vs another ref, installing dependencies in each checkout, 5 rounds per build
-bunx @abbacchio/api bench --baseline origin/main --setup "bun install" --runs 5 --run "bun run load-test"
+bunx abbacchio bench --baseline origin/main --setup "bun install" --runs 5 --run "bun run load-test"
 ```
 
 ```
@@ -204,7 +204,7 @@ Running the baseline and the candidate **in the same sandbox, one after the othe
 ```bash
 # Abbacchio: one command, no Docker or clone needed (requires Bun).
 # Anonymous access, no rate limit, SQL endpoint on, database wiped on start.
-bunx @abbacchio/api sandbox --env-file .abbacchio.env &
+bunx abbacchio sandbox --env-file .abbacchio.env &
 source .abbacchio.env       # ABBACCHIO_URL, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL
 
 # Baseline
