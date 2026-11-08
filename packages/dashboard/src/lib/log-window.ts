@@ -24,19 +24,25 @@ export interface AppendResult {
 /** Append newer logs, skipping ids already present near the tail, and enforce the cap. */
 export function appendLogs(prev: LogEntry[], incoming: LogEntry[], max = MAX_LOGS_IN_MEMORY): AppendResult {
   const recentIds = new Set<string>();
+
   for (let i = Math.max(0, prev.length - DEDUP_WINDOW); i < prev.length; i++) {
     recentIds.add(prev[i].id);
   }
+
   const unique: LogEntry[] = [];
+
   for (const log of incoming) {
     if (recentIds.has(log.id)) continue;
     recentIds.add(log.id); // also dedupes within the incoming batch
     unique.push(log);
   }
+
   if (unique.length === 0) return { logs: prev, added: 0, trimmed: false };
 
   const combined = prev.concat(unique);
+
   if (combined.length <= max) return { logs: combined, added: unique.length, trimmed: false };
+
   return { logs: combined.slice(combined.length - max), added: unique.length, trimmed: true };
 }
 

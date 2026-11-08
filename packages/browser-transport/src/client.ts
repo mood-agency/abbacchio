@@ -23,36 +23,51 @@ interface OtlpAnyValue {
   boolValue?: boolean;
 }
 
+/** Body of an OTLP/HTTP JSON export request (logs, metrics or traces). */
+type OtlpExportRequest =
+  | { resourceLogs: readonly object[] }
+  | { resourceMetrics: readonly object[] }
+  | { resourceSpans: readonly object[] };
+
 interface OtlpKeyValue {
   key: string;
   value: OtlpAnyValue;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- converts arbitrary log attribute values to OTLP AnyValue
 function toOtlpAnyValue(val: unknown): OtlpAnyValue {
   if (typeof val === 'string') {
     return { stringValue: val.length > 2000 ? val.substring(0, 2000) + '...[TRUNCATED]' : val };
   }
+
   if (typeof val === 'number') {
     return Number.isInteger(val) ? { intValue: val } : { doubleValue: val };
   }
+
   if (typeof val === 'boolean') return { boolValue: val };
+
   if (val === null || val === undefined) return { stringValue: '' };
+
   // For objects/arrays, JSON.stringify
   try {
     const str = JSON.stringify(val);
+
     return { stringValue: str.length > 2000 ? str.substring(0, 2000) + '...[TRUNCATED]' : str };
   } catch {
     const str = String(val);
+
     return { stringValue: str.length > 2000 ? str.substring(0, 2000) + '...[TRUNCATED]' : str };
   }
 }
 
 function toOtlpAttributes(obj: Record<string, unknown>): OtlpKeyValue[] {
   const attrs: OtlpKeyValue[] = [];
+
   for (const [key, val] of Object.entries(obj)) {
     if (val === undefined) continue;
     attrs.push({ key, value: toOtlpAnyValue(val) });
   }
+
   return attrs;
 }
 
@@ -64,13 +79,16 @@ const INSTANCE_ID_STORAGE_KEY = 'abbacchio_instance_id';
  */
 function defaultBrowserInstanceId(): string | undefined {
   const random = () => 'web-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
   try {
     if (typeof localStorage === 'undefined') return random();
     let id = localStorage.getItem(INSTANCE_ID_STORAGE_KEY);
+
     if (!id) {
       id = random();
       localStorage.setItem(INSTANCE_ID_STORAGE_KEY, id);
     }
+
     return id;
   } catch {
     return random();
@@ -233,6 +251,7 @@ export class AbbacchioClient {
     } else {
       this.endpoint = options.endpoint || 'http://localhost:4000';
     }
+
     this.serviceName = options.serviceName || 'default';
     this.source = options.source;
     this.instanceId = options.instanceId ?? defaultBrowserInstanceId();
@@ -264,6 +283,7 @@ export class AbbacchioClient {
     if (this.maxPointsPerSecond <= 0) return true;
     const now = Date.now();
     const elapsedSec = (now - this.intakeLastRefill) / 1000;
+
     if (elapsedSec > 0) {
       this.intakeTokens = Math.min(
         this.maxPointsPerSecond,
@@ -271,10 +291,13 @@ export class AbbacchioClient {
       );
       this.intakeLastRefill = now;
     }
+
     if (this.intakeTokens >= 1) {
       this.intakeTokens -= 1;
+
       return true;
     }
+
     return false;
   }
 
@@ -287,6 +310,7 @@ export class AbbacchioClient {
   private noteDropped(count = 1): void {
     this.droppedSinceWarn += count;
     const now = Date.now();
+
     if (now - this.lastDropWarn > 5000) {
       console.warn(
         `[abbacchio] dropped ${this.droppedSinceWarn} telemetry records (intake rate limit or buffer cap)`,
@@ -300,8 +324,10 @@ export class AbbacchioClient {
   private admit(bufferLength: number): boolean {
     if (!this.intakeOK() || bufferLength >= this.maxBufferSize) {
       this.noteDropped();
+
       return false;
     }
+
     return true;
   }
 
@@ -313,20 +339,26 @@ export class AbbacchioClient {
   private requeue<T>(batch: T[], current: T[]): T[] {
     if (this.isClosed) {
       this.noteDropped(batch.length);
+
       return current;
     }
+
     const merged = batch.concat(current);
     const excess = merged.length - this.maxBufferSize;
+
     if (excess > 0) {
       this.noteDropped(excess);
+
       return merged.slice(excess);
     }
+
     return merged;
   }
 
   /** Add a log to the buffer and trigger send if needed */
   add(log: LogEntry): void {
     if (!this.enabled || this.isClosed) return;
+
     if (!this.admit(this.buffer.length)) return;
     this.buffer.push(log);
 
@@ -361,7 +393,10 @@ export class AbbacchioClient {
 
   async flushLogs(force = false): Promise<void> {
     if (this.buffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleSend(); return; }
+
+    if (this.isPaused() && !force) { this.scheduleSend();
+
+ return; }
 
     const toSend = this.buffer;
     this.buffer = [];
@@ -373,6 +408,7 @@ export class AbbacchioClient {
 
     if (await this.sendLogs(toSend)) {
       this.buffer = this.requeue(toSend, this.buffer);
+
       if (!this.isClosed) this.scheduleSend();
     }
   }
@@ -381,7 +417,7 @@ export class AbbacchioClient {
   private async sendLogs(logs: LogEntry[]): Promise<boolean> {
     try {
       const logRecords = logs.map((log) => {
-        const { level, msg, message, time, name, ...extra } = log;
+        const { level, msg, message, time, name: _name, ...extra } = log;
         const pinoLevel = typeof level === 'number' ? level : 30;
         const severity = PINO_TO_OTLP_SEVERITY[pinoLevel] || PINO_TO_OTLP_SEVERITY[30];
         const body = msg || (message as string) || '';
@@ -419,6 +455,7 @@ export class AbbacchioClient {
   /** Add a metric data point to the buffer */
   addMetric(metric: MetricRecord): void {
     if (!this.enabled || this.isClosed) return;
+
     if (!this.admit(this.metricBuffer.length)) return;
     this.metricBuffer.push(metric);
 
@@ -439,15 +476,22 @@ export class AbbacchioClient {
 
   async flushMetrics(force = false): Promise<void> {
     if (this.metricBuffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleMetricFlush(); return; }
+
+    if (this.isPaused() && !force) { this.scheduleMetricFlush();
+
+ return; }
+
     const batch = this.metricBuffer;
     this.metricBuffer = [];
+
     if (this.metricTimer) {
       clearTimeout(this.metricTimer);
       this.metricTimer = null;
     }
+
     if (await this.sendMetrics(batch)) {
       this.metricBuffer = this.requeue(batch, this.metricBuffer);
+
       if (!this.isClosed) this.scheduleMetricFlush();
     }
   }
@@ -456,6 +500,7 @@ export class AbbacchioClient {
   private async sendMetrics(metrics: MetricRecord[]): Promise<boolean> {
     try {
       const byName = new Map<string, MetricRecord[]>();
+
       for (const m of metrics) {
         const arr = byName.get(m.name) || [];
         arr.push(m);
@@ -463,8 +508,10 @@ export class AbbacchioClient {
       }
 
       const otlpMetrics: unknown[] = [];
+
       for (const [name, records] of byName) {
         const first = records[0];
+
         const dataPoints = records.map((r) => ({
           timeUnixNano: String(Date.now() * 1_000_000),
           asDouble: r.value,
@@ -512,6 +559,7 @@ export class AbbacchioClient {
   /** Add a trace span to the buffer */
   addSpan(span: SpanRecord): void {
     if (!this.enabled || this.isClosed) return;
+
     if (!this.admit(this.spanBuffer.length)) return;
     this.spanBuffer.push(span);
 
@@ -532,15 +580,22 @@ export class AbbacchioClient {
 
   async flushSpans(force = false): Promise<void> {
     if (this.spanBuffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleSpanFlush(); return; }
+
+    if (this.isPaused() && !force) { this.scheduleSpanFlush();
+
+ return; }
+
     const batch = this.spanBuffer;
     this.spanBuffer = [];
+
     if (this.spanTimer) {
       clearTimeout(this.spanTimer);
       this.spanTimer = null;
     }
+
     if (await this.sendSpans(batch)) {
       this.spanBuffer = this.requeue(batch, this.spanBuffer);
+
       if (!this.isClosed) this.scheduleSpanFlush();
     }
   }
@@ -581,22 +636,27 @@ export class AbbacchioClient {
 
   async close(): Promise<void> {
     this.isClosed = true;
+
     if (typeof window !== 'undefined') {
       window.removeEventListener('beforeunload', this.onUnload);
       window.removeEventListener('pagehide', this.onUnload);
     }
+
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
+
     if (this.metricTimer) {
       clearTimeout(this.metricTimer);
       this.metricTimer = null;
     }
+
     if (this.spanTimer) {
       clearTimeout(this.spanTimer);
       this.spanTimer = null;
     }
+
     await this.flushAll(true);
   }
 
@@ -604,21 +664,25 @@ export class AbbacchioClient {
     const attrs: OtlpKeyValue[] = [
       { key: 'service.name', value: { stringValue: this.serviceName } },
     ];
+
     for (const [key, val] of Object.entries(this.resourceAttributes)) {
       attrs.push({ key, value: { stringValue: val } });
     }
+
     return attrs;
   }
 
   /** Returns true when the server rate-limited the request (429). */
-  private async post(path: string, payload: unknown): Promise<boolean> {
+  private async post(path: string, payload: OtlpExportRequest): Promise<boolean> {
     const body = JSON.stringify(payload);
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...this.headers,
     };
 
     if (this.source) headers['X-Source'] = this.source;
+
     if (this.instanceId) headers['X-Instance-Id'] = this.instanceId;
 
     const res = await fetch(`${this.endpoint}${path}`, {
@@ -633,22 +697,28 @@ export class AbbacchioClient {
     if (res.status === 429) {
       // Honor Retry-After when present; otherwise exponential backoff (capped).
       const retryAfter = Number(res.headers.get('retry-after'));
+
       const backoff = Number.isFinite(retryAfter) && retryAfter > 0
         ? retryAfter * 1000
         : this.backoffMs;
+
       this.pausedUntil = Date.now() + backoff;
       this.backoffMs = Math.min(this.backoffMs * 2, AbbacchioClient.MAX_BACKOFF_MS);
+
       return true;
     }
+
     if (res.ok) {
       this.backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
     }
+
     return false;
   }
 
   /** Update client configuration */
   configure(options: Partial<AbbacchioClientOptions>): void {
     if (options.endpoint !== undefined) this.endpoint = options.endpoint;
+
     if (options.url !== undefined && !options.endpoint) {
       try {
         const u = new URL(options.url);
@@ -657,15 +727,25 @@ export class AbbacchioClient {
         this.endpoint = options.url;
       }
     }
+
     if (options.serviceName !== undefined) this.serviceName = options.serviceName;
+
     if (options.source !== undefined) this.source = options.source;
+
     if (options.instanceId !== undefined) this.instanceId = options.instanceId;
+
     if (options.resourceAttributes !== undefined) this.resourceAttributes = options.resourceAttributes;
+
     if (options.enabled !== undefined) this.enabled = options.enabled;
+
     if (options.batchSize !== undefined) this.batchSize = options.batchSize;
+
     if (options.flushInterval !== undefined) this.flushInterval = options.flushInterval;
+
     if (options.headers !== undefined) this.headers = options.headers;
+
     if (options.maxBufferSize !== undefined) this.maxBufferSize = options.maxBufferSize;
+
     if (options.maxPointsPerSecond !== undefined) {
       this.maxPointsPerSecond = options.maxPointsPerSecond;
       this.intakeTokens = options.maxPointsPerSecond;

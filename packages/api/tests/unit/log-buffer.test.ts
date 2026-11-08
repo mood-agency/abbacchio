@@ -54,6 +54,7 @@ describe('LogBuffer', () => {
 
     it('should put extra fields in data object', () => {
       const buffer = new LogBuffer();
+
       const entry = buffer.add({
         level: 30,
         msg: 'Test',
@@ -67,6 +68,7 @@ describe('LogBuffer', () => {
 
     it('should assign correct levelLabel for all levels', () => {
       const buffer = new LogBuffer();
+
       const levels = [
         { level: 10, label: 'trace' },
         { level: 20, label: 'debug' },
@@ -111,6 +113,7 @@ describe('LogBuffer', () => {
   describe('addBatch()', () => {
     it('should add multiple logs and return entries', () => {
       const buffer = new LogBuffer();
+
       const logs = [
         { level: 30, msg: 'Log 1' },
         { level: 40, msg: 'Log 2' },

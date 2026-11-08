@@ -100,6 +100,7 @@ export function startErrorCapture(
     errorHandler = (event: ErrorEvent) => {
       try { onEntry(createErrorEntry(event, options)); } catch { /* never throw */ }
     };
+
     window.addEventListener('error', errorHandler);
   }
 
@@ -107,6 +108,7 @@ export function startErrorCapture(
     rejectionHandler = (event: PromiseRejectionEvent) => {
       try { onEntry(createRejectionEntry(event, options)); } catch { /* never throw */ }
     };
+
     window.addEventListener('unhandledrejection', rejectionHandler);
   }
 }

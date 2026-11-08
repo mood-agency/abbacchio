@@ -63,6 +63,7 @@
    */
   async function deriveKey(password, salt) {
     const encoder = new TextEncoder();
+
     const passwordKey = await crypto.subtle.importKey(
       'raw',
       encoder.encode(password),
@@ -118,6 +119,7 @@
    */
   function safeSerialize(value, seen = new WeakSet()) {
     if (value === null) return null;
+
     if (value === undefined) return undefined;
 
     if (typeof value === 'function') {
@@ -132,6 +134,7 @@
     if (seen.has(value)) {
       return '[Circular]';
     }
+
     seen.add(value);
 
     // Handle special objects
@@ -163,13 +166,15 @@
 
     // Handle plain objects
     const result = {};
+
     for (const key of Object.keys(value)) {
       try {
         result[key] = safeSerialize(value[key], seen);
-      } catch (e) {
+      } catch {
         result[key] = '[Unserializable]';
       }
     }
+
     return result;
   }
 
@@ -213,12 +218,15 @@
 
     try {
       const stack = new Error().stack;
+
       if (!stack) return null;
 
       const lines = stack.split('\n');
+
       // Find the first line that's not from this file
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+
         if (line.includes('abbacchio-console') ||
             line.includes('createInterceptor') ||
             line.includes('at console.') ||
@@ -229,6 +237,7 @@
 
         // Parse the location
         const match = line.match(/at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?/);
+
         if (match) {
           return {
             function: match[1] || 'anonymous',
@@ -238,9 +247,10 @@
           };
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore errors getting stack trace
     }
+
     return null;
   }
 
@@ -328,7 +338,7 @@
         },
         body: JSON.stringify({ logs: processedLogs }),
       });
-    } catch (e) {
+    } catch {
       // Silently fail - don't break the app
     }
   }
@@ -346,7 +356,7 @@
         try {
           const entry = createLogEntry(method, args);
           addToBuffer(entry);
-        } catch (e) {
+        } catch {
           // Don't let logging errors break the app
         }
       }

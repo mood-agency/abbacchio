@@ -47,6 +47,7 @@ export default async function pinoTransport(opts: PinoTransportOptions = {}) {
       for await (const obj of source) {
         client.add(obj);
       }
+
       await client.flush();
     },
     {

@@ -26,6 +26,7 @@ describe('RateLimiter', () => {
       for (let i = 0; i < 5; i++) {
         limiter.tryConsume('test-key');
       }
+
       expect(limiter.tryConsume('test-key')).toBe(false);
     });
 
@@ -56,6 +57,7 @@ describe('RateLimiter', () => {
       for (let i = 0; i < 3; i++) {
         shortLimiter.tryConsume('test-key');
       }
+
       expect(shortLimiter.tryConsume('test-key')).toBe(false);
 
       // Wait for window to pass

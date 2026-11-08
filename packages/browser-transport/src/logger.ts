@@ -24,9 +24,11 @@ export function getMemoryUsageBytes(): number {
   if (typeof process !== 'undefined' && process.memoryUsage) {
     return process.memoryUsage().heapUsed;
   }
+
   if (typeof performance !== 'undefined' && (performance as any).memory) {
     return (performance as any).memory.usedJSHeapSize;
   }
+
   return 0;
 }
 
@@ -98,6 +100,7 @@ export class Logger {
 
   private parseLevel(level: number | LogLevel): number {
     if (typeof level === 'number') return level;
+
     return LOG_LEVELS[level] ?? LOG_LEVELS.info;
   }
 
@@ -230,6 +233,7 @@ export class Logger {
   child(bindings: Record<string, unknown>): Logger {
     const child = Object.create(this) as Logger;
     child.bindings = { ...this.bindings, ...bindings };
+
     return child;
   }
 

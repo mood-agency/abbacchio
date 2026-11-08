@@ -17,6 +17,7 @@ import esCommands from './locales/es/commands.json';
 import esOnboarding from './locales/es/onboarding.json';
 
 export const defaultNS = 'common';
+
 export const resources = {
   en: {
     common: enCommon,

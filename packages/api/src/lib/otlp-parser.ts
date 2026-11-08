@@ -55,6 +55,7 @@ function getChannelFromResource(resource: OTLPResource | undefined, defaultChann
     }
 
     const serviceNameAttr = resource.attributes.find((attr) => attr.key === 'service.name');
+
     if (serviceNameAttr && serviceNameAttr.value && serviceNameAttr.value.stringValue) {
         return serviceNameAttr.value.stringValue;
     }
@@ -72,13 +73,61 @@ function getIdentityFromResource(resource: OTLPResource | undefined): { source?:
     if (!resource || !Array.isArray(resource.attributes)) return {};
     let source: string | undefined;
     let instanceId: string | undefined;
+
     for (const attr of resource.attributes) {
         const val = attr.value?.stringValue;
+
         if (!val) continue;
+
         if (attr.key === 'service.instance.id') instanceId = val;
         else if (attr.key === 'service.source') source = val;
     }
+
     return { source, instanceId };
+}
+
+/**
+ * Resource attributes copied onto every log, metric data point and span.
+ * They identify *which build* emitted the telemetry, so runs of different
+ * versions can be filtered and compared (see lib/compare.ts). Everything else
+ * on the resource (host.*, process.*, telemetry.sdk.*) is dropped to keep rows
+ * small. Point-level attributes with the same key take precedence.
+ */
+export const RESOURCE_ATTRIBUTE_ALLOWLIST = [
+    'service.version',
+    'service.namespace',
+    'deployment.environment',
+    'deployment.environment.name',
+    'vcs.ref.head.name',
+    'vcs.ref.head.revision',
+] as const;
+
+const RESOURCE_ATTRIBUTE_KEYS = new Set<string>(RESOURCE_ATTRIBUTE_ALLOWLIST);
+
+type AttributeMap = Record<string, string | number | boolean>;
+
+/** Allow-listed resource attributes, or null when there are none (the common case). */
+function getResourceAttributes(resource: OTLPResource | undefined): AttributeMap | null {
+    if (!resource || !Array.isArray(resource.attributes)) return null;
+
+    const picked = resource.attributes.filter((attr) => RESOURCE_ATTRIBUTE_KEYS.has(attr.key));
+
+    return picked.length > 0 ? parseAttributes(picked) : null;
+}
+
+/**
+ * Add resource attributes to a record's own (freshly parsed) attributes, in
+ * place: this runs once per log record, data point and span, so it must not
+ * allocate a copy. Keys already on the record win.
+ */
+function withResourceAttributes(attributes: AttributeMap, resourceAttributes: AttributeMap | null): AttributeMap {
+    if (resourceAttributes === null) return attributes;
+
+    for (const key in resourceAttributes) {
+        if (!(key in attributes)) attributes[key] = resourceAttributes[key];
+    }
+
+    return attributes;
 }
 
 /**
@@ -86,10 +135,12 @@ function getIdentityFromResource(resource: OTLPResource | undefined): { source?:
  */
 function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | number | boolean> {
     const result: Record<string, string | number | boolean> = {};
+
     if (!Array.isArray(attributes)) return result;
 
     for (const attr of attributes) {
         const val = attr.value;
+
         if (!val) continue;
 
         if (val.stringValue !== undefined) result[attr.key] = val.stringValue;
@@ -97,6 +148,7 @@ function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | n
         else if (val.doubleValue !== undefined) result[attr.key] = val.doubleValue;
         else if (val.boolValue !== undefined) result[attr.key] = val.boolValue;
     }
+
     return result;
 }
 
@@ -105,6 +157,7 @@ function parseAttributes(attributes?: OTLPKeyValue[]): Record<string, string | n
  */
 function severityNumberToPinoLevel(severityNumber?: number): number {
     if (!severityNumber) return 30; // Default info
+
     // OTel SeverityNumber:
     // 1-4: TRACE -> Pino 10
     // 5-8: DEBUG -> Pino 20
@@ -113,10 +166,15 @@ function severityNumberToPinoLevel(severityNumber?: number): number {
     // 17-20: ERROR -> Pino 50
     // 21-24: FATAL -> Pino 60
     if (severityNumber <= 4) return 10;
+
     if (severityNumber <= 8) return 20;
+
     if (severityNumber <= 12) return 30;
+
     if (severityNumber <= 16) return 40;
+
     if (severityNumber <= 20) return 50;
+
     return 60;
 }
 
@@ -131,6 +189,7 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
     for (const resourceLog of request.resourceLogs) {
         const channel = getChannelFromResource(resourceLog.resource, defaultChannel);
         const identity = getIdentityFromResource(resourceLog.resource);
+        const resourceAttributes = getResourceAttributes(resourceLog.resource);
 
         if (!Array.isArray(resourceLog.scopeLogs)) continue;
 
@@ -141,7 +200,7 @@ export function parseOtlpLogs(request: OTLPExportLogsServiceRequest, defaultChan
                 const timeUnixNano = logRecord.timeUnixNano || logRecord.observedTimeUnixNano;
                 const time = timeUnixNano ? Math.floor(Number(timeUnixNano) / 1_000_000) : Date.now();
 
-                const attributes = parseAttributes(logRecord.attributes);
+                const attributes = withResourceAttributes(parseAttributes(logRecord.attributes), resourceAttributes);
                 const msg = logRecord.body?.stringValue || '';
 
                 const incoming: IncomingLog = {
@@ -174,6 +233,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
 
     for (const resourceMetric of request.resourceMetrics) {
         const channel = getChannelFromResource(resourceMetric.resource, defaultChannel);
+        const resourceAttributes = getResourceAttributes(resourceMetric.resource);
 
         if (!Array.isArray(resourceMetric.scopeMetrics)) continue;
 
@@ -196,7 +256,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             channel,
                             timeUnixNano: Number(dp.timeUnixNano),
                             value: dp.asDouble !== undefined ? dp.asDouble : Number(dp.asInt || 0),
-                            attributes: parseAttributes(dp.attributes),
+                            attributes: withResourceAttributes(parseAttributes(dp.attributes), resourceAttributes),
                         });
                     }
                 }
@@ -212,7 +272,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             channel,
                             timeUnixNano: Number(dp.timeUnixNano),
                             value: dp.asDouble !== undefined ? dp.asDouble : Number(dp.asInt || 0),
-                            attributes: parseAttributes(dp.attributes),
+                            attributes: withResourceAttributes(parseAttributes(dp.attributes), resourceAttributes),
                         });
                     }
                 }
@@ -231,7 +291,7 @@ export function parseOtlpMetrics(request: OTLPExportMetricsServiceRequest, defau
                             count: dp.count !== undefined ? Number(dp.count) : 0,
                             bucketCounts: Array.isArray(dp.bucketCounts) ? dp.bucketCounts.map(Number) : undefined,
                             explicitBounds: Array.isArray(dp.explicitBounds) ? dp.explicitBounds.map(Number) : undefined,
-                            attributes: parseAttributes(dp.attributes),
+                            attributes: withResourceAttributes(parseAttributes(dp.attributes), resourceAttributes),
                         });
                     }
                 }
@@ -252,6 +312,7 @@ export function parseOtlpTraces(request: OTLPExportTraceServiceRequest, defaultC
 
     for (const resourceSpan of request.resourceSpans) {
         const channel = getChannelFromResource(resourceSpan.resource, defaultChannel);
+        const resourceAttributes = getResourceAttributes(resourceSpan.resource);
 
         if (!Array.isArray(resourceSpan.scopeSpans)) continue;
 
@@ -270,8 +331,10 @@ export function parseOtlpTraces(request: OTLPExportTraceServiceRequest, defaultC
                     name: span.name,
                     startTimeMs: Number(startNano / 1_000_000n),
                     endTimeMs: Number(endNano / 1_000_000n),
+                    // Exact (sub-millisecond) duration; start/end above are truncated to ms.
+                    durationMs: endNano >= startNano ? Number(endNano - startNano) / 1_000_000 : 0,
                     channel,
-                    attributes: parseAttributes(span.attributes),
+                    attributes: withResourceAttributes(parseAttributes(span.attributes), resourceAttributes),
                     status: span.status ? {
                         code: span.status.code,
                         message: span.status.message,

@@ -17,7 +17,7 @@ const LEVEL_SHORTCUTS: Array<{ key: string; level: LogLevelNumber; label: LogLev
   { key: '6', level: 60, label: 'fatal' },
 ];
 
-export function StatusBar({ levelFilter, search }: StatusBarProps): React.ReactElement {
+export function StatusBar({ levelFilter }: StatusBarProps): React.ReactElement {
   return (
     <Box
       flexDirection="row"
@@ -49,6 +49,7 @@ export function StatusBar({ levelFilter, search }: StatusBarProps): React.ReactE
         {LEVEL_SHORTCUTS.map(({ key, level, label }) => {
           const color = getLevelColor(label);
           const isActive = levelFilter === level;
+
           return (
             <Text key={key}>
               <Text dimColor={!isActive}>{key}:</Text>

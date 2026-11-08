@@ -12,9 +12,11 @@ describe('IdPool', () => {
   describe('ID generation', () => {
     it('should generate unique IDs', () => {
       const ids = new Set<string>();
+
       for (let i = 0; i < 50; i++) {
         ids.add(pool.getId());
       }
+
       expect(ids.size).toBe(50);
     });
 

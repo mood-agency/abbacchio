@@ -49,11 +49,15 @@ function tokenizeSql(code: string): SqlToken[] {
     // Strings (single-quoted)
     if (code[i] === "'") {
       let j = i + 1;
+
       while (j < code.length) {
         if (code[j] === "'" && code[j + 1] === "'") { j += 2; continue; }
+
         if (code[j] === "'") { j++; break; }
+
         j++;
       }
+
       tokens.push({ type: 'string', value: code.slice(i, j) });
       i = j;
       continue;
@@ -62,6 +66,7 @@ function tokenizeSql(code: string): SqlToken[] {
     // Numbers
     if (/\d/.test(code[i]) && (i === 0 || /[\s,()=<>!+\-*/]/.test(code[i - 1]))) {
       let j = i;
+
       while (j < code.length && /[\d.]/.test(code[j])) j++;
       tokens.push({ type: 'number', value: code.slice(i, j) });
       i = j;
@@ -71,12 +76,14 @@ function tokenizeSql(code: string): SqlToken[] {
     // Words (keywords, functions, identifiers)
     if (/[a-zA-Z_]/.test(code[i])) {
       let j = i;
+
       while (j < code.length && /[a-zA-Z0-9_]/.test(code[j])) j++;
       const word = code.slice(i, j);
       const upper = word.toUpperCase();
 
       // Check for function (word followed by parenthesis)
       const rest = code.slice(j).trimStart();
+
       if (SQL_FUNCTIONS.has(word.toLowerCase()) || (SQL_FUNCTIONS.has(word) && rest[0] === '(')) {
         tokens.push({ type: 'function', value: word });
       } else if (SQL_KEYWORDS.has(upper)) {
@@ -84,6 +91,7 @@ function tokenizeSql(code: string): SqlToken[] {
       } else {
         tokens.push({ type: 'plain', value: word });
       }
+
       i = j;
       continue;
     }
@@ -91,7 +99,9 @@ function tokenizeSql(code: string): SqlToken[] {
     // Operators
     if (/[=<>!+\-*/%|&]/.test(code[i])) {
       let j = i;
+
       while (j < code.length && /[=<>!]/.test(code[j])) j++;
+
       if (j === i) j++;
       tokens.push({ type: 'operator', value: code.slice(i, j) });
       i = j;
@@ -118,6 +128,7 @@ const TOKEN_CLASSES: Record<TokenType, string> = {
 
 function SqlHighlight({ code }: { code: string }) {
   const tokens = useMemo(() => tokenizeSql(code), [code]);
+
   return (
     <>
       {tokens.map((token, i) => (
@@ -179,11 +190,13 @@ export function SqlQueryPanel() {
       e.preventDefault();
       execute();
     }
+
     // Arrow up/down for history when at start/end of input
     if (e.key === 'ArrowUp' && e.altKey) {
       e.preventDefault();
       navigateHistory('up');
     }
+
     if (e.key === 'ArrowDown' && e.altKey) {
       e.preventDefault();
       navigateHistory('down');
@@ -305,13 +318,16 @@ export function SqlQueryPanel() {
                       <td className="px-3 py-1.5 text-xs text-muted-foreground font-mono tabular-nums">{i + 1}</td>
                       {result.columns.map(col => {
                         const val = row[col];
+
                         const display = val === null
                           ? 'NULL'
                           : typeof val === 'object'
                             ? JSON.stringify(val)
                             : String(val);
+
                         const isNull = val === null;
                         const isLongText = display.length > 100;
+
                         return (
                           <td
                             key={col}

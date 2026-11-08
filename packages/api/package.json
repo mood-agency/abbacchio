@@ -2,24 +2,22 @@
   "name": "@abbacchio/api",
   "version": "0.2.0",
   "description": "Abbacchio API - Real-time log viewer HTTP API with SQLite persistence",
-  "type": "module",
-  "main": "src/server.ts",
-  "types": "src/server.ts",
-  "exports": {
-    ".": {
-      "types": "./src/server.ts",
-      "default": "./src/server.ts"
-    }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mood-agency/abbacchio.git",
+    "directory": "packages/api"
   },
+  "type": "module",
   "bin": {
-    "abbacchio": "src/server.ts"
+    "abbacchio": "dist/cli.js"
   },
   "scripts": {
     "dev": "bun --hot src/server.ts",
-    "build": "bun build src/server.ts --outdir dist --target bun",
+    "build": "bun scripts/build.ts",
     "start": "bun src/server.ts",
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "prepublishOnly": "bun scripts/build.ts"
   },
   "keywords": [
     "logs",
@@ -29,19 +27,24 @@
     "viewer",
     "server",
     "sqlite",
-    "bun"
+    "bun",
+    "opentelemetry",
+    "otlp",
+    "sandbox"
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
+  "devDependencies": {
     "dotenv": "^17.4.2",
     "hono": "^4.12.18",
-    "nanoid": "^5.1.11"
-  },
-  "devDependencies": {
+    "nanoid": "^5.1.11",
     "@types/bun": "latest"
   },
   "engines": {
     "bun": ">=1.0"
-  }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }

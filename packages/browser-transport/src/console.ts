@@ -70,17 +70,25 @@ let minLevel: number = DEFAULT_MIN_LEVEL;
 
 function resolveMinLevel(level: ConsoleInterceptorOptions['level']): number {
   if (typeof level === 'number') return level;
+
   if (typeof level === 'string') return LOG_LEVELS[level] ?? DEFAULT_MIN_LEVEL;
+
   return DEFAULT_MIN_LEVEL;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- serializes arbitrary console arguments; any value is valid input
 function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
   if (value === null) return null;
+
   if (value === undefined) return undefined;
+
   if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
+
   // JSON.stringify throws on BigInt, which would drop the whole log entry.
   if (typeof value === 'bigint') return `${value}n`;
+
   if (typeof value === 'symbol') return value.toString();
+
   if (typeof value !== 'object') return value;
 
   if (seen.has(value as object)) return '[Circular]';
@@ -89,8 +97,11 @@ function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
   if (value instanceof Error) {
     return { __type: 'Error', name: value.name, message: value.message, stack: value.stack };
   }
+
   if (value instanceof Date) return value.toISOString();
+
   if (value instanceof RegExp) return value.toString();
+
   if (Array.isArray(value)) return value.map(item => safeSerialize(item, seen));
 
   if (typeof Element !== 'undefined' && value instanceof Element) {
@@ -98,6 +109,7 @@ function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
   }
 
   const result: Record<string, unknown> = {};
+
   for (const key of Object.keys(value as object)) {
     try {
       result[key] = safeSerialize((value as Record<string, unknown>)[key], seen);
@@ -105,6 +117,7 @@ function safeSerialize(value: unknown, seen = new WeakSet()): unknown {
       result[key] = '[Unserializable]';
     }
   }
+
   return result;
 }
 
@@ -139,9 +152,11 @@ function getCallerLocation(): { file: string; line: number; column: number; func
 
   try {
     const stack = new Error().stack;
+
     if (!stack) return null;
 
     const lines = stack.split('\n');
+
     for (const line of lines) {
       if (
         line.includes('console.ts') ||
@@ -152,6 +167,7 @@ function getCallerLocation(): { file: string; line: number; column: number; func
       ) continue;
 
       const match = line.match(/at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?/);
+
       if (match) {
         return {
           function: match[1] || 'anonymous',
@@ -162,6 +178,7 @@ function getCallerLocation(): { file: string; line: number; column: number; func
       }
     }
   } catch { /* ignore */ }
+
   return null;
 }
 
@@ -207,6 +224,7 @@ function createInterceptor(method: keyof typeof originalConsole) {
     }
 
     const level = LEVEL_MAP[method] ?? LOG_LEVELS.info;
+
     if (isIntercepting && client && level >= minLevel) {
       try {
         client.add(createLogEntry(args, level));
@@ -223,7 +241,9 @@ function createInterceptor(method: keyof typeof originalConsole) {
  */
 function networkCaptureOptions() {
   const ignoreNetworkUrls = [...(options.ignoreNetworkUrls ?? [])];
+
   if (client) ignoreNetworkUrls.push(client.getEndpoint());
+
   return { ...options, name: options.appName, ignoreNetworkUrls };
 }
 
@@ -231,13 +251,17 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
   if (isIntercepting) {
     options = { ...options, ...opts };
     minLevel = resolveMinLevel(options.level);
+
     if (client) client.configure(opts);
+
     if (opts.captureErrors !== undefined || opts.captureUnhandledRejections !== undefined) {
       stopErrorCapture();
+
       if (options.captureErrors || options.captureUnhandledRejections) {
         startErrorCapture(options, (entry) => { if (client) client.add(entry); });
       }
     }
+
     if (
       opts.captureLongTasks !== undefined ||
       opts.captureSlowEvents !== undefined ||
@@ -246,20 +270,24 @@ export function interceptConsole(opts: ConsoleInterceptorOptions = {}): void {
       opts.memoryCaptureIntervalMs !== undefined
     ) {
       stopPerfCapture();
+
       if (options.captureLongTasks || options.captureSlowEvents || options.captureMemory) {
         startPerfCapture(options, (entry) => { if (client) client.add(entry); });
       }
     }
+
     if (
       opts.captureFetch !== undefined ||
       opts.captureXhr !== undefined ||
       opts.captureWebSockets !== undefined
     ) {
       stopNetworkCapture();
+
       if (options.captureFetch || options.captureXhr || options.captureWebSockets) {
         startNetworkCapture(networkCaptureOptions(), (entry) => { if (client) client.add(entry); });
       }
     }
+
     return;
   }
 

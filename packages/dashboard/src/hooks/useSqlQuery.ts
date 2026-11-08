@@ -29,6 +29,7 @@ export function useSqlQuery() {
 
   const execute = useCallback(async (query?: string) => {
     const sqlToRun = query ?? sql;
+
     if (!sqlToRun.trim()) return;
 
     setIsExecuting(true);
@@ -57,6 +58,7 @@ export function useSqlQuery() {
           rowCount: res.rowCount,
           executionTimeMs: res.executionTimeMs,
         };
+
         return [entry, ...prev].slice(0, MAX_HISTORY);
       });
       historyIndexRef.current = -1;
@@ -71,6 +73,7 @@ export function useSqlQuery() {
           success: false,
           error: message,
         };
+
         return [entry, ...prev].slice(0, MAX_HISTORY);
       });
       historyIndexRef.current = -1;
@@ -83,6 +86,7 @@ export function useSqlQuery() {
     if (history.length === 0) return;
 
     let newIndex = historyIndexRef.current;
+
     if (direction === 'up') {
       newIndex = Math.min(newIndex + 1, history.length - 1);
     } else {
@@ -90,6 +94,7 @@ export function useSqlQuery() {
     }
 
     historyIndexRef.current = newIndex;
+
     if (newIndex >= 0) {
       setSql(history[newIndex].sql);
     }

@@ -43,13 +43,16 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     const generation = generationRef.current;
+
     try {
       const params = new URLSearchParams({ channel });
+
       if (lastIdRef.current) {
         params.set('afterId', lastIdRef.current);
       }
 
       const res = await fetch(`${apiUrl}/api/logs?${params}`);
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -60,6 +63,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
       setError(null);
 
       const data = await res.json() as { logs: LogEntry[] };
+
       if (generation !== generationRef.current) return;
       const logs: LogEntry[] = data.logs || [];
 
@@ -110,6 +114,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
 
     return () => {
       mountedRef.current = false;
+
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;

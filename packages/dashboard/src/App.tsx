@@ -4,6 +4,7 @@ import { LogViewer } from './components/LogViewer';
 import { Toaster } from './components/ui/sonner';
 
 type ViewType = 'logs' | 'metrics' | 'traces';
+
 const VALID_VIEWS: ViewType[] = ['logs', 'metrics', 'traces'];
 
 function AppContent() {
@@ -12,17 +13,20 @@ function AppContent() {
 
   const activeView = useMemo<ViewType>(() => {
     const param = searchParams.get('view');
+
     return param && VALID_VIEWS.includes(param as ViewType) ? (param as ViewType) : 'logs';
   }, [searchParams]);
 
   const setActiveView = useCallback((view: ViewType) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
+
       if (view === 'logs') {
         next.delete('view');
       } else {
         next.set('view', view);
       }
+
       return next;
     }, { replace: true });
   }, [setSearchParams]);

@@ -21,12 +21,16 @@ const PORT = parseInt(process.env.PORT || '4000', 10);
 const API_KEY = process.env.API_KEY;
 const IS_DEV = process.env.NODE_ENV !== 'production';
 const envCors = process.env.CORS_ORIGIN || 'http://localhost:4001,http://localhost:5173';
+
 const CORS_ORIGIN = envCors === '*'
   ? '*'
   : envCors.split(',').map((o) => o.trim()).filter(Boolean);
+
 const ENABLE_RATE_LIMIT = process.env.ENABLE_RATE_LIMIT !== 'false';
+
 // SECURITY: Trust proxy headers only when explicitly enabled
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+
 // In production, API_KEY is required unless ALLOW_ANON=true is set explicitly.
 const ALLOW_ANON = process.env.ALLOW_ANON === 'true';
 
@@ -46,9 +50,14 @@ app.use('*', cors({
 // logging every POST (and every 429 when a producer floods) drowns the terminal
 // in millions of lines. Skip them by default; set LOG_OTLP_INGEST=true to include.
 const LOG_OTLP_INGEST = process.env.LOG_OTLP_INGEST === 'true';
+
+// ABBACCHIO_QUIET (set by `abbacchio sandbox`): no banner, request log or anonymous-access warning.
+const QUIET = process.env.ABBACCHIO_QUIET === 'true';
 const honoLogger = logger();
+
 app.use('*', (c, next) => {
-  if (!LOG_OTLP_INGEST && c.req.path.startsWith('/v1/')) return next();
+  if (QUIET || (!LOG_OTLP_INGEST && c.req.path.startsWith('/v1/'))) return next();
+
   return honoLogger(c, next);
 });
 
@@ -56,6 +65,7 @@ app.use('*', (c, next) => {
 if (ENABLE_RATE_LIMIT) {
   app.use('/api/*', createRateLimiterMiddleware());
   app.use('/v1/*', createRateLimiterMiddleware());
+
   if (!TRUST_PROXY && !IS_DEV) {
     console.warn('⚠️  Rate limiting active without TRUST_PROXY=true. Clients identified by User-Agent hash (less precise). Set TRUST_PROXY=true behind a reverse proxy.');
   }
@@ -66,6 +76,7 @@ app.use('/api/logs', createValidatorMiddleware());
 
 // Payload size limit for OTLP endpoints
 const MAX_OTLP_PAYLOAD = parseInt(process.env.MAX_PAYLOAD_SIZE || '1048576', 10);
+
 // bodyLimit enforces the cap while streaming, so it also catches chunked
 // requests that omit or understate Content-Length.
 app.use('/v1/*', bodyLimit({
@@ -76,17 +87,23 @@ app.use('/v1/*', bodyLimit({
 // API key authentication (opt-in: set API_KEY env var to enable)
 if (API_KEY) {
   const apiKeyBuffer = Buffer.from(API_KEY);
+
   const authMiddleware = async (c: any, next: any) => {
     const key = c.req.header('X-API-KEY');
+
     if (!key) {
       return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
     }
+
     const keyBuffer = Buffer.from(key);
+
     if (keyBuffer.length !== apiKeyBuffer.length || !crypto.timingSafeEqual(keyBuffer, apiKeyBuffer)) {
       return c.json({ error: 'Unauthorized', message: 'Valid API key required' }, 401);
     }
+
     return next();
   };
+
   app.use('/api/*', authMiddleware);
   app.use('/v1/*', authMiddleware);
 } else if (!IS_DEV) {
@@ -94,7 +111,8 @@ if (API_KEY) {
     console.error('FATAL: API_KEY is required in production. Set API_KEY (openssl rand -base64 32) or ALLOW_ANON=true to opt into anonymous access. Exiting.');
     process.exit(1);
   }
-  console.warn('\n⚠️  WARNING: Running in production with ALLOW_ANON=true. All endpoints are unauthenticated.\n');
+
+  if (!QUIET) console.warn('\n⚠️  WARNING: Running in production with ALLOW_ANON=true. All endpoints are unauthenticated.\n');
 }
 
 // SECURITY: Add security headers to all responses
@@ -141,8 +159,17 @@ app.get('/health', (c) => {
 
 // Serve dashboard static files (only in production)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dashboardPath = join(__dirname, '../../dashboard/dist');
-const shouldServeDashboard = !IS_DEV && existsSync(dashboardPath);
+
+// Look for the built dashboard: explicit DASHBOARD_DIR, next to the bundled
+// server (published package: dist/dashboard), or the monorepo sibling package.
+const dashboardCandidates = [
+  process.env.DASHBOARD_DIR,
+  join(__dirname, 'dashboard'),
+  join(__dirname, '../../dashboard/dist'),
+].filter((p): p is string => Boolean(p));
+
+const dashboardPath = dashboardCandidates.find((p) => existsSync(join(p, 'index.html'))) ?? dashboardCandidates[dashboardCandidates.length - 1];
+const shouldServeDashboard = !IS_DEV && existsSync(join(dashboardPath, 'index.html'));
 
 if (shouldServeDashboard) {
   // Serve static files with absolute path
@@ -157,12 +184,14 @@ if (shouldServeDashboard) {
 
     if (existsSync(filePath)) {
       const file = Bun.file(filePath);
+
       return new Response(file);
     }
 
     // SPA fallback - serve index.html for non-file routes
     if (!path.includes('.')) {
       const file = Bun.file(join(dashboardPath, 'index.html'));
+
       return new Response(file);
     }
 
@@ -219,6 +248,7 @@ let isShuttingDown = false;
 async function gracefulShutdown(signal: string): Promise<void> {
   if (isShuttingDown) {
     console.log('Shutdown already in progress...');
+
     return;
   }
 
@@ -256,6 +286,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
 // Register shutdown handlers
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught errors
@@ -272,8 +303,8 @@ process.on('unhandledRejection', (reason) => {
 
 // Start server
 const dbPath = process.env.SQLITE_PATH || './data/logs.db';
-const dashboardUrl = IS_DEV ? 'http://localhost:4001' : `http://localhost:${PORT}`;
-console.log(`
+
+if (!QUIET) console.log(`
   ╔═══════════════════════════════════════════╗
   ║                                           ║
   ║   Abbacchio${IS_DEV ? ' (dev)' : ''}                          ║
@@ -291,6 +322,8 @@ const server = Bun.serve({
 });
 
 // Export for programmatic use
-export { app };
+export { app, server, shouldServeDashboard };
+
 export { getLogBuffer, resetLogBuffer } from './lib/log-buffer.js';
+
 export type { LogEntry, IncomingLog, LogLevelLabel } from './types.js';

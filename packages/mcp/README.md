@@ -34,11 +34,17 @@ Add to your Claude Code configuration (`~/.claude/settings.json`):
 | Tool | Description |
 |------|-------------|
 | `search_logs` | Search logs with text query and filters |
-| `get_recent_errors` | Get recent error and fatal logs |
-| `get_logs_around_time` | Get logs around a timestamp for correlation |
-| `get_channels` | List available log channels |
-| `get_log_stats` | Get log statistics |
+| `get_trace` | All spans and logs for a traceId |
+| `search_spans` | Search spans by name, channel or error status |
+| `list_metrics` | List metric names and types |
+| `get_metric_data` | Data points of one metric |
+| `query_sql` | Read-only SQL against the database |
+| `get_channels` | List log, trace and metric channels |
 | `analyze_error` | Analyze an error message and find related logs |
+| `list_versions` | `service.version` values seen per channel (HTTP API) |
+| `compare_runs` | Compare a span or metric between two versions or runs and report regressions (HTTP API) |
+
+Most tools read the SQLite database at `SQLITE_PATH` (default `~/.abbacchio/logs.db`). To use the database written by the API server, point `SQLITE_PATH` at the server's database file. `list_versions` and `compare_runs` call the API server instead: set `ABBACCHIO_URL` (default `http://localhost:4000`) and, if needed, `ABBACCHIO_API_KEY`.
 
 ## How It Works
 

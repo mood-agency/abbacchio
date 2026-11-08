@@ -66,6 +66,7 @@ export class AbbacchioWinstonTransport extends TransportStream {
       debug: 20,
       silly: 10,
     };
+
     return levels[level] || 30;
   }
 

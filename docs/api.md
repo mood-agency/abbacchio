@@ -83,6 +83,24 @@ Get list of available channels.
 { "channels": ["default", "api-server", "worker"] }
 ```
 
+## GET /api/versions
+
+List the `service.version` values seen per channel, with span, metric-point and log counts. Optional `channel` query param.
+
+```json
+{ "versions": [{ "channel": "shop", "version": "1.1.0", "spans": 1000, "metricPoints": 12, "logs": 40, "firstSeen": 1794110521059, "lastSeen": 1794110522158 }] }
+```
+
+## GET /api/compare
+
+Compare a span or metric between two runs (for example a baseline version and a candidate version). It returns mean, p50, p90, p95, p99 and max for each run, the deltas, and a verdict: `regression`, `improvement`, `no_change` or `insufficient_data`.
+
+```bash
+curl 'http://localhost:4000/api/compare?source=span&name=checkout&baselineVersion=1.0.0&candidateVersion=1.1.0'
+```
+
+See [Comparing Versions](performance-comparison.md) for every parameter and how values are computed.
+
 ## POST /api/sql
 
 Execute SQL queries against stored logs.

@@ -57,12 +57,15 @@ const VITAL_THRESHOLDS: Record<string, VitalThresholds> = {
 
 function ratingLevel(rating: Rating, options: WebVitalsCaptureOptions): number {
   if (rating === 'good') return options.goodLevel ?? 30;
+
   if (rating === 'needs-improvement') return options.needsImprovementLevel ?? 40;
+
   return options.poorLevel ?? 50;
 }
 
 function formatValue(name: string, value: number): string {
   if (name === 'CLS') return value.toFixed(3);
+
   return `${value.toFixed(0)}ms`;
 }
 
@@ -97,8 +100,10 @@ function buildLogEntry(
 
   if (name === 'LCP' && entries.length > 0) {
     const lcpEntry = entries[entries.length - 1] as PerformanceEntry & { element?: Element };
+
     if (lcpEntry.element) {
       (entry.vital as Record<string, unknown>).element = lcpEntry.element.tagName?.toLowerCase();
+
       if ((lcpEntry.element as HTMLElement).id) {
         (entry.vital as Record<string, unknown>).elementId = (lcpEntry.element as HTMLElement).id;
       }
@@ -141,11 +146,13 @@ export async function startWebVitalsCapture(
 
   function handleVital(metric: { name: string; value: number; rating: Rating; id: string; navigationType: string; entries: PerformanceEntry[] }) {
     if (!active) return;
+
     try {
       const logEntry = buildLogEntry(
         metric.name, metric.value, metric.rating,
         metric.id, metric.navigationType, metric.entries, options,
       );
+
       onLogEntry(logEntry);
 
       if (reportAsMetrics && onMetricEntry) {
@@ -157,9 +164,13 @@ export async function startWebVitalsCapture(
   const reportOpts = { reportAllChanges: true };
 
   if (options.captureLCP !== false) onLCP(handleVital, reportOpts);
+
   if (options.captureINP !== false) onINP(handleVital, reportOpts);
+
   if (options.captureCLS !== false) onCLS(handleVital, reportOpts);
+
   if (options.captureFCP !== false) onFCP(handleVital, reportOpts);
+
   if (options.captureTTFB !== false) onTTFB(handleVital, reportOpts);
 }
 

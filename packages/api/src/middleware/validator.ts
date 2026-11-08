@@ -36,6 +36,7 @@ export function isLogObject(value: unknown): value is Record<string, unknown> {
 /**
  * Validate a single log entry's shape and size
  */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary parser for untrusted request bodies
 export function validateLogEntry(log: unknown, maxSize: number): ValidationResult {
   if (!isLogObject(log)) {
     return {
@@ -44,7 +45,9 @@ export function validateLogEntry(log: unknown, maxSize: number): ValidationResul
       statusCode: 400,
     };
   }
+
   const serialized = JSON.stringify(log);
+
   if (serialized.length > maxSize) {
     return {
       valid: false,
@@ -52,6 +55,7 @@ export function validateLogEntry(log: unknown, maxSize: number): ValidationResul
       statusCode: 413,
     };
   }
+
   return { valid: true };
 }
 
@@ -81,6 +85,7 @@ export function validateBatch(
   // Validate each log entry
   for (let i = 0; i < logs.length; i++) {
     const result = validateLogEntry(logs[i], config.maxSingleLogSize);
+
     if (!result.valid) {
       return {
         valid: false,
@@ -109,8 +114,10 @@ export function createValidatorMiddleware(
 
     // Check Content-Length header if present
     const contentLength = c.req.header('content-length');
+
     if (contentLength) {
       const length = parseInt(contentLength, 10);
+
       if (length > cfg.maxPayloadSize) {
         return c.json(
           { error: 'Payload Too Large' },
@@ -122,6 +129,7 @@ export function createValidatorMiddleware(
     // Clone request to read body for validation
     // Note: This adds overhead but is necessary for validation
     let body: unknown;
+
     try {
       body = await c.req.json();
     } catch {
@@ -133,6 +141,7 @@ export function createValidatorMiddleware(
 
     // Validate total body size
     const bodyStr = JSON.stringify(body);
+
     if (bodyStr.length > cfg.maxPayloadSize) {
       return c.json(
         { error: 'Payload Too Large' },
@@ -144,8 +153,10 @@ export function createValidatorMiddleware(
     if (body && typeof body === 'object' && 'logs' in body) {
       const batchBody = body as { logs: unknown[] };
       const result = validateBatch(batchBody.logs, cfg);
+
       if (!result.valid) {
         const status = (result.statusCode || 400) as ContentfulStatusCode;
+
         return c.json(
           { error: status === 413 ? 'Payload Too Large' : 'Bad Request', message: result.error },
           status
@@ -154,8 +165,10 @@ export function createValidatorMiddleware(
     } else {
       // Single log validation
       const result = validateLogEntry(body, cfg.maxSingleLogSize);
+
       if (!result.valid) {
         const status = (result.statusCode || 413) as ContentfulStatusCode;
+
         return c.json(
           { error: status === 413 ? 'Payload Too Large' : 'Bad Request', message: result.error },
           status

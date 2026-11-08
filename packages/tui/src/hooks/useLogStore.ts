@@ -27,6 +27,7 @@ export interface LogStore extends LogStoreState, LogStoreActions {
 export function useLogStore(secretKey?: string): LogStore {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [paused, setPaused] = useState(false);
+
   const [filter, setFilter] = useState<FilterState>({
     level: null,
     search: '',
@@ -39,11 +40,13 @@ export function useLogStore(secretKey?: string): LogStore {
   // Extract data fields from decrypted log
   const extractDataFields = useCallback((incoming: Record<string, unknown>): Record<string, unknown> => {
     const data: Record<string, unknown> = {};
+
     for (const key of Object.keys(incoming)) {
       if (!KNOWN_FIELDS.has(key)) {
         data[key] = incoming[key];
       }
     }
+
     return data;
   }, []);
 
@@ -51,6 +54,7 @@ export function useLogStore(secretKey?: string): LogStore {
   const processLog = useCallback((log: LogEntry): LogEntry => {
     if (log.encrypted && log.encryptedData && secretKey) {
       const decrypted = tryDecrypt(log.encryptedData, secretKey);
+
       if (decrypted) {
         try {
           const parsed = JSON.parse(decrypted) as Record<string, unknown>;
@@ -73,6 +77,7 @@ export function useLogStore(secretKey?: string): LogStore {
         }
       }
     }
+
     return log;
   }, [secretKey, extractDataFields]);
 
@@ -82,9 +87,11 @@ export function useLogStore(secretKey?: string): LogStore {
     const processed = processLog(log);
     setLogs(prev => {
       const newLogs = [...prev, processed];
+
       if (newLogs.length > MAX_LOGS) {
         return newLogs.slice(-MAX_LOGS);
       }
+
       return newLogs;
     });
   }, [paused, processLog]);
@@ -95,9 +102,11 @@ export function useLogStore(secretKey?: string): LogStore {
     const processed = newLogs.map(processLog);
     setLogs(prev => {
       const combined = [...prev, ...processed];
+
       if (combined.length > MAX_LOGS) {
         return combined.slice(-MAX_LOGS);
       }
+
       return combined;
     });
   }, [paused, processLog]);
@@ -141,6 +150,7 @@ export function useLogStore(secretKey?: string): LogStore {
         const msgMatch = log.msg.toLowerCase().includes(searchLower);
         const nsMatch = log.namespace?.toLowerCase().includes(searchLower);
         const dataMatch = JSON.stringify(log.data).toLowerCase().includes(searchLower);
+
         if (!msgMatch && !nsMatch && !dataMatch) {
           return false;
         }

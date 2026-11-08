@@ -155,6 +155,23 @@ This will generate an OTLP Span containing the duration and exact memory metrics
 
 ## High-Throughput & Agent Sandboxes
 
+To start a throwaway instance with one command (no Docker, no clone), you only need [Bun](https://bun.sh):
+
+```bash
+bunx @abbacchio/api sandbox --env-file .abbacchio.env &
+source .abbacchio.env        # OTEL_EXPORTER_OTLP_ENDPOINT, ABBACCHIO_URL, ...
+```
+
+The sandbox runs with anonymous access, no rate limit and the SQL endpoint on, and it wipes its database on every start. It also serves the dashboard.
+
+To check a code change for performance regressions in one step, run `abbacchio bench`. It runs your command against `HEAD` (in a temporary worktree) and against your working tree, compares every span, and exits `1` on a regression:
+
+```bash
+bunx @abbacchio/api bench --setup "bun install" --run "bun run load-test"
+```
+
+See [Comparing Versions](docs/performance-comparison.md).
+
 Abbacchio is optimized to handle massive amounts of logs quickly. For ephemeral environments like AI Agent Sandboxes where you don't need persistent disk storage, you can run Abbacchio entirely in-memory with strict memory bounding.
 
 Set the following environment variables:
@@ -171,6 +188,7 @@ This configuration guarantees your sandbox will not hit an Out-Of-Memory (OOM) e
 - [Browser Memory Profiling](docs/memory-profiling.md) - Track heap, DOM, and application counters over time
 - [Transports](docs/transports.md) - Pino, Winston, Bunyan, Console, HTTP
 - [API Reference](docs/api.md) - REST endpoints and log format
+- [Comparing Versions](docs/performance-comparison.md) - Detect performance regressions between builds
 - [Channels](docs/channels.md) - Multi-channel support
 - [Dashboard](docs/dashboard.md) - URL parameters and filtering
 - [Terminal UI](docs/tui.md) - CLI for viewing logs in terminal

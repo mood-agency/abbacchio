@@ -287,6 +287,7 @@ const JsonNode = memo(function JsonNode({
           if ((e.target as HTMLElement).closest('[data-json-key], [data-json-value]')) {
             return;
           }
+
           e.preventDefault();
           e.stopPropagation();
           onCopy(JSON.stringify(value, null, 2), 'value');

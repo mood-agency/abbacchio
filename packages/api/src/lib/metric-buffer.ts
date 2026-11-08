@@ -31,15 +31,20 @@ export class MetricBuffer extends EventEmitter {
      */
     private registerChannel(channel: string): void {
         const existing = this.channels.get(channel);
+
         if (existing) {
             this.channels.delete(channel);
             this.channels.set(channel, existing);
+
             return;
         }
+
         if (this.channels.size >= this.config.maxChannels) {
             const oldest = this.channels.keys().next().value;
+
             if (oldest !== undefined) this.channels.delete(oldest);
         }
+
         this.channels.set(channel, []);
     }
 
@@ -53,9 +58,11 @@ export class MetricBuffer extends EventEmitter {
 
         for (const metric of metrics) {
             const channel = metric.channel || DEFAULT_CHANNEL;
+
             if (!metricsByChannel.has(channel)) {
                 metricsByChannel.set(channel, []);
             }
+
             metricsByChannel.get(channel)!.push(metric);
         }
 
@@ -100,6 +107,7 @@ export function getMetricBuffer(): MetricBuffer {
     if (!instance) {
         instance = new MetricBuffer();
     }
+
     return instance;
 }
 
@@ -107,5 +115,6 @@ export function resetMetricBuffer(): void {
     if (instance) {
         instance.removeAllListeners();
     }
+
     instance = null;
 }

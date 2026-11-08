@@ -33,11 +33,13 @@ const DEFAULT_CONFIG: LogBufferConfig = {
  */
 function extractDataFields(incoming: IncomingLog): Record<string, unknown> {
   const data: Record<string, unknown> = {};
+
   for (const key of Object.keys(incoming)) {
     if (!KNOWN_FIELDS.has(key)) {
       data[key] = incoming[key];
     }
   }
+
   return data;
 }
 
@@ -146,6 +148,7 @@ export class LogBuffer extends EventEmitter {
 
     if (existing) {
       existing.lastActivity = Date.now();
+
       return;
     }
 
@@ -192,10 +195,12 @@ export class LogBuffer extends EventEmitter {
    */
   private storeLog(entry: LogEntry, channel: string): void {
     let channelLogs = this.logs.get(channel);
+
     if (!channelLogs) {
       channelLogs = [];
       this.logs.set(channel, channelLogs);
     }
+
     channelLogs.push(entry);
 
     // Ring buffer: drop oldest when over limit
@@ -214,6 +219,7 @@ export class LogBuffer extends EventEmitter {
     this.registerChannel(channel);
 
     const channelInfo = this.channels.get(channel);
+
     if (channelInfo) {
       channelInfo.logCount++;
       channelInfo.lastActivity = Date.now();
@@ -239,6 +245,7 @@ export class LogBuffer extends EventEmitter {
       this.registerChannel(channel);
 
       const channelInfo = this.channels.get(channel);
+
       if (channelInfo) {
         channelInfo.logCount++;
         channelInfo.lastActivity = Date.now();
@@ -262,13 +269,17 @@ export class LogBuffer extends EventEmitter {
     if (channel) {
       return this.logs.get(channel) || [];
     }
+
     // Return all logs across all channels
     const all: LogEntry[] = [];
+
     for (const entries of this.logs.values()) {
       all.push(...entries);
     }
+
     // Sort by time
     all.sort((a, b) => a.time - b.time);
+
     return all;
   }
 
@@ -280,7 +291,9 @@ export class LogBuffer extends EventEmitter {
   getSince(afterId: string, channel?: string): LogEntry[] | null {
     const allLogs = this.getAll(channel);
     const idx = allLogs.findIndex(l => l.id === afterId);
+
     if (idx === -1) return null; // ID not found — caller should fall back to DB
+
     return allLogs.slice(idx + 1);
   }
 
@@ -310,11 +323,13 @@ export class LogBuffer extends EventEmitter {
    */
   deleteChannel(channel: string): boolean {
     if (channel === DEFAULT_CHANNEL) return false;
+
     if (!this.channels.has(channel)) return false;
 
     this.channels.delete(channel);
     this.logs.delete(channel);
     this.emit('channel:deleted', channel);
+
     return true;
   }
 
@@ -334,11 +349,14 @@ export class LogBuffer extends EventEmitter {
       this.logs.set(DEFAULT_CHANNEL, []);
     } else {
       const info = this.channels.get(channel);
+
       if (info) {
         info.logCount = 0;
       }
+
       this.logs.set(channel, []);
     }
+
     this.emit('clear', channel);
   }
 
@@ -349,10 +367,13 @@ export class LogBuffer extends EventEmitter {
     if (channel) {
       return (this.logs.get(channel) || []).length;
     }
+
     let total = 0;
+
     for (const entries of this.logs.values()) {
       total += entries.length;
     }
+
     return total;
   }
 
@@ -394,6 +415,7 @@ export function getLogBuffer(): LogBuffer {
     instance = new LogBuffer();
     instance.startCleanupInterval();
   }
+
   return instance;
 }
 
@@ -402,5 +424,6 @@ export function resetLogBuffer(): void {
     instance.stopCleanupInterval();
     instance.removeAllListeners();
   }
+
   instance = null;
 }

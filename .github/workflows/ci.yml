@@ -35,6 +35,28 @@ jobs:
         run: bun run --filter '!@abbacchio/desktop' build
 
   # ============================================
+  # Oxlint (the anti-slop plugin is TypeScript, which needs Node >= 22.12)
+  # ============================================
+  oxlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+  # ============================================
   # Build packages npm
   # ============================================
   build-packages:

@@ -53,7 +53,7 @@ export class AbbacchioBunyanStream extends Writable {
   }
 
   private transformLog(record: Record<string, unknown>): Record<string, unknown> {
-    const { name, hostname, pid, level, msg, time, v, ...rest } = record;
+    const { name, hostname, pid, level, msg, time, v: _v, ...rest } = record;
 
     return {
       level: level as number,
@@ -79,6 +79,7 @@ export class AbbacchioBunyanStream extends Writable {
 
 export function bunyanStream(opts?: BunyanStreamOptions): { stream: AbbacchioBunyanStream; level?: number | string; type: "raw" } {
   const stream = new AbbacchioBunyanStream(opts);
+
   return {
     stream,
     level: opts?.level,

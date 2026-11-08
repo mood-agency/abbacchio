@@ -64,14 +64,19 @@ interface FlatSpan {
 
 function formatDuration(ms: number): string {
     if (!Number.isFinite(ms) || ms < 0) return '<0.01ms';
+
     if (ms < 0.01) return '<0.01ms';
+
     if (ms < 1) return `${ms.toFixed(2)}ms`;
+
     if (ms < 1000) return `${Math.round(ms)}ms`;
+
     return `${(ms / 1000).toFixed(2)}s`;
 }
 
 function formatTime(ms: number): string {
     const d = new Date(ms);
+
     return d.toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
@@ -82,6 +87,7 @@ function formatTime(ms: number): string {
 
 function formatTimestamp(ms: number): string {
     const d = new Date(ms);
+
     return d.toLocaleString([], {
         year: 'numeric',
         month: '2-digit',
@@ -95,22 +101,27 @@ function formatTimestamp(ms: number): string {
 
 function arrayMin(arr: number[]): number {
     let min = arr[0];
+
     for (let i = 1; i < arr.length; i++) {
         if (arr[i] < min) min = arr[i];
     }
+
     return min;
 }
 
 function arrayMax(arr: number[]): number {
     let max = arr[0];
+
     for (let i = 1; i < arr.length; i++) {
         if (arr[i] > max) max = arr[i];
     }
+
     return max;
 }
 
 function getServiceName(span: TraceSpan): string {
     const attrs = span.attributes || {};
+
     return String(
         attrs['service.name'] ||
         attrs['http.target'] ||
@@ -165,6 +176,7 @@ function buildSpanTree(spans: TraceSpan[]): SpanTreeNode[] {
 
     for (const span of spans) {
         const node = nodeMap.get(span.spanId)!;
+
         if (span.parentSpanId && nodeMap.has(span.parentSpanId)) {
             nodeMap.get(span.parentSpanId)!.children.push(node);
         } else {
@@ -174,12 +186,15 @@ function buildSpanTree(spans: TraceSpan[]): SpanTreeNode[] {
 
     function setDepths(nodes: SpanTreeNode[], depth: number) {
         nodes.sort((a, b) => a.span.startTimeMs - b.span.startTimeMs);
+
         for (const node of nodes) {
             node.depth = depth;
             setDepths(node.children, depth + 1);
         }
     }
+
     setDepths(roots, 0);
+
     return roots;
 }
 
@@ -190,9 +205,11 @@ function computeCriticalPath(roots: SpanTreeNode[]): Set<string> {
     function markCritical(nodes: SpanTreeNode[]) {
         if (nodes.length === 0) return;
         let latest = nodes[0];
+
         for (const n of nodes) {
             if (n.span.endTimeMs > latest.span.endTimeMs) latest = n;
         }
+
         criticalIds.add(latest.span.spanId);
         markCritical(latest.children);
     }
@@ -223,12 +240,15 @@ function flattenTree(
                 isCollapsed,
                 isCriticalPath: criticalIds.has(node.span.spanId),
             });
+
             if (hasChildren && !isCollapsed) {
                 walk(node.children);
             }
         }
     }
+
     walk(nodes);
+
     return result;
 }
 
@@ -249,8 +269,10 @@ const MiniWaterfallCanvas = memo(function MiniWaterfallCanvas({
 
     useEffect(() => {
         const canvas = canvasRef.current;
+
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+
         if (!ctx) return;
 
         const dpr = window.devicePixelRatio || 1;
@@ -268,6 +290,7 @@ const MiniWaterfallCanvas = memo(function MiniWaterfallCanvas({
         ctx.fill();
 
         const totalDur = durationMs || 1;
+
         for (const span of spans) {
             const left = ((span.startTimeMs - startTime) / totalDur) * w;
             const barW = Math.max(((span.endTimeMs - span.startTimeMs) / totalDur) * w, 1.5);
@@ -278,6 +301,7 @@ const MiniWaterfallCanvas = memo(function MiniWaterfallCanvas({
             ctx.roundRect(left, 2, barW, h - 4, 1);
             ctx.fill();
         }
+
         ctx.globalAlpha = 1;
     }, [spans, startTime, durationMs]);
 
@@ -308,8 +332,10 @@ const MinimapCanvas = memo(function MinimapCanvas({
 
     useEffect(() => {
         const canvas = canvasRef.current;
+
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+
         if (!ctx) return;
 
         const dpr = window.devicePixelRatio || 1;
@@ -357,6 +383,7 @@ const MinimapCanvas = memo(function MinimapCanvas({
 
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
+
     const handleCopy = useCallback(() => {
         navigator.clipboard.writeText(text);
         setCopied(true);
@@ -606,14 +633,17 @@ const WaterfallView = memo(function WaterfallView({
     const dragRef = useRef<{ dragging: boolean; startX: number; startZoom: ZoomState }>({
         dragging: false, startX: 0, startZoom: ZOOM_INITIAL,
     });
+
     const timelineRef = useRef<HTMLDivElement>(null);
 
     const toggleCollapse = useCallback((spanId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setCollapsedIds(prev => {
             const next = new Set(prev);
+
             if (next.has(spanId)) next.delete(spanId);
             else next.add(spanId);
+
             return next;
         });
     }, []);
@@ -627,11 +657,13 @@ const WaterfallView = memo(function WaterfallView({
         const names = [...new Set(spans.map(s => s.name))];
         const map = new Map<string, number>();
         names.forEach((name, i) => map.set(name, i));
+
         return map;
     }, [spans]);
 
     // Virtualization
     const parentRef = useRef<HTMLDivElement>(null);
+
     const rowVirtualizer = useVirtualizer({
         count: flatSpans.length,
         getScrollElement: () => parentRef.current,
@@ -649,6 +681,7 @@ const WaterfallView = memo(function WaterfallView({
             const range = prev.end - prev.start;
             const newRange = Math.max(range * 0.5, MIN_RANGE);
             const center = (prev.start + prev.end) / 2;
+
             return {
                 start: Math.max(0, center - newRange / 2),
                 end: Math.min(1, center + newRange / 2),
@@ -661,6 +694,7 @@ const WaterfallView = memo(function WaterfallView({
             const range = prev.end - prev.start;
             const newRange = Math.min(range * 2, 1);
             const center = (prev.start + prev.end) / 2;
+
             return {
                 start: Math.max(0, center - newRange / 2),
                 end: Math.min(1, center + newRange / 2),
@@ -689,7 +723,9 @@ const WaterfallView = memo(function WaterfallView({
 
             // Clamp
             if (newStart < 0) { newEnd -= newStart; newStart = 0; }
+
             if (newEnd > 1) { newStart -= (newEnd - 1); newEnd = 1; }
+
             newStart = Math.max(0, newStart);
 
             return { start: newStart, end: newEnd };
@@ -714,7 +750,9 @@ const WaterfallView = memo(function WaterfallView({
             let newEnd = dragRef.current.startZoom.end + shift;
 
             if (newStart < 0) { newEnd -= newStart; newStart = 0; }
+
             if (newEnd > 1) { newStart -= (newEnd - 1); newEnd = 1; }
+
             newStart = Math.max(0, newStart);
             newEnd = Math.min(1, newEnd);
 
@@ -725,6 +763,7 @@ const WaterfallView = memo(function WaterfallView({
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
+
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
@@ -993,13 +1032,16 @@ export function TracesViewer({ traces, channelName }: TracesViewerProps) {
 
     const traceGroups = useMemo(() => {
         const grouped = new Map<string, TraceSpan[]>();
+
         for (const span of traces) {
             const existing = grouped.get(span.traceId);
+
             if (existing) existing.push(span);
             else grouped.set(span.traceId, [span]);
         }
 
         const groups: TraceGroup[] = [];
+
         for (const [traceId, spans] of grouped) {
             spans.sort((a, b) => a.startTimeMs - b.startTimeMs);
             const startTimes = spans.map(s => s.startTimeMs);
@@ -1023,24 +1065,29 @@ export function TracesViewer({ traces, channelName }: TracesViewerProps) {
         }
 
         groups.sort((a, b) => b.startTime - a.startTime);
+
         return groups;
     }, [traces]);
 
     const nameColorIndex = useMemo(() => {
         if (!selectedSpan) return new Map<string, number>();
         const group = traceGroups.find(g => g.traceId === selectedSpan.traceId);
+
         if (!group) return new Map<string, number>();
         const names = [...new Set(group.spans.map(s => s.name))];
         const map = new Map<string, number>();
         names.forEach((name, i) => map.set(name, i));
+
         return map;
     }, [selectedSpan, traceGroups]);
 
     const toggleTrace = useCallback((traceId: string) => {
         setExpandedTraces(prev => {
             const next = new Set(prev);
+
             if (next.has(traceId)) next.delete(traceId);
             else next.add(traceId);
+
             return next;
         });
     }, []);
@@ -1051,17 +1098,21 @@ export function TracesViewer({ traces, channelName }: TracesViewerProps) {
 
     // Virtualize the trace group list
     const listParentRef = useRef<HTMLDivElement>(null);
+
     const groupVirtualizer = useVirtualizer({
         count: traceGroups.length,
         getScrollElement: () => listParentRef.current,
         // Collapsed rows are ~44px, expanded ones vary but estimateSize is just a hint
         estimateSize: (index) => {
             const group = traceGroups[index];
+
             if (!group) return 44;
+
             if (expandedTraces.has(group.traceId)) {
                 // header + timeline header + span rows (capped) + padding
                 return 44 + 32 + Math.min(group.spanCount * 32, 500) + 16;
             }
+
             return 44;
         },
         overscan: 5,
@@ -1128,6 +1179,7 @@ export function TracesViewer({ traces, channelName }: TracesViewerProps) {
                         {groupVirtualizer.getVirtualItems().map((virtualRow) => {
                             const group = traceGroups[virtualRow.index];
                             const isExpanded = expandedTraces.has(group.traceId);
+
                             return (
                                 <div
                                     key={group.traceId}

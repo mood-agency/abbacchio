@@ -25,6 +25,7 @@ import {
 } from './test-utils';
 
 const options = parseScriptArgs(['npm-test']);
+
 printConfig(options);
 
 const logger = pino({

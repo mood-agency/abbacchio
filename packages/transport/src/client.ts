@@ -1,10 +1,12 @@
 import os from "node:os";
+import { readOtelEnv } from "./otel-env.js";
 
 /** Best-effort default emitter identity for a Node/Bun process. */
 function defaultIdentity(): { source: string | undefined; instanceId: string | undefined } {
   try {
     const hostname = os.hostname();
     const pid = typeof process !== "undefined" ? process.pid : undefined;
+
     return {
       source: hostname || undefined,
       instanceId: hostname && pid !== undefined ? `${hostname}:${pid}` : hostname || undefined,
@@ -32,19 +34,25 @@ const PINO_TO_OTLP_SEVERITY: Record<number, { number: number; text: string }> = 
  */
 function toOtlpAttributes(obj: Record<string, unknown>): OtlpKeyValue[] {
   const attrs: OtlpKeyValue[] = [];
+
   for (const [key, val] of Object.entries(obj)) {
     if (val === undefined || val === null) continue;
     attrs.push({ key, value: toOtlpAnyValue(val) });
   }
+
   return attrs;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- converts arbitrary log attribute values to OTLP AnyValue
 function toOtlpAnyValue(val: unknown): OtlpAnyValue {
   if (typeof val === 'string') return { stringValue: val };
+
   if (typeof val === 'number') {
     return Number.isInteger(val) ? { intValue: val } : { doubleValue: val };
   }
+
   if (typeof val === 'boolean') return { boolValue: val };
+
   return { stringValue: String(val) };
 }
 
@@ -55,17 +63,29 @@ interface OtlpAnyValue {
   boolValue?: boolean;
 }
 
+/** Body of an OTLP/HTTP JSON export request (logs, metrics or traces). */
+type OtlpExportRequest =
+  | { resourceLogs: readonly object[] }
+  | { resourceMetrics: readonly object[] }
+  | { resourceSpans: readonly object[] };
+
 interface OtlpKeyValue {
   key: string;
   value: OtlpAnyValue;
 }
 
 export interface AbbacchioClientOptions {
-  /** Base URL of the OTLP server (e.g. "http://localhost:4000"). Logs go to {endpoint}/v1/logs */
+  /**
+   * Base URL of the OTLP server (e.g. "http://localhost:4000"). Logs go to {endpoint}/v1/logs.
+   * Defaults to $OTEL_EXPORTER_OTLP_ENDPOINT, then http://localhost:4000.
+   */
   endpoint?: string;
   /** @deprecated Use `endpoint` instead. If set, used as the full URL for log ingestion. */
   url?: string;
-  /** Service name — maps to OTLP resource attribute `service.name`. Defaults to 'default' */
+  /**
+   * Service name — maps to OTLP resource attribute `service.name` (the Abbacchio channel).
+   * Defaults to $OTEL_SERVICE_NAME, then `service.name` in $OTEL_RESOURCE_ATTRIBUTES, then 'default'.
+   */
   serviceName?: string;
   /**
    * Self-declared emitter label sent on every request via the `X-Source` header.
@@ -77,14 +97,23 @@ export interface AbbacchioClientOptions {
    * Defaults to `<hostname>:<pid>`.
    */
   instanceId?: string;
-  /** Additional OTLP resource attributes */
+  /**
+   * Additional OTLP resource attributes, e.g. `{ 'service.version': '1.2.3' }`.
+   * Merged over $OTEL_RESOURCE_ATTRIBUTES (these win on conflicts).
+   */
   resourceAttributes?: Record<string, string>;
   /** Number of log records to batch before sending. Defaults to 10 */
   batchSize?: number;
   /** Interval in ms between flushes. Defaults to 1000 */
   interval?: number;
-  /** Additional headers to send with requests */
+  /** Additional headers to send with requests. Merged over $OTEL_EXPORTER_OTLP_HEADERS. */
   headers?: Record<string, string>;
+  /**
+   * Read the standard OTEL_* environment variables (OTEL_EXPORTER_OTLP_ENDPOINT,
+   * OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS,
+   * OTEL_SDK_DISABLED) as defaults for the options above. Defaults to true.
+   */
+  readEnv?: boolean;
   /** Whether to send data to the server. Defaults to true */
   enabled?: boolean;
   /**
@@ -203,6 +232,9 @@ export class AbbacchioClient {
   private spanTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: AbbacchioClientOptions = {}) {
+    // Standard OTEL_* environment variables fill in whatever the options leave unset.
+    const env = options.readEnv === false ? undefined : readOtelEnv();
+
     // Support legacy `url` option: if it looks like a full URL with path, strip the path
     if (options.url && !options.endpoint) {
       try {
@@ -212,17 +244,18 @@ export class AbbacchioClient {
         this.endpoint = options.url;
       }
     } else {
-      this.endpoint = options.endpoint || 'http://localhost:4000';
+      this.endpoint = options.endpoint || env?.endpoint || 'http://localhost:4000';
     }
-    this.serviceName = options.serviceName || 'default';
+
+    this.serviceName = options.serviceName || env?.serviceName || 'default';
     const fallback = defaultIdentity();
     this.source = options.source ?? fallback.source;
     this.instanceId = options.instanceId ?? fallback.instanceId;
-    this.resourceAttributes = options.resourceAttributes || {};
+    this.resourceAttributes = { ...env?.resourceAttributes, ...options.resourceAttributes };
     this.batchSize = options.batchSize || 10;
     this.interval = options.interval || 1000;
-    this.headers = options.headers || {};
-    this.enabled = options.enabled ?? true;
+    this.headers = { ...env?.headers, ...options.headers };
+    this.enabled = options.enabled ?? !env?.disabled;
     this.maxBufferSize = options.maxBufferSize ?? 10000;
     this.maxPointsPerSecond = options.maxPointsPerSecond ?? 2000;
     this.intakeTokens = this.maxPointsPerSecond;
@@ -233,6 +266,7 @@ export class AbbacchioClient {
     if (this.maxPointsPerSecond <= 0) return true;
     const now = Date.now();
     const elapsedSec = (now - this.intakeLastRefill) / 1000;
+
     if (elapsedSec > 0) {
       this.intakeTokens = Math.min(
         this.maxPointsPerSecond,
@@ -240,10 +274,13 @@ export class AbbacchioClient {
       );
       this.intakeLastRefill = now;
     }
+
     if (this.intakeTokens >= 1) {
       this.intakeTokens -= 1;
+
       return true;
     }
+
     return false;
   }
 
@@ -256,6 +293,7 @@ export class AbbacchioClient {
   private noteDropped(count = 1): void {
     this.droppedSinceWarn += count;
     const now = Date.now();
+
     if (now - this.lastDropWarn > 5000) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -270,8 +308,10 @@ export class AbbacchioClient {
   private admit(bufferLength: number): boolean {
     if (!this.intakeOK() || bufferLength >= this.maxBufferSize) {
       this.noteDropped();
+
       return false;
     }
+
     return true;
   }
 
@@ -283,14 +323,19 @@ export class AbbacchioClient {
   private requeue<T>(batch: T[], current: T[]): T[] {
     if (this.closed) {
       this.noteDropped(batch.length);
+
       return current;
     }
+
     const merged = batch.concat(current);
     const excess = merged.length - this.maxBufferSize;
+
     if (excess > 0) {
       this.noteDropped(excess);
+
       return merged.slice(excess);
     }
+
     return merged;
   }
 
@@ -301,7 +346,9 @@ export class AbbacchioClient {
    */
   private armTimer(fn: () => void, retry: boolean): ReturnType<typeof setTimeout> {
     const timer = setTimeout(fn, this.interval);
+
     if (retry) (timer as { unref?: () => void }).unref?.();
+
     return timer;
   }
 
@@ -333,8 +380,10 @@ export class AbbacchioClient {
   // ─── Logs ──────────────────────────────────────────
 
   /** Add a log record to the buffer */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- public API: accepts any logger record shape (pino/winston/bunyan objects)
   add(log: LogRecord | unknown): void {
     if (!this.enabled) return;
+
     if (!this.admit(this.logBuffer.length)) return;
     this.logBuffer.push(log as LogRecord);
 
@@ -348,10 +397,12 @@ export class AbbacchioClient {
   /** Add multiple log records at once */
   addBatch(logs: (LogRecord | unknown)[]): void {
     if (!this.enabled) return;
+
     for (const log of logs) {
       if (!this.admit(this.logBuffer.length)) continue;
       this.logBuffer.push(log as LogRecord);
     }
+
     if (this.logBuffer.length >= this.batchSize) {
       this.flushLogs();
     } else {
@@ -362,12 +413,16 @@ export class AbbacchioClient {
   /** Send logs immediately without batching */
   async send(logs: (LogRecord | unknown)[]): Promise<void> {
     if (!this.enabled) return;
+
     if (this.isPaused()) {
       this.addBatch(logs);
+
       return;
     }
+
     if (await this.sendLogs(logs as LogRecord[])) {
       this.logBuffer = this.requeue(logs as LogRecord[], this.logBuffer);
+
       if (!this.closed) this.scheduleLogFlush(true);
     }
   }
@@ -382,11 +437,17 @@ export class AbbacchioClient {
 
   async flushLogs(force = false): Promise<void> {
     if (this.logBuffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleLogFlush(true); return; }
+
+    if (this.isPaused() && !force) { this.scheduleLogFlush(true);
+
+ return; }
+
     const batch = this.logBuffer;
     this.logBuffer = [];
+
     if (await this.sendLogs(batch)) {
       this.logBuffer = this.requeue(batch, this.logBuffer);
+
       if (!this.closed) this.scheduleLogFlush(true);
     }
   }
@@ -428,6 +489,7 @@ export class AbbacchioClient {
   /** Add a metric data point to the buffer */
   addMetric(metric: MetricRecord): void {
     if (!this.enabled) return;
+
     if (!this.admit(this.metricBuffer.length)) return;
     this.metricBuffer.push(metric);
 
@@ -448,11 +510,17 @@ export class AbbacchioClient {
 
   async flushMetrics(force = false): Promise<void> {
     if (this.metricBuffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleMetricFlush(true); return; }
+
+    if (this.isPaused() && !force) { this.scheduleMetricFlush(true);
+
+ return; }
+
     const batch = this.metricBuffer;
     this.metricBuffer = [];
+
     if (await this.sendMetrics(batch)) {
       this.metricBuffer = this.requeue(batch, this.metricBuffer);
+
       if (!this.closed) this.scheduleMetricFlush(true);
     }
   }
@@ -461,6 +529,7 @@ export class AbbacchioClient {
   private async sendMetrics(metrics: MetricRecord[]): Promise<boolean> {
     // Group by metric name to build proper OTLP structure
     const byName = new Map<string, MetricRecord[]>();
+
     for (const m of metrics) {
       const arr = byName.get(m.name) || [];
       arr.push(m);
@@ -468,8 +537,10 @@ export class AbbacchioClient {
     }
 
     const otlpMetrics: unknown[] = [];
+
     for (const [name, records] of byName) {
       const first = records[0];
+
       const dataPoints = records.map((r) => ({
         timeUnixNano: String(Date.now() * 1_000_000),
         asDouble: r.value,
@@ -515,6 +586,7 @@ export class AbbacchioClient {
   /** Add a histogram observation to the buffer */
   addHistogram(record: HistogramRecord): void {
     if (!this.enabled) return;
+
     if (!this.admit(this.histogramBuffer.length)) return;
     this.histogramBuffer.push(record);
 
@@ -535,11 +607,17 @@ export class AbbacchioClient {
 
   async flushHistograms(force = false): Promise<void> {
     if (this.histogramBuffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleHistogramFlush(true); return; }
+
+    if (this.isPaused() && !force) { this.scheduleHistogramFlush(true);
+
+ return; }
+
     const batch = this.histogramBuffer;
     this.histogramBuffer = [];
+
     if (await this.sendHistograms(batch)) {
       this.histogramBuffer = this.requeue(batch, this.histogramBuffer);
+
       if (!this.closed) this.scheduleHistogramFlush(true);
     }
   }
@@ -548,32 +626,39 @@ export class AbbacchioClient {
   private async sendHistograms(records: HistogramRecord[]): Promise<boolean> {
     // Group by name+attributes key to aggregate observations into OTLP histogram data points
     const groups = new Map<string, { records: HistogramRecord[]; bounds: number[] }>();
+
     for (const r of records) {
       const key = JSON.stringify({ name: r.name, attributes: r.attributes });
       let group = groups.get(key);
+
       if (!group) {
         group = { records: [], bounds: r.explicitBounds || AbbacchioClient.DEFAULT_BOUNDS };
         groups.set(key, group);
       }
+
       group.records.push(r);
     }
 
     const otlpMetrics: unknown[] = [];
+
     for (const [, group] of groups) {
       const first = group.records[0];
       const bounds = group.bounds;
-      const bucketCounts = new Array(bounds.length + 1).fill(0);
+      const bucketCounts: number[] = Array.from({ length: bounds.length + 1 }, () => 0);
       let sum = 0;
       let min = Infinity;
       let max = -Infinity;
 
       for (const r of group.records) {
         sum += r.value;
+
         if (r.value < min) min = r.value;
+
         if (r.value > max) max = r.value;
 
         // Find the bucket
         let placed = false;
+
         for (let i = 0; i < bounds.length; i++) {
           if (r.value <= bounds[i]) {
             bucketCounts[i]++;
@@ -581,6 +666,7 @@ export class AbbacchioClient {
             break;
           }
         }
+
         if (!placed) bucketCounts[bounds.length]++;
       }
 
@@ -622,6 +708,7 @@ export class AbbacchioClient {
   /** Add a trace span to the buffer */
   addSpan(span: SpanRecord): void {
     if (!this.enabled) return;
+
     if (!this.admit(this.spanBuffer.length)) return;
     this.spanBuffer.push(span);
 
@@ -642,11 +729,17 @@ export class AbbacchioClient {
 
   async flushSpans(force = false): Promise<void> {
     if (this.spanBuffer.length === 0) return;
-    if (this.isPaused() && !force) { this.scheduleSpanFlush(true); return; }
+
+    if (this.isPaused() && !force) { this.scheduleSpanFlush(true);
+
+ return; }
+
     const batch = this.spanBuffer;
     this.spanBuffer = [];
+
     if (await this.sendSpans(batch)) {
       this.spanBuffer = this.requeue(batch, this.spanBuffer);
+
       if (!this.closed) this.scheduleSpanFlush(true);
     }
   }
@@ -696,10 +789,15 @@ export class AbbacchioClient {
    */
   async close(): Promise<void> {
     this.closed = true;
+
     if (this.logTimer) { clearTimeout(this.logTimer); this.logTimer = null; }
+
     if (this.metricTimer) { clearTimeout(this.metricTimer); this.metricTimer = null; }
+
     if (this.histogramTimer) { clearTimeout(this.histogramTimer); this.histogramTimer = null; }
+
     if (this.spanTimer) { clearTimeout(this.spanTimer); this.spanTimer = null; }
+
     await Promise.all([
       this.flushLogs(true),
       this.flushMetrics(true),
@@ -712,14 +810,16 @@ export class AbbacchioClient {
     const attrs: OtlpKeyValue[] = [
       { key: 'service.name', value: { stringValue: this.serviceName } },
     ];
+
     for (const [key, val] of Object.entries(this.resourceAttributes)) {
       attrs.push({ key, value: { stringValue: val } });
     }
+
     return attrs;
   }
 
   /** Returns true when the server rate-limited the request (429). */
-  private async post(path: string, payload: unknown): Promise<boolean> {
+  private async post(path: string, payload: OtlpExportRequest): Promise<boolean> {
     try {
       const body = JSON.stringify(payload);
 
@@ -729,6 +829,7 @@ export class AbbacchioClient {
       };
 
       if (this.source) headers['X-Source'] = this.source;
+
       if (this.instanceId) headers['X-Instance-Id'] = this.instanceId;
 
       const res = await fetch(`${this.endpoint}${path}`, {
@@ -740,19 +841,24 @@ export class AbbacchioClient {
       if (res.status === 429) {
         // Honor Retry-After when present; otherwise exponential backoff (capped).
         const retryAfter = Number(res.headers.get('retry-after'));
+
         const backoff = Number.isFinite(retryAfter) && retryAfter > 0
           ? retryAfter * 1000
           : this.backoffMs;
+
         this.pausedUntil = Date.now() + backoff;
         this.backoffMs = Math.min(this.backoffMs * 2, AbbacchioClient.MAX_BACKOFF_MS);
+
         return true;
       }
+
       if (res.ok) {
         this.backoffMs = AbbacchioClient.BASE_BACKOFF_MS;
       }
     } catch {
       // Silently fail — don't break the app if the telemetry server is down
     }
+
     return false;
   }
 }

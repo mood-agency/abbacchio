@@ -40,12 +40,14 @@ function getClientIp(c: Context): string {
   // These headers can be spoofed by clients if there's no trusted proxy
   if (TRUST_PROXY) {
     const forwarded = c.req.header('x-forwarded-for');
+
     if (forwarded) {
       // Take the first IP in the chain (original client)
       return forwarded.split(',')[0].trim();
     }
 
     const realIp = c.req.header('x-real-ip');
+
     if (realIp) {
       return realIp;
     }
@@ -54,10 +56,11 @@ function getClientIp(c: Context): string {
   // Get true remote address using Bun's connection info
   try {
     const info = getConnInfo(c);
+
     if (info?.remote?.address) {
       return info.remote.address;
     }
-  } catch (e) {
+  } catch {
     // Ignore if not running in Bun or conn info unavailable
   }
 
@@ -77,11 +80,13 @@ function getClientIp(c: Context): string {
  */
 function simpleHash(str: string): string {
   let hash = 0;
+
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
+
   return Math.abs(hash).toString(36);
 }
 
@@ -135,13 +140,16 @@ export class RateLimiter {
       // growth from attackers varying their client identity.
       if (this.buckets.size >= MAX_BUCKETS) {
         const oldestKey = this.buckets.keys().next().value;
+
         if (oldestKey !== undefined) this.buckets.delete(oldestKey);
       }
+
       bucket = {
         tokens: this.config.maxRequests - 1,
         lastRefill: now,
       };
       this.buckets.set(key, bucket);
+
       return true;
     }
 
@@ -156,6 +164,7 @@ export class RateLimiter {
 
     if (bucket.tokens > 0) {
       bucket.tokens--;
+
       return true;
     }
 
@@ -167,6 +176,7 @@ export class RateLimiter {
    */
   getRemaining(key: string): number {
     const bucket = this.buckets.get(key);
+
     if (!bucket) {
       return this.config.maxRequests;
     }
@@ -183,12 +193,14 @@ export class RateLimiter {
    */
   getRetryAfter(key: string): number {
     const bucket = this.buckets.get(key);
+
     if (!bucket || bucket.tokens > 0) {
       return 0;
     }
 
     const now = Date.now();
     const elapsed = now - bucket.lastRefill;
+
     return Math.max(0, this.config.windowMs - elapsed);
   }
 
@@ -217,6 +229,7 @@ export function getRateLimiter(): RateLimiter {
   if (!instance) {
     instance = new RateLimiter();
   }
+
   return instance;
 }
 
@@ -225,6 +238,7 @@ export function resetRateLimiter(): void {
     instance.stopCleanup();
     instance.clear();
   }
+
   instance = null;
 }
 

@@ -10,6 +10,7 @@ interface LevelBadgeProps {
 
 export function LevelBadge({ level, highlight = false }: LevelBadgeProps) {
   const colors = LOG_LEVEL_HEX[level];
+
   return (
     <Badge
       variant="secondary"

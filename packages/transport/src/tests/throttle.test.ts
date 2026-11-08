@@ -21,6 +21,7 @@ describe('AbbacchioClient runaway-producer protections', () => {
     // @ts-expect-error — mock global fetch
     globalThis.fetch = mock(async (url: string, init: any) => {
       calls.push({ url, body: JSON.parse(init.body) });
+
       return new Response('{}', { status: nextStatus, headers: nextHeaders });
     });
   });
@@ -50,6 +51,7 @@ describe('AbbacchioClient runaway-producer protections', () => {
     for (let i = 0; i < 100; i++) {
       client.addMetric({ name: 'progress', type: 'gauge', value: i });
     }
+
     await client.flush();
 
     // Only the ~5 admitted points should ever reach the wire; the rest dropped.
@@ -68,6 +70,7 @@ describe('AbbacchioClient runaway-producer protections', () => {
     for (let i = 0; i < 1000; i++) {
       client.addMetric({ name: 'progress', type: 'gauge', value: i });
     }
+
     await client.flush();
 
     expect(countPoints()).toBeLessThanOrEqual(10);
@@ -90,9 +93,11 @@ describe('AbbacchioClient runaway-producer protections', () => {
 
     // Server would now accept, but we are paused: further flushes must not hit the wire.
     nextStatus = 200;
+
     for (let i = 0; i < 20; i++) {
       client.addMetric({ name: 'progress', type: 'gauge', value: i });
     }
+
     await client.flush();
 
     expect(calls.length).toBe(callsAfter429); // still paused — no new requests

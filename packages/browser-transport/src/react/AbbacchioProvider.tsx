@@ -114,13 +114,16 @@ export function AbbacchioProvider({
 
 export function useAbbacchio(): AbbacchioContextValue {
   const context = useContext(AbbacchioContext);
+
   if (!context) {
     throw new Error('useAbbacchio must be used within an AbbacchioProvider');
   }
+
   return context;
 }
 
 export function useLogger(): Logger {
   const { logger } = useAbbacchio();
+
   return logger;
 }

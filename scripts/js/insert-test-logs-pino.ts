@@ -50,6 +50,7 @@ function logWithLevel(
   name?: string
 ) {
   const logData = { ...extras, name: name || randomElement(namespaces) };
+
   switch (level) {
     case 'trace':
       logger.trace(logData, message);

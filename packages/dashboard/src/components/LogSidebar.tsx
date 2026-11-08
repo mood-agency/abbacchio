@@ -61,6 +61,7 @@ function CountDisplay({ loaded, server }: { loaded: number; server?: number }) {
       </span>
     );
   }
+
   return (
     <span className="tabular-nums text-xs text-muted-foreground">
       {loaded.toLocaleString()}
@@ -144,6 +145,7 @@ export function LogSidebar({
             const count = levelCounts[level];
             const serverCount = isPartial ? serverLevelCounts?.[level] : undefined;
             const isChecked = levelFilters.includes(level);
+
             return (
               <label
                 key={level}
@@ -183,6 +185,7 @@ export function LogSidebar({
               const isChecked = namespaceFilters.includes(namespace);
               const count = namespaceCounts[namespace] ?? 0;
               const serverCount = isPartial ? serverNamespaceCounts?.[namespace] : undefined;
+
               return (
                 <label
                   key={namespace}

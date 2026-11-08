@@ -43,11 +43,13 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
     // Set initial channel if provided
     if (initialChannel) {
       let channel = getChannel(initialChannel);
+
       if (!channel) {
         channel = upsertChannel(initialChannel, '');
       } else {
         touchChannel(initialChannel);
       }
+
       setCurrentChannelState(channel);
       // Refresh channels list
       setChannels(getChannels());
@@ -64,11 +66,13 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
   // Set the active channel
   const setCurrentChannel = useCallback((name: string) => {
     let channel = getChannel(name);
+
     if (!channel) {
       channel = upsertChannel(name, '');
     } else {
       touchChannel(name);
     }
+
     setCurrentChannelState(channel);
     refreshChannels();
   }, [refreshChannels]);
@@ -79,6 +83,7 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
 
     // Update current channel if it's the one being modified
     const updated = getChannel(name);
+
     if (currentChannel?.name === name && updated) {
       setCurrentChannelState(updated);
     }
@@ -89,6 +94,7 @@ export function useChannelConfig(initialChannel?: string): UseChannelConfigResul
   // Get key for a channel
   const getKey = useCallback((name: string): string => {
     const channel = getChannel(name);
+
     return channel?.secretKey || '';
   }, []);
 

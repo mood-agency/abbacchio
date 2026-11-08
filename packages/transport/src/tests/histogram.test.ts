@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { createClient, type HistogramRecord } from '../index.js';
+import { createClient } from '../index.js';
 
 /**
  * Tests for addHistogram / sendHistograms on AbbacchioClient.
@@ -16,6 +16,7 @@ describe('AbbacchioClient.addHistogram', () => {
     // @ts-expect-error — mock global fetch
     globalThis.fetch = mock(async (_url: string, init: any) => {
       captured.push({ url: _url, body: JSON.parse(init.body) });
+
       return new Response('{}', { status: 200 });
     });
   });
@@ -72,6 +73,7 @@ describe('AbbacchioClient.addHistogram', () => {
     const client = createClient({ endpoint: 'http://test:4002', batchSize: 100 });
 
     const values = [3, 8, 15, 55, 120, 300, 8000];
+
     for (const v of values) {
       client.addHistogram({ name: 'latency', value: v, unit: 'ms' });
     }
@@ -153,12 +155,14 @@ describe('AbbacchioClient.addHistogram', () => {
     const dpA = metrics.find((m: any) =>
       m.histogram.dataPoints[0].attributes.some((a: any) => a.value.stringValue === '/api/a')
     ).histogram.dataPoints[0];
+
     expect(dpA.count).toBe(2);
     expect(dpA.sum).toBe(30);
 
     const dpB = metrics.find((m: any) =>
       m.histogram.dataPoints[0].attributes.some((a: any) => a.value.stringValue === '/api/b')
     ).histogram.dataPoints[0];
+
     expect(dpB.count).toBe(1);
     expect(dpB.sum).toBe(30);
 

@@ -25,13 +25,16 @@ export function LogRow({ log, search, maxWidth = 120, selected = false }: LogRow
   // Format data payload
   const dataKeys = Object.keys(log.data);
   let dataStr = '';
+
   if (dataKeys.length > 0) {
     // Format as key=value pairs for readability
     dataStr = dataKeys.map(k => {
       const v = log.data[k];
+
       if (typeof v === 'string') {
         return `${k}="${v}"`;
       }
+
       return `${k}=${JSON.stringify(v)}`;
     }).join(' ');
   }

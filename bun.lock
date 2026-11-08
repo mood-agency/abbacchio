@@ -19,15 +19,13 @@
       "name": "@abbacchio/api",
       "version": "0.2.0",
       "bin": {
-        "abbacchio": "src/server.ts",
-      },
-      "dependencies": {
-        "dotenv": "^17.4.2",
-        "hono": "^4.12.18",
-        "nanoid": "^5.1.11",
+        "abbacchio": "dist/cli.js",
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "dotenv": "^17.4.2",
+        "hono": "^4.12.18",
+        "nanoid": "^5.1.11",
       },
     },
     "packages/browser-transport": {

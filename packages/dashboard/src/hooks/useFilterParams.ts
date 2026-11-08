@@ -53,11 +53,13 @@ export function useFilterParams(): UseFilterParamsResult {
   // Parse current params
   const params = useMemo((): FilterParams => {
     const levelsParam = searchParams.get('levels') || '';
+
     const levels = levelsParam
       .split(',')
       .filter((l) => l && isValidLevel(l)) as FilterLevels;
 
     const namespacesParam = searchParams.get('namespaces') || '';
+
     const namespaces = namespacesParam
       .split(',')
       .filter((n) => n.trim() !== '') as FilterNamespaces;
@@ -78,11 +80,13 @@ export function useFilterParams(): UseFilterParamsResult {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
+
           if (value === null || value === '') {
             next.delete(key);
           } else {
             next.set(key, value);
           }
+
           return next;
         },
         { replace: true }
@@ -101,9 +105,11 @@ export function useFilterParams(): UseFilterParamsResult {
   const toggleLevel = useCallback(
     (level: LogLevelLabel) => {
       const currentLevels = params.levels;
+
       const newLevels = currentLevels.includes(level)
         ? currentLevels.filter((l) => l !== level)
         : [...currentLevels, level];
+
       setLevels(newLevels);
     },
     [params.levels, setLevels]
@@ -119,9 +125,11 @@ export function useFilterParams(): UseFilterParamsResult {
   const toggleNamespace = useCallback(
     (namespace: string) => {
       const currentNamespaces = params.namespaces;
+
       const newNamespaces = currentNamespaces.includes(namespace)
         ? currentNamespaces.filter((n) => n !== namespace)
         : [...currentNamespaces, namespace];
+
       setNamespaces(newNamespaces);
     },
     [params.namespaces, setNamespaces]
@@ -154,42 +162,49 @@ export function useFilterParams(): UseFilterParamsResult {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
+
           // Set levels
           if (filters.levels.length > 0) {
             next.set('levels', filters.levels.join(','));
           } else {
             next.delete('levels');
           }
+
           // Set namespaces
           if (filters.namespaces.length > 0) {
             next.set('namespaces', filters.namespaces.join(','));
           } else {
             next.delete('namespaces');
           }
+
           // Set time range
           if (filters.timeRange !== 'all') {
             next.set('time', filters.timeRange);
           } else {
             next.delete('time');
           }
+
           // Set search
           if (filters.search) {
             next.set('q', filters.search);
           } else {
             next.delete('q');
           }
+
           // Set case sensitive
           if (filters.caseSensitive) {
             next.set('case', '1');
           } else {
             next.delete('case');
           }
+
           // Set useRegex
           if (filters.useRegex) {
             next.set('regex', '1');
           } else {
             next.delete('regex');
           }
+
           return next;
         },
         { replace: true }
@@ -208,6 +223,7 @@ export function useFilterParams(): UseFilterParamsResult {
         next.delete('q');
         next.delete('case');
         next.delete('regex');
+
         return next;
       },
       { replace: true }

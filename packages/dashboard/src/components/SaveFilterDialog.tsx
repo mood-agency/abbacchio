@@ -52,21 +52,27 @@ export function SaveFilterDialog({
 
   // Generate a summary of current filters
   const filterSummary: string[] = [];
+
   if (currentFilters.levels.length > 0) {
     filterSummary.push(t('savedFilters.summary.levels', { count: currentFilters.levels.length }));
   }
+
   if (currentFilters.namespaces.length > 0) {
     filterSummary.push(t('savedFilters.summary.namespaces', { count: currentFilters.namespaces.length }));
   }
+
   if (currentFilters.timeRange !== 'all') {
     filterSummary.push(t(`timeRange.${currentFilters.timeRange}`));
   }
+
   if (currentFilters.search) {
     filterSummary.push(t('savedFilters.summary.search', { query: currentFilters.search }));
   }
+
   if (currentFilters.caseSensitive) {
     filterSummary.push(t('savedFilters.summary.caseSensitive'));
   }
+
   if (currentFilters.useRegex) {
     filterSummary.push(t('savedFilters.summary.useRegex'));
   }

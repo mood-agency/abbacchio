@@ -4,17 +4,21 @@ export function getMemoryUsageBytes(): number {
   if (typeof process !== 'undefined' && process.memoryUsage) {
     return process.memoryUsage().heapUsed;
   }
+
   if (typeof performance !== 'undefined' && (performance as any).memory) {
     return (performance as any).memory.usedJSHeapSize;
   }
+
   return 0;
 }
 
 function randomHex(bytes: number): string {
   let out = '';
+
   for (let i = 0; i < bytes; i++) {
     out += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
   }
+
   return out;
 }
 
@@ -23,6 +27,15 @@ export interface TraceOptions {
   traceId?: string;
   parentSpanId?: string;
   attributes?: Record<string, unknown>;
+}
+
+/** Monotonic nanoseconds: process.hrtime in Node/Bun, performance.now() elsewhere. */
+function monotonicNanos(): bigint {
+  if (typeof process !== 'undefined' && typeof process.hrtime?.bigint === 'function') {
+    return process.hrtime.bigint();
+  }
+
+  return BigInt(Math.round(performance.now() * 1_000_000));
 }
 
 /**
@@ -40,8 +53,10 @@ export async function traceWithMemory<T>(
   const baseAttributes = typeof options !== 'string' ? options.attributes : undefined;
 
   const startMemory = getMemoryUsageBytes();
-  const startTime = Date.now();
-  const startNano = BigInt(startTime) * 1_000_000n;
+  // Wall clock for the span's position in time; monotonic clock for its
+  // duration, so sub-millisecond operations are measured precisely.
+  const startNano = BigInt(Date.now()) * 1_000_000n;
+  const startMono = monotonicNanos();
 
   let hasError = false;
   let errorMessage: string | undefined;
@@ -54,9 +69,9 @@ export async function traceWithMemory<T>(
     throw error;
   } finally {
     const endMemory = getMemoryUsageBytes();
-    const endTime = Date.now();
-    const endNano = BigInt(endTime) * 1_000_000n;
-    const durationMs = endTime - startTime;
+    const durationNano = monotonicNanos() - startMono;
+    const endNano = startNano + durationNano;
+    const durationMs = Number(durationNano) / 1_000_000;
     const memoryDelta = endMemory - startMemory;
 
     const span: SpanRecord = {

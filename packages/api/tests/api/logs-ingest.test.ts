@@ -7,6 +7,7 @@ describe('POST /api/logs', () => {
   describe('single log ingestion', () => {
     it('should accept a single log and return 201', async () => {
       const app = createTestApp();
+
       const response = await app.request('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,6 +54,7 @@ describe('POST /api/logs', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(log),
         });
+
         expect(response.status).toBe(201);
       }
     });
@@ -77,6 +79,7 @@ describe('POST /api/logs', () => {
 
     it('should accept network telemetry logs', async () => {
       const app = createTestApp();
+
       const networkLog = {
         level: 30,
         msg: 'browser network request',
@@ -108,7 +111,7 @@ describe('POST /api/logs', () => {
       expect(storedLog).toBeDefined();
       expect(storedLog?.data).toHaveProperty('req');
       expect(storedLog?.data).toHaveProperty('res');
-      expect((storedLog?.data as any).req.method).toBe('POST');
+      expect((storedLog!.data as any).req.method).toBe('POST');
     });
 
     it('should default level to 30 if not provided', async () => {
@@ -184,6 +187,7 @@ describe('POST /api/logs', () => {
 
     it('should handle empty batch', async () => {
       const app = createTestApp();
+
       const response = await app.request('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,6 +234,7 @@ describe('POST /api/logs', () => {
 
     it('should use channel query parameter', async () => {
       const app = createTestApp();
+
       const response = await app.request('/api/logs?channel=my-app', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -242,6 +247,7 @@ describe('POST /api/logs', () => {
 
     it('should prefer header over query parameter', async () => {
       const app = createTestApp();
+
       const response = await app.request('/api/logs?channel=query-channel', {
         method: 'POST',
         headers: {
@@ -257,6 +263,7 @@ describe('POST /api/logs', () => {
 
     it('should default to "default" channel', async () => {
       const app = createTestApp();
+
       const response = await app.request('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -350,6 +357,7 @@ describe('POST /api/logs', () => {
   describe('invalid bodies', () => {
     it.each(['0', '"text"', 'null', 'not json'])('should return 400 (not 500) for body %s', async (raw) => {
       const app = createTestApp();
+
       const response = await app.request('/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

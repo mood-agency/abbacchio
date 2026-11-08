@@ -81,20 +81,25 @@ import { Activity, GitCommitVertical, FileText as LogsIcon } from 'lucide-react'
 // Compute level counts from logs in memory
 function computeLevelCounts(logs: LogEntry[]) {
   const counts = { all: logs.length, trace: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 };
+
   for (const log of logs) {
     const label = log.levelLabel;
+
     if (label in counts) counts[label as keyof typeof counts]++;
   }
+
   return counts;
 }
 
 // Compute namespace counts from logs in memory
 function computeNamespaceCounts(logs: LogEntry[]): Record<string, number> {
   const counts: Record<string, number> = {};
+
   for (const log of logs) {
     const ns = log.namespace || '(none)';
     counts[ns] = (counts[ns] || 0) + 1;
   }
+
   return counts;
 }
 
@@ -166,11 +171,13 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     setIsPausedRaw(paused);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
+
       if (paused) {
         next.set('paused', '1');
       } else {
         next.delete('paused');
       }
+
       return next;
     }, { replace: true });
   }, [setIsPausedRaw, setSearchParams]);
@@ -181,6 +188,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('channel', name);
+
       return next;
     }, { replace: true });
   }, [setActiveChannelRaw, setSearchParams]);
@@ -191,6 +199,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set('channel', activeChannel);
+
         return next;
       }, { replace: true });
     }
@@ -198,12 +207,15 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
 
   // Cache JSON.stringify results across re-renders (same log.data object → same string)
   const dataStringCache = useRef(new WeakMap<Record<string, unknown>, string>());
+
   const getDataString = useCallback((data: Record<string, unknown>) => {
     let cached = dataStringCache.current.get(data);
+
     if (cached === undefined) {
       cached = JSON.stringify(data);
       dataStringCache.current.set(data, cached);
     }
+
     return cached;
   }, []);
 
@@ -213,6 +225,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     let filtered = allLogs;
 
     const rangeMs = TIME_RANGE_OPTIONS[timeRange];
+
     if (rangeMs > 0) {
       const minTime = Date.now() - rangeMs;
       filtered = filtered.filter(log => log.time >= minTime);
@@ -233,6 +246,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
         filtered = filtered.filter(log => {
           const msg = caseSensitive ? log.msg : log.msg.toLowerCase();
           const data = caseSensitive ? getDataString(log.data) : getDataString(log.data).toLowerCase();
+
           return msg.includes(query) || data.includes(query);
         });
       }
@@ -251,7 +265,9 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Theme state
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
+
     if (saved) return saved === 'dark';
+
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
@@ -300,8 +316,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Validate regex
   const regexError = useMemo(() => {
     if (!useRegex || !searchQuery) return null;
+
     try {
       new RegExp(searchQuery);
+
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : 'Invalid regex';
@@ -313,26 +331,32 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     if (shiftKey && lastSelectedIdRef.current !== null) {
       const lastIndex = logs.findIndex(log => log.id === lastSelectedIdRef.current);
       const currentIndex = logs.findIndex(log => log.id === logId);
+
       if (lastIndex !== -1 && currentIndex !== -1) {
         const start = Math.min(lastIndex, currentIndex);
         const end = Math.max(lastIndex, currentIndex);
         setSelectedIds(prev => {
           const newSelection = new Set(prev);
+
           for (let i = start; i <= end; i++) {
             newSelection.add(logs[i].id);
           }
+
           return newSelection;
         });
       }
     } else {
       setSelectedIds(prev => {
         const newSelection = new Set(prev);
+
         if (newSelection.has(logId)) {
           newSelection.delete(logId);
         } else {
           newSelection.add(logId);
         }
+
         setLastSelectedId(newSelection.has(logId) ? logId : null);
+
         return newSelection;
       });
     }
@@ -344,16 +368,21 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     setSelectedIds(prev => {
       if (prev.size > 0) {
         setLastSelectedId(null);
+
         return new Set();
       }
+
       setLastSelectedId(logs[logs.length - 1]?.id ?? null);
+
       return new Set(logs.map(log => log.id));
     });
   }, [logs]);
 
   const selectAllState = useMemo(() => {
     if (logs.length === 0 || selectedIds.size === 0) return 'none';
+
     if (selectedIds.size === logs.length) return 'all';
+
     return 'some';
   }, [logs.length, selectedIds.size]);
 
@@ -362,6 +391,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     if (selectedIdsRef.current.size === 0) return;
     const selectedLogs = logs.filter(log => selectedIdsRef.current.has(log.id));
     const formatted = formatLogsForClipboard(selectedLogs);
+
     try {
       await navigator.clipboard.writeText(formatted);
       toast.success(tLogs('toast.logsCopied', { count: selectedLogs.length }));
@@ -391,24 +421,32 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   useEffect(() => {
     if (allLogs.length === 0) {
       prevAllLogsLastIdRef.current = null;
+
       return;
     }
+
     const lastId = allLogs[allLogs.length - 1].id;
     const prevLastId = prevAllLogsLastIdRef.current;
+
     // Only highlight if the last log changed (i.e., new logs appended at the end)
     if (prevLastId && lastId !== prevLastId) {
       const prevIdx = allLogs.findIndex(l => l.id === prevLastId);
+
       if (prevIdx !== -1 && prevIdx < allLogs.length - 1) {
         const newIds = new Set<string>();
+
         for (let i = prevIdx + 1; i < allLogs.length; i++) {
           newIds.add(allLogs[i].id);
         }
+
         setNewLogIds(newIds);
         const timer = setTimeout(() => setNewLogIds(new Set()), 2000);
         prevAllLogsLastIdRef.current = lastId;
+
         return () => clearTimeout(timer);
       }
     }
+
     prevAllLogsLastIdRef.current = lastId;
   }, [allLogs]);
 
@@ -426,6 +464,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       }
+
       if (selectedIdsRef.current.size > 0) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
           e.preventDefault();
@@ -436,7 +475,9 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
         }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
@@ -452,13 +493,17 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Track scroll position to detect if user is at bottom
   useEffect(() => {
     const el = scrollContainerRef.current;
+
     if (!el) return;
+
     const handleScroll = () => {
       const threshold = 50;
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
       setIsAtBottom(atBottom);
     };
+
     el.addEventListener('scroll', handleScroll, { passive: true });
+
     return () => el.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -468,9 +513,11 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
 
   useEffect(() => {
     const el = scrollContainerRef.current;
+
     if (!el || logs.length === 0) {
       prevFirstLogIdRef.current = logs[0]?.id ?? null;
       prevLogLengthRef.current = logs.length;
+
       return;
     }
 
@@ -499,6 +546,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
         rowVirtualizer.scrollToIndex(logs.length - 1, { align: 'auto' });
       });
     }
+
     prevLogCountRef.current = logs.length;
   }, [logs.length, isAtBottom, rowVirtualizer]);
 
@@ -517,10 +565,12 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
 
   useEffect(() => {
     const el = scrollContainerRef.current;
+
     if (!el) return;
 
     const handleScrollForOlder = () => {
       const nearTop = el.scrollTop < 200;
+
       if (nearTop && hasMoreOlderLogs && !isLoadingOlder) {
         if (!loadOlderTimeoutRef.current) {
           loadOlderTimeoutRef.current = setTimeout(() => {
@@ -535,8 +585,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
     };
 
     el.addEventListener('scroll', handleScrollForOlder, { passive: true });
+
     return () => {
       el.removeEventListener('scroll', handleScrollForOlder);
+
       if (loadOlderTimeoutRef.current) {
         clearTimeout(loadOlderTimeoutRef.current);
       }
@@ -553,6 +605,7 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   // Handle delete channel confirmation
   const handleConfirmDeleteChannel = useCallback(async () => {
     if (!channelToDelete) return;
+
     try {
       await deleteChannel(channelToDelete);
       setShowDeleteChannelDialog(false);
@@ -598,8 +651,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
   const handleExport = useCallback((format: ExportFormat) => {
     if (logs.length === 0 || !activeChannel) {
       toast.error(tFilters('export.toast.noLogs'));
+
       return;
     }
+
     downloadLogs(logs, format, activeChannel);
     toast.success(tFilters('export.toast.success'));
   }, [logs, activeChannel, tFilters]);
@@ -703,8 +758,10 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                     onClick={() => {
                       if (logs.length === 0) {
                         toast.error(tFilters('export.toast.noLogs'));
+
                         return;
                       }
+
                       setShowExportDialog(true);
                     }}
                     disabled={logs.length === 0}
@@ -904,7 +961,9 @@ export function LogViewer({ activeView, onViewChange }: LogViewerProps) {
                         >
                           {rowVirtualizer.getVirtualItems().map((virtualItem) => {
                             const log = logs[virtualItem.index];
+
                             if (!log) return null;
+
                             return (
                               <div
                                 key={log.id}

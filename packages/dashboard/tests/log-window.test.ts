@@ -4,6 +4,7 @@ import type { LogEntry } from '../src/types';
 
 const log = (id: number): LogEntry =>
   ({ id: String(id), level: 30, levelLabel: 'info', time: id, msg: `m${id}`, channel: 'c', data: {} }) as LogEntry;
+
 const ids = (logs: LogEntry[]) => logs.map((l) => Number(l.id));
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => log(from + i));
 

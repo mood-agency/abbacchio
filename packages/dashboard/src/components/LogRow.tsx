@@ -27,17 +27,21 @@ interface LogRowProps {
 
 function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp);
+
   const dateStr = date.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',
   });
+
   const time = date.toLocaleTimeString('en-US', {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   });
+
   const ms = String(date.getMilliseconds()).padStart(3, '0');
+
   return `${dateStr} ${time}.${ms}`;
 }
 
@@ -112,6 +116,7 @@ function highlightText(text: string, query: string, caseSensitive = false, useRe
     // Quick check if query exists in text (plain text search)
     const textToCheck = caseSensitive ? text : text.toLowerCase();
     const queryToCheck = caseSensitive ? query : query.toLowerCase();
+
     if (!textToCheck.includes(queryToCheck)) return text;
 
     // Create regex with escaped query
@@ -129,6 +134,7 @@ function highlightText(text: string, query: string, caseSensitive = false, useRe
       regex.lastIndex++;
       continue;
     }
+
     matches.push({ start: match.index, end: match.index + match[0].length });
   }
 
@@ -143,6 +149,7 @@ function highlightText(text: string, query: string, caseSensitive = false, useRe
     if (m.start > lastEnd) {
       result.push(text.slice(lastEnd, m.start));
     }
+
     // Add highlighted match
     result.push(
       <mark key={i} className="search-highlight">
@@ -181,6 +188,7 @@ function syntaxHighlightJson(jsonString: string): React.ReactNode {
 
   // Combined regex for all tokens
   const allTokens = /("(?:\\.|[^"\\])*")(\s*:)?|(\b(?:true|false)\b)|(null)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+
   while ((m = allTokens.exec(jsonString)) !== null) {
     // Add plain text before this token
     if (m.index > lastIndex) {
@@ -235,6 +243,7 @@ function highlightData(
     // Check if there's a match (plain text search)
     const dataToCheck = caseSensitive ? dataString : dataString.toLowerCase();
     const queryToCheck = caseSensitive ? query : query.toLowerCase();
+
     if (!dataToCheck.includes(queryToCheck)) {
       return syntaxHighlightJson(dataString);
     }
@@ -281,10 +290,12 @@ export const LogRow = memo(function LogRow({
   // Check if level label matches the search (for highlighting the badge)
   const levelMatchesSearch = useMemo(() => {
     if (!searchQuery || !useRegex) return false;
+
     try {
       // Don't use 'g' flag for test() to avoid lastIndex issues
       const regex = new RegExp(searchQuery, caseSensitive ? '' : 'i');
       const match = regex.exec(log.levelLabel);
+
       // Only highlight if there's a non-empty match
       return match !== null && match[0].length > 0;
     } catch {
@@ -302,6 +313,7 @@ export const LogRow = memo(function LogRow({
   // Handle clicking on the selection area for multi-select
   const handleSelectionClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+
     if (onSelect) {
       onSelect(log.id, e.shiftKey);
     }

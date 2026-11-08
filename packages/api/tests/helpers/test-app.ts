@@ -22,6 +22,7 @@ export function createTestApp(options: CreateTestAppOptions = {}) {
       if (key !== apiKey) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
+
       return next();
     });
   }

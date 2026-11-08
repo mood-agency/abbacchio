@@ -41,15 +41,18 @@ function loadStorage(): StorageData {
 
   if (!existsSync(CONFIG_PATH)) {
     cache = { channels: [] };
+
     return cache;
   }
 
   try {
     const content = readFileSync(CONFIG_PATH, 'utf-8');
     cache = JSON.parse(content) as StorageData;
+
     return cache;
   } catch {
     cache = { channels: [] };
+
     return cache;
   }
 }
@@ -70,6 +73,7 @@ function saveStorage(data: StorageData): void {
  */
 export function getChannels(): ChannelConfig[] {
   const data = loadStorage();
+
   return [...data.channels].sort((a, b) => b.lastUsedAt - a.lastUsedAt);
 }
 
@@ -78,6 +82,7 @@ export function getChannels(): ChannelConfig[] {
  */
 export function getChannel(name: string): ChannelConfig | null {
   const data = loadStorage();
+
   return data.channels.find(ch => ch.name === name) || null;
 }
 
@@ -103,6 +108,7 @@ export function upsertChannel(name: string, secretKey: string = ''): ChannelConf
   }
 
   saveStorage(data);
+
   return getChannel(name)!;
 }
 

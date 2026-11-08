@@ -29,6 +29,7 @@ export function getLevelColor(level: LogLevelLabel): (text: string) => string {
 export function getLevelBadge(level: LogLevelLabel): string {
   const color = getLevelColor(level);
   const label = level.toUpperCase().padEnd(5);
+
   return color(label);
 }
 
@@ -37,6 +38,7 @@ export function getLevelBadge(level: LogLevelLabel): string {
  */
 export function formatTime(time: number): string {
   const date = new Date(time);
+
   return chalk.dim(
     date.toLocaleTimeString('en-US', {
       hour12: false,
@@ -51,6 +53,7 @@ export function formatTime(time: number): string {
 // two-char ESC sequences. Matches the full sequence so no payload leaks through.
 // eslint-disable-next-line no-control-regex
 const ESCAPE_SEQUENCE = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)?|[@-Z\\-_])/g;
+
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x1F\x7F-\x9F]/g;
 
@@ -69,6 +72,7 @@ export function sanitizeForTerminal(text: string): string {
  */
 export function formatNamespace(namespace?: string): string {
   if (!namespace) return '';
+
   return chalk.magenta(`[${sanitizeForTerminal(namespace)}]`);
 }
 
@@ -78,6 +82,7 @@ export function formatNamespace(namespace?: string): string {
 export function highlightSearch(text: string, search: string): string {
   if (!search) return text;
   const regex = new RegExp(`(${escapeRegex(search)})`, 'gi');
+
   return text.replace(regex, chalk.bgYellow.black('$1'));
 }
 
@@ -101,11 +106,13 @@ function stripAnsi(text: string): string {
  */
 export function truncate(text: string, maxLength: number): string {
   const visibleLength = stripAnsi(text).length;
+
   if (visibleLength <= maxLength) return text;
 
   // Need to truncate while preserving ANSI codes
   let visibleCount = 0;
   let i = 0;
+  // oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences is the point
   const ansiRegex = /\x1B\[[0-9;]*m/g;
   let result = '';
   let match;

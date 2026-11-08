@@ -44,9 +44,11 @@ export function ChannelSelector({
     const fetchChannels = async () => {
       try {
         const response = await fetch(`${apiUrl}/api/channels`);
+
         if (!response.ok) {
           throw new Error(`Failed to fetch channels: ${response.status}`);
         }
+
         const data = await response.json() as { channels: string[] };
         setApiChannels(data.channels || []);
       } catch (err) {
@@ -87,6 +89,7 @@ export function ChannelSelector({
   // Handle new channel name submission
   const handleNewChannelSubmit = () => {
     const trimmed = newChannelName.trim();
+
     if (trimmed) {
       const existingKey = getKey(trimmed);
       setSelectedChannel(trimmed);
@@ -97,11 +100,6 @@ export function ChannelSelector({
 
   // Handle key submission (final step)
   const handleKeySubmit = () => {
-    onSelect(selectedChannel, keyValue);
-  };
-
-  // Skip key editing - use existing key or empty
-  const handleSkipKey = () => {
     onSelect(selectedChannel, keyValue);
   };
 
@@ -116,21 +114,29 @@ export function ChannelSelector({
     .sort((a, b) => {
       // Current channel first
       if (a === currentChannel) return -1;
+
       if (b === currentChannel) return 1;
       // Then by last used (from saved channels)
       const savedA = savedChannels.find(c => c.name === a);
       const savedB = savedChannels.find(c => c.name === b);
+
       if (savedA && savedB) return savedB.lastUsedAt - savedA.lastUsedAt;
+
       if (savedA) return -1;
+
       if (savedB) return 1;
+
       return a.localeCompare(b);
     })
     .map(ch => {
       const hasKey = !!getKey(ch);
       const isCurrent = ch === currentChannel;
       let label = sanitizeForTerminal(ch);
+
       if (hasKey) label = `🔑 ${label}`;
+
       if (isCurrent) label = `${label} (current)`;
+
       return { label, value: ch };
     });
 

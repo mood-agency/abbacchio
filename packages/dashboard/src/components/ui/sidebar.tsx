@@ -18,6 +18,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
     />
   )
 );
+
 Sidebar.displayName = 'Sidebar';
 
 const SidebarHeader = React.forwardRef<
@@ -30,6 +31,7 @@ const SidebarHeader = React.forwardRef<
     {...props}
   />
 ));
+
 SidebarHeader.displayName = 'SidebarHeader';
 
 const SidebarContent = React.forwardRef<
@@ -42,6 +44,7 @@ const SidebarContent = React.forwardRef<
     {...props}
   />
 ));
+
 SidebarContent.displayName = 'SidebarContent';
 
 const SidebarSection = React.forwardRef<
@@ -54,6 +57,7 @@ const SidebarSection = React.forwardRef<
     {...props}
   />
 ));
+
 SidebarSection.displayName = 'SidebarSection';
 
 const SidebarSectionTitle = React.forwardRef<
@@ -69,6 +73,7 @@ const SidebarSectionTitle = React.forwardRef<
     {...props}
   />
 ));
+
 SidebarSectionTitle.displayName = 'SidebarSectionTitle';
 
 interface SidebarItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -89,6 +94,7 @@ const SidebarItem = React.forwardRef<HTMLButtonElement, SidebarItemProps>(
     />
   )
 );
+
 SidebarItem.displayName = 'SidebarItem';
 
 const SidebarFooter = React.forwardRef<
@@ -101,6 +107,7 @@ const SidebarFooter = React.forwardRef<
     {...props}
   />
 ));
+
 SidebarFooter.displayName = 'SidebarFooter';
 
 export {
