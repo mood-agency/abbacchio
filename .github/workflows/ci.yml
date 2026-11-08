@@ -118,10 +118,12 @@ jobs:
             --format markdown > perf.md
           code=$?
           set -e
+          cat perf.md                       # in the log too, not only the summary
           cat perf.md >> "$GITHUB_STEP_SUMMARY"
+          regressed=$(grep '🔴' perf.md | cut -d'|' -f2 | sed 's/^ *//; s/ *$//' | paste -sd ',' - | sed 's/,/, /g')
           case $code in
             0) echo "No performance regressions." ;;
-            1) echo "::warning title=Performance::Possible regression vs ${{ github.base_ref }}; see the job summary." ;;
+            1) echo "::warning title=Performance::Possible regression vs ${{ github.base_ref }}: ${regressed}. See the job summary." ;;
             3) echo "::warning title=Performance::Not enough data to compare; see the job summary." ;;
             *) echo "::error title=Performance::abbacchio bench failed (exit $code)"; exit "$code" ;;
           esac
