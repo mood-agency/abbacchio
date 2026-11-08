@@ -381,7 +381,7 @@ export function streamLogs(c: Context) {
               event: 'logs',
               data: JSON.stringify(filtered)
             });
-          } catch (e) {
+          } catch {
             // Ignore write errors
           }
         }
@@ -394,7 +394,7 @@ export function streamLogs(c: Context) {
               event: 'clear',
               data: JSON.stringify({ channel: clearedChannel || 'all' })
             });
-          } catch (e) {}
+          } catch {}
         }
       };
 

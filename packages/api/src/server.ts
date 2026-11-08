@@ -291,7 +291,6 @@ process.on('unhandledRejection', (reason) => {
 
 // Start server
 const dbPath = process.env.SQLITE_PATH || './data/logs.db';
-const dashboardUrl = IS_DEV ? 'http://localhost:4001' : `http://localhost:${PORT}`;
 
 console.log(`
   ╔═══════════════════════════════════════════╗

@@ -9,7 +9,7 @@ describe('Network Capture (Monkey Patching)', () => {
   let nativeWebSocket: typeof window.WebSocket;
 
   beforeEach(() => {
-    logSpy = vi.fn((entry: LogEntry) => {});
+    logSpy = vi.fn((_entry: LogEntry) => {});
     nativeFetch = globalThis.fetch;
     nativeXHR = globalThis.XMLHttpRequest;
     nativeWebSocket = globalThis.WebSocket;
@@ -85,8 +85,8 @@ describe('Network Capture (Monkey Patching)', () => {
       // Mock the XHR prototype before starting capture
       class MockXHR extends EventTarget {
         status = 0;
-        open(method: string, url: string) {}
-        send(body?: any) {
+        open(_method: string, _url: string) {}
+        send(_body?: any) {
           setTimeout(() => {
             this.status = 201;
             this.dispatchEvent(new Event('loadend'));
@@ -125,7 +125,7 @@ describe('Network Capture (Monkey Patching)', () => {
           this.url = url;
           setTimeout(() => this.dispatchEvent(new Event('open')), 0);
         }
-        send(data: any) {}
+        send(_data: any) {}
         close() {
           this.dispatchEvent(new CloseEvent('close', { code: 1000 }));
         }

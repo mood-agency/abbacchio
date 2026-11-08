@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { interceptConsole, stopInterceptConsole } from '../console.js';
-import { AbbacchioClient } from '../client.js';
 
 const mockClientInstance = {
   add: vi.fn(),
@@ -25,17 +24,12 @@ describe('Console Interceptor', () => {
   const originalError = console.error;
   const originalDebug = console.debug;
 
-  let consoleSpies: Record<string, ReturnType<typeof vi.fn>>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    consoleSpies = {
-      log: vi.spyOn(console, 'log').mockImplementation(() => {}),
-      info: vi.spyOn(console, 'info').mockImplementation(() => {}),
-      warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
-      error: vi.spyOn(console, 'error').mockImplementation(() => {}),
-      debug: vi.spyOn(console, 'debug').mockImplementation(() => {}),
-    };
+
+    for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+      vi.spyOn(console, method).mockImplementation(() => {});
+    }
   });
 
   afterEach(() => {

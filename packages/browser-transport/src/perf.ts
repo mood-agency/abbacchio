@@ -181,7 +181,7 @@ export function startPerfCapture(
           };
           onEntry(log);
         }
-      } catch (e) {
+      } catch {
         // Ignore failures (e.g., cross-origin isolation missing, API not supported)
       }
     }, intervalMs);

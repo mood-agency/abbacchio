@@ -170,7 +170,7 @@
     for (const key of Object.keys(value)) {
       try {
         result[key] = safeSerialize(value[key], seen);
-      } catch (e) {
+      } catch {
         result[key] = '[Unserializable]';
       }
     }
@@ -247,7 +247,7 @@
           };
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore errors getting stack trace
     }
 
@@ -338,7 +338,7 @@
         },
         body: JSON.stringify({ logs: processedLogs }),
       });
-    } catch (e) {
+    } catch {
       // Silently fail - don't break the app
     }
   }
@@ -356,7 +356,7 @@
         try {
           const entry = createLogEntry(method, args);
           addToBuffer(entry);
-        } catch (e) {
+        } catch {
           // Don't let logging errors break the app
         }
       }

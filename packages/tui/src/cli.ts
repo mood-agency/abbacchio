@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import meow from 'meow';
-import { LOG_LEVEL_NAMES } from './types/index.js';
 import type { LogLevelLabel, CLIOptions } from './types/index.js';
 
 const cli = meow(`

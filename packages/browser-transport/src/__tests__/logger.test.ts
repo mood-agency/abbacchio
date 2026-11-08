@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Logger, createLogger, LOG_LEVELS } from '../logger.js';
 import { AbbacchioClient } from '../client.js';
 import * as networkMod from '../network.js';

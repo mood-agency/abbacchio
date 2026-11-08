@@ -60,7 +60,7 @@ function getClientIp(c: Context): string {
     if (info?.remote?.address) {
       return info.remote.address;
     }
-  } catch (e) {
+  } catch {
     // Ignore if not running in Bun or conn info unavailable
   }
 

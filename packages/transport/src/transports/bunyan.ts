@@ -53,7 +53,7 @@ export class AbbacchioBunyanStream extends Writable {
   }
 
   private transformLog(record: Record<string, unknown>): Record<string, unknown> {
-    const { name, hostname, pid, level, msg, time, v, ...rest } = record;
+    const { name, hostname, pid, level, msg, time, v: _v, ...rest } = record;
 
     return {
       level: level as number,

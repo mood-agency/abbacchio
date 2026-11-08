@@ -112,6 +112,7 @@ export function truncate(text: string, maxLength: number): string {
   // Need to truncate while preserving ANSI codes
   let visibleCount = 0;
   let i = 0;
+  // oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences is the point
   const ansiRegex = /\x1B\[[0-9;]*m/g;
   let result = '';
   let match;

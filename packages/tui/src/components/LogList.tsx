@@ -87,7 +87,7 @@ export function LogList({ logs, search, scrollOffset, onScrollChange, autoScroll
 
   return (
     <Box flexDirection="column" height={visibleHeight}>
-      {visibleLogs.map((log, index) => (
+      {visibleLogs.map((log) => (
         <LogRow
           key={log.id}
           log={log}

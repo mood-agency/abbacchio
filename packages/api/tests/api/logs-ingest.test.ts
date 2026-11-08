@@ -111,7 +111,7 @@ describe('POST /api/logs', () => {
       expect(storedLog).toBeDefined();
       expect(storedLog?.data).toHaveProperty('req');
       expect(storedLog?.data).toHaveProperty('res');
-      expect((storedLog?.data as any).req.method).toBe('POST');
+      expect((storedLog!.data as any).req.method).toBe('POST');
     });
 
     it('should default level to 30 if not provided', async () => {

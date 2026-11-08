@@ -103,11 +103,6 @@ export function ChannelSelector({
     onSelect(selectedChannel, keyValue);
   };
 
-  // Skip key editing - use existing key or empty
-  const handleSkipKey = () => {
-    onSelect(selectedChannel, keyValue);
-  };
-
   // Merge API channels with saved channels
   const allChannelNames = new Set<string>([
     ...apiChannels.filter(ch => ch !== 'default'),

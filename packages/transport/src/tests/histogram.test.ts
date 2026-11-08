@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { createClient, type HistogramRecord } from '../index.js';
+import { createClient } from '../index.js';
 
 /**
  * Tests for addHistogram / sendHistograms on AbbacchioClient.

@@ -410,7 +410,7 @@ export class AbbacchioClient {
   private async sendLogs(logs: LogEntry[]): Promise<boolean> {
     try {
       const logRecords = logs.map((log) => {
-        const { level, msg, message, time, name, ...extra } = log;
+        const { level, msg, message, time, name: _name, ...extra } = log;
         const pinoLevel = typeof level === 'number' ? level : 30;
         const severity = PINO_TO_OTLP_SEVERITY[pinoLevel] || PINO_TO_OTLP_SEVERITY[30];
         const body = msg || (message as string) || '';

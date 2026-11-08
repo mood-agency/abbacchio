@@ -492,7 +492,7 @@ export function usePolling(initialChannel?: string | null, initialPaused?: boole
              setHasMoreOlderLogs(false);
              hasMoreOlderLogsRef.current = false;
           }
-        } catch (err) {}
+        } catch {}
       });
 
       es.onopen = () => {

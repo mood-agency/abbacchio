@@ -617,7 +617,7 @@ export class AbbacchioClient {
     for (const [, group] of groups) {
       const first = group.records[0];
       const bounds = group.bounds;
-      const bucketCounts = new Array(bounds.length + 1).fill(0);
+      const bucketCounts: number[] = Array.from({ length: bounds.length + 1 }, () => 0);
       let sum = 0;
       let min = Infinity;
       let max = -Infinity;

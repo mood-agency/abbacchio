@@ -28,7 +28,7 @@ function spanRequest(version: string, durationsMs: number[], name = 'GET /users'
             startTimeUnixNano: String(start),
             endTimeUnixNano: String(start + BigInt(Math.round(d * 1_000_000))),
             attributes: [],
-            ...(errorEvery && i % errorEvery === 0 ? { status: { code: 2 } } : {}),
+            status: { code: errorEvery && i % errorEvery === 0 ? 2 : 0 },
           };
         }),
       }],
