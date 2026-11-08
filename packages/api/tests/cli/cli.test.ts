@@ -1,8 +1,24 @@
-import { describe, it, expect, afterEach } from 'bun:test';
-import { mkdtempSync, readFileSync, existsSync } from 'fs';
+import { describe, it, expect, afterAll, afterEach } from 'bun:test';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { Subprocess } from 'bun';
+
+/** Temporary directories created by this file, removed after its tests. */
+const tempDirs: string[] = [];
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+
+  tempDirs.push(dir);
+
+  return dir;
+}
+
+afterAll(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
+
 
 const root = join(import.meta.dir, '../..');
 const cli = join(root, 'src/cli.ts');
@@ -65,7 +81,7 @@ describe('abbacchio CLI', () => {
   });
 
   it('sandbox starts anonymous, rate-limit-free, writes the env file and accepts OTLP', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'abbacchio-cli-'));
+    const dir = tempDir('abbacchio-cli-');
     const port = freePort();
     const envFile = join(dir, 'abbacchio.env');
     const url = `http://localhost:${port}`;

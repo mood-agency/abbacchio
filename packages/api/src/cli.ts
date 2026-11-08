@@ -85,6 +85,7 @@ async function sandbox(args: string[]): Promise<void> {
       args,
       options: {
         port: { type: 'string', short: 'p' },
+        help: { type: 'boolean', short: 'h', default: false },
         db: { type: 'string' },
         keep: { type: 'boolean', default: false },
         'env-file': { type: 'string' },
@@ -95,6 +96,12 @@ async function sandbox(args: string[]): Promise<void> {
     }));
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
+  }
+
+  if (values.help) {
+    console.log(HELP);
+
+    return;
   }
 
   if (values.port !== undefined) {
@@ -198,12 +205,19 @@ async function benchCommand(args: string[]): Promise<void> {
         json: { type: 'boolean', default: false },
         format: { type: 'string' },
         port: { type: 'string', short: 'p' },
+        help: { type: 'boolean', short: 'h', default: false },
       },
       strict: true,
       allowPositionals: false,
     }));
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
+  }
+
+  if (values.help) {
+    console.log(HELP);
+
+    return;
   }
 
   const { bench, formatReport, formatMarkdown, BenchError, EXIT_ERROR } = await import('./bench.js');
