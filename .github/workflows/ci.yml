@@ -89,8 +89,9 @@ jobs:
 
   # ============================================
   # Performance vs the base branch (abbacchio bench)
-  # Report-only for now: a regression adds a warning and the table to the
-  # job summary but does not fail the job, until runner noise is known.
+  # Fails on a regression beyond both the threshold and the measured
+  # run-to-run noise (±0.3-6% on GitHub runners); the table goes to the log
+  # and the job summary. "Not enough data" only warns.
   # ============================================
   perf:
     if: github.event_name == 'pull_request'
@@ -123,7 +124,7 @@ jobs:
           regressed=$(grep '🔴' perf.md | cut -d'|' -f2 | sed 's/^ *//; s/ *$//' | paste -sd ',' - | sed 's/,/, /g')
           case $code in
             0) echo "No performance regressions." ;;
-            1) echo "::warning title=Performance::Possible regression vs ${{ github.base_ref }}: ${regressed}. See the job summary." ;;
+            1) echo "::error title=Performance::Regression vs ${{ github.base_ref }}: ${regressed}. See the job summary."; exit 1 ;;
             3) echo "::warning title=Performance::Not enough data to compare; see the job summary." ;;
             *) echo "::error title=Performance::abbacchio bench failed (exit $code)"; exit "$code" ;;
           esac

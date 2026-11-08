@@ -162,7 +162,7 @@ This repository's own CI runs a `perf` job on every pull request. It benchmarks 
       --format markdown >> "$GITHUB_STEP_SUMMARY"
 ```
 
-The load script is passed by absolute path from the candidate checkout, so the baseline doesn't need to contain it. It starts the API server of whichever checkout it runs in. The job is report-only for now: a regression adds a warning annotation, and the table goes to the job summary.
+The load script is passed by absolute path from the candidate checkout, so the baseline doesn't need to contain it. It starts the API server of whichever checkout it runs in. The job fails on a regression and names the regressed workloads in an error annotation. The table goes to the job log and the job summary. On GitHub runners the measured run-to-run noise is about ±0.3–6%, so a 10% threshold is meaningful there. "Not enough data" only warns. If a regression is intentional (the cost of a feature), say so in the PR; once it merges, the base branch is the new baseline.
 
 ### Keeping a baseline across sandboxes
 
